@@ -29,6 +29,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<IUserService, UserService>();
 
         // Settings
         services.Configure<EmailSettings>(

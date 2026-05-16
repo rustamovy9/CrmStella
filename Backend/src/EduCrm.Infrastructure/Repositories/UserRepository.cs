@@ -8,6 +8,21 @@ namespace EduCrm.Infrastructure.Repositories;
 
 public class UserRepository(AppDbContext context) : IUserRepository
 {
+    public async Task<List<User>> GetAllAsync()
+        => await context.Users
+            .Include(x => x.Role)
+            .Include(x => x.Profile)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync();
+
+    public async Task<List<User>> GetByRoleAsync(int roleId)
+        => await context.Users
+            .Include(x => x.Role)
+            .Include(x => x.Profile)
+            .Where(x => x.RoleId == roleId)
+            .OrderByDescending(x => x.CreatedAt)
+            .ToListAsync();
+    
     public async Task<User?> GetByIdAsync(int id)
         => await context.Users
             .Include(x => x.Role)
