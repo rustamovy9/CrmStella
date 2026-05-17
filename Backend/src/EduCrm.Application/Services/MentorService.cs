@@ -3,7 +3,7 @@ using EduCrm.Application.DTOs.Mentor.Request;
 using EduCrm.Application.DTOs.Mentor.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
-using EduCrm.Domain.Enums;
+using EduCrm.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
@@ -55,7 +55,7 @@ public class MentorService(
         if (mentor is null)
         {
             logger.LogWarning("Mentor not found: {MentorId}", id);
-            return Result<MentorResponse>.Fail("Mentor not found", ErrorType.NotFound);
+            return Result<MentorResponse>.Fail("Mentor not found");
         }
 
         var response = MapToResponse(mentor);
@@ -70,7 +70,7 @@ public class MentorService(
         if (mentor is null)
         {
             logger.LogWarning("Update failed - mentor not found: {MentorId}", id);
-            return Result<MentorResponse>.Fail("Mentor not found", ErrorType.NotFound);
+            return Result<MentorResponse>.Fail("Mentor not found");
         }
 
         if (request.Specialization is not null)
@@ -98,7 +98,7 @@ public class MentorService(
         if (mentor is null)
         {
             logger.LogWarning("SetStatus failed - mentor not found: {MentorId}", id);
-            return Result<bool>.Fail("Mentor not found", ErrorType.NotFound);
+            return Result<bool>.Fail("Mentor not found");
         }
 
         mentor.IsActive = request.IsActive;
@@ -114,18 +114,21 @@ public class MentorService(
         return Result<bool>.Ok(true);
     }
 
-    private static MentorResponse MapToResponse(Domain.Entities.Mentor m) => new()
+    private static MentorResponse MapToResponse(Mentor m)
     {
-        Id = m.Id,
-        UserId = m.UserId,
-        FullName = m.User.FullName,
-        Email = m.User.Email,
-        PhoneNumber = m.User.PhoneNumber,
-        AvatarUrl = m.User.Profile?.AvatarUrl,
-        Specialization = m.Specialization,
-        ExperienceYears = m.ExperienceYears,
-        HireDate = m.HireDate,
-        IsActive = m.IsActive,
-        GroupsCount = m.Groups?.Count ?? 0
-    };
+        return new MentorResponse
+        {
+            Id = m.Id,
+            UserId = m.UserId,
+            FullName = m.User.FullName,
+            Email = m.User.Email,
+            PhoneNumber = m.User.PhoneNumber,
+            AvatarUrl = m.User.Profile?.AvatarUrl,
+            Specialization = m.Specialization,
+            ExperienceYears = m.ExperienceYears,
+            HireDate = m.HireDate,
+            IsActive = m.IsActive,
+            GroupsCount = m.Groups?.Count ?? 0
+        };
+    }
 }

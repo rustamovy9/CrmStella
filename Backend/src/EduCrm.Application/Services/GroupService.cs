@@ -3,6 +3,7 @@ using EduCrm.Application.DTOs.Group.Request;
 using EduCrm.Application.DTOs.Group.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -65,7 +66,7 @@ public class GroupService(
         if (group is null)
         {
             logger.LogWarning("Group not found: {GroupId}", id);
-            return Result<GroupResponse>.Fail("Group not found", ErrorType.NotFound);
+            return Result<GroupResponse>.Fail("Group not found");
         }
 
         var response = MapToResponse(group);
@@ -97,7 +98,7 @@ public class GroupService(
             return Result<GroupResponse>.Fail(
                 "EndDate must be after StartDate", ErrorType.BadRequest);
 
-        var group = new Domain.Entities.Group
+        var group = new Group
         {
             Name = request.Name.Trim(),
             CourseId = request.CourseId,
@@ -106,7 +107,7 @@ public class GroupService(
             EndDate = request.EndDate,
             MaxStudents = request.MaxStudents,
             Status = GroupStatus.Active,
-            CreatedAt = DateTime.UtcNow      // <-- ВОТ ФИКС: явно ставим UTC-время создания
+            CreatedAt = DateTime.UtcNow // <-- ВОТ ФИКС: явно ставим UTC-время создания
         };
 
         await unitOfWork.Groups.CreateAsync(group);
@@ -126,7 +127,7 @@ public class GroupService(
         if (group is null)
         {
             logger.LogWarning("Update failed - group not found: {GroupId}", id);
-            return Result<GroupResponse>.Fail("Group not found", ErrorType.NotFound);
+            return Result<GroupResponse>.Fail("Group not found");
         }
 
         if (request.MentorId is not null)
@@ -170,7 +171,7 @@ public class GroupService(
         if (group is null)
         {
             logger.LogWarning("SetStatus failed - group not found: {GroupId}", id);
-            return Result<bool>.Fail("Group not found", ErrorType.NotFound);
+            return Result<bool>.Fail("Group not found");
         }
 
         group.Status = (GroupStatus)request.Status;
@@ -186,18 +187,21 @@ public class GroupService(
         return Result<bool>.Ok(true);
     }
 
-    private static GroupResponse MapToResponse(Domain.Entities.Group g) => new()
+    private static GroupResponse MapToResponse(Group g)
     {
-        Id = g.Id,
-        Name = g.Name,
-        CourseId = g.CourseId,
-        CourseName = g.Course.Name,
-        MentorId = g.MentorId,
-        MentorName = g.Mentor.User.FullName,
-        StartDate = g.StartDate,
-        EndDate = g.EndDate,
-        MaxStudents = g.MaxStudents,
-        ActiveStudentsCount = g.GroupStudents?.Count(gs => gs.IsActive) ?? 0,
-        Status = g.Status.ToString()
-    };
+        return new GroupResponse
+        {
+            Id = g.Id,
+            Name = g.Name,
+            CourseId = g.CourseId,
+            CourseName = g.Course.Name,
+            MentorId = g.MentorId,
+            MentorName = g.Mentor.User.FullName,
+            StartDate = g.StartDate,
+            EndDate = g.EndDate,
+            MaxStudents = g.MaxStudents,
+            ActiveStudentsCount = g.GroupStudents?.Count(gs => gs.IsActive) ?? 0,
+            Status = g.Status.ToString()
+        };
+    }
 }

@@ -20,7 +20,7 @@ public static class DependencyInjection
         // DbContext
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
-        
+
         // Memory Cache
         services.AddMemoryCache();
 

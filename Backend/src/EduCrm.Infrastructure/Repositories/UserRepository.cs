@@ -10,57 +10,69 @@ public class UserRepository(AppDbContext context) : IUserRepository
     // AsNoTracking для методов чтения
     public async Task<List<User>> GetAllAsync(
         CancellationToken cancellationToken = default)
-        => await context.Users
+    {
+        return await context.Users
             .AsNoTracking()
             .Include(x => x.Role)
             .Include(x => x.Profile)
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<List<User>> GetByRoleAsync(
         int roleId,
         CancellationToken cancellationToken = default)
-        => await context.Users
+    {
+        return await context.Users
             .AsNoTracking()
             .Include(x => x.Role)
             .Include(x => x.Profile)
             .Where(x => x.RoleId == roleId)
             .OrderByDescending(x => x.CreatedAt)
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<User?> GetByIdAsync(
         int id,
         CancellationToken cancellationToken = default)
-        => await context.Users
+    {
+        return await context.Users
             .AsNoTracking()
             .Include(x => x.Role)
             .Include(x => x.Profile)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+    }
 
     public async Task<User?> GetByEmailAsync(
         string email,
         CancellationToken cancellationToken = default)
-        => await context.Users
+    {
+        return await context.Users
             .AsNoTracking()
             .Include(x => x.Role)
             .Include(x => x.Profile)
             .FirstOrDefaultAsync(x => x.Email == email.ToLower(), cancellationToken);
+    }
 
     public async Task<User?> GetByRefreshTokenAsync(
         string refreshToken,
         CancellationToken cancellationToken = default)
-        => await context.Users
+    {
+        return await context.Users
             .AsNoTracking()
             .Include(x => x.Role)
             .Include(x => x.Profile)
             .FirstOrDefaultAsync(x => x.RefreshToken == refreshToken, cancellationToken);
+    }
 
     public async Task<bool> ExistsByEmailAsync(
         string email,
         CancellationToken cancellationToken = default)
-        => await context.Users
+    {
+        return await context.Users
             .AsNoTracking()
             .AnyAsync(x => x.Email == email.ToLower(), cancellationToken);
+    }
 
     public async Task LoadRoleAsync(
         User user,

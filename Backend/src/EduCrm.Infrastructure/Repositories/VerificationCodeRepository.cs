@@ -13,7 +13,8 @@ public class VerificationCodeRepository(AppDbContext context) : IVerificationCod
         int userId,
         VerificationCodeType type,
         CancellationToken cancellationToken = default)
-        => await context.VerificationCodes
+    {
+        return await context.VerificationCodes
             .AsNoTracking()
             .Where(x =>
                 x.UserId == userId &&
@@ -23,6 +24,7 @@ public class VerificationCodeRepository(AppDbContext context) : IVerificationCod
                 x.Attempts < x.MaxAttempts)
             .OrderByDescending(x => x.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
+    }
 
     // БЕЗ AsNoTracking для записи
     public async Task CreateAsync(

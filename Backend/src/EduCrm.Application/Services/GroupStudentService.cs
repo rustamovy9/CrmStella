@@ -3,6 +3,7 @@ using EduCrm.Application.DTOs.GroupStudent.Request;
 using EduCrm.Application.DTOs.GroupStudent.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -39,7 +40,7 @@ public class GroupStudentService(
         if (student is null)
         {
             logger.LogWarning("Enroll failed - student not found: {StudentId}", request.StudentId);
-            return Result<GroupStudentResponse>.Fail("Student not found", ErrorType.NotFound);
+            return Result<GroupStudentResponse>.Fail("Student not found");
         }
 
         // 2. группа существует?
@@ -47,7 +48,7 @@ public class GroupStudentService(
         if (group is null)
         {
             logger.LogWarning("Enroll failed - group not found: {GroupId}", request.GroupId);
-            return Result<GroupStudentResponse>.Fail("Group not found", ErrorType.NotFound);
+            return Result<GroupStudentResponse>.Fail("Group not found");
         }
 
         // 3. уже активно зачислен? (защита от дубля)
@@ -64,7 +65,7 @@ public class GroupStudentService(
             return Result<GroupStudentResponse>.Fail(
                 "Group is full", ErrorType.BadRequest);
 
-        var enrollment = new Domain.Entities.GroupStudent
+        var enrollment = new GroupStudent
         {
             GroupId = request.GroupId,
             StudentId = request.StudentId,
@@ -92,7 +93,7 @@ public class GroupStudentService(
         {
             logger.LogWarning(
                 "Remove failed - enrollment not found: {Id}", request.GroupStudentId);
-            return Result<bool>.Fail("Enrollment not found", ErrorType.NotFound);
+            return Result<bool>.Fail("Enrollment not found");
         }
 
         if (!enrollment.IsActive)
@@ -114,81 +115,85 @@ public class GroupStudentService(
 
         return Result<bool>.Ok(true);
     }
+
     public async Task<Result<GroupStudentResponse>> TransferAsync(TransferStudentRequest request)
-{
-    // 1. текущая запись существует и активна?
-    var current = await unitOfWork.GroupStudents.GetByIdAsync(request.GroupStudentId);
-    if (current is null)
-        return Result<GroupStudentResponse>.Fail("Enrollment not found", ErrorType.NotFound);
-
-    if (!current.IsActive)
-        return Result<GroupStudentResponse>.Fail(
-            "Cannot transfer an inactive enrollment", ErrorType.BadRequest);
-
-    // 2. целевая группа существует?
-    var targetGroup = await unitOfWork.Groups.GetByIdAsync(request.TargetGroupId);
-    if (targetGroup is null)
-        return Result<GroupStudentResponse>.Fail("Target group not found", ErrorType.NotFound);
-
-    // 3. перевод в ту же группу запрещён
-    if (current.GroupId == request.TargetGroupId)
-        return Result<GroupStudentResponse>.Fail(
-            "Student is already in this group", ErrorType.BadRequest);
-
-    // 4. уже активно в целевой группе?
-    var alreadyInTarget = await unitOfWork.GroupStudents
-        .IsActiveEnrollmentAsync(request.TargetGroupId, current.StudentId);
-    if (alreadyInTarget)
-        return Result<GroupStudentResponse>.Fail(
-            "Student is already enrolled in target group", ErrorType.Conflict);
-
-    // 5. место в целевой группе есть?
-    var activeCount = await unitOfWork.GroupStudents
-        .CountActiveInGroupAsync(request.TargetGroupId);
-    if (activeCount >= targetGroup.MaxStudents)
-        return Result<GroupStudentResponse>.Fail("Target group is full", ErrorType.BadRequest);
-
-    // создаём НОВУЮ запись в целевой группе
-    var newEnrollment = new Domain.Entities.GroupStudent
     {
-        GroupId = request.TargetGroupId,
-        StudentId = current.StudentId,
-        JoinedAt = DateTime.UtcNow,
-        IsActive = true,
-        TransferredFrom = current        // связь по навигации (FK проставит EF)
-    };
+        // 1. текущая запись существует и активна?
+        var current = await unitOfWork.GroupStudents.GetByIdAsync(request.GroupStudentId);
+        if (current is null)
+            return Result<GroupStudentResponse>.Fail("Enrollment not found");
 
-    // старую запись закрываем и связываем с новой
-    current.IsActive = false;
-    current.LeftAt = DateTime.UtcNow;
-    current.RemoveReason = request.Reason ?? $"Transferred to group {request.TargetGroupId}";
-    current.TransferredTo = newEnrollment;
+        if (!current.IsActive)
+            return Result<GroupStudentResponse>.Fail(
+                "Cannot transfer an inactive enrollment", ErrorType.BadRequest);
 
-    await unitOfWork.GroupStudents.CreateAsync(newEnrollment);
-    await unitOfWork.GroupStudents.UpdateAsync(current);
-    await unitOfWork.SaveChangesAsync();   // обе записи РАЗОМ, в одной транзакции
+        // 2. целевая группа существует?
+        var targetGroup = await unitOfWork.Groups.GetByIdAsync(request.TargetGroupId);
+        if (targetGroup is null)
+            return Result<GroupStudentResponse>.Fail("Target group not found");
 
-    await cache.RemoveByPrefixAsync(GroupStudentCachePrefix);
+        // 3. перевод в ту же группу запрещён
+        if (current.GroupId == request.TargetGroupId)
+            return Result<GroupStudentResponse>.Fail(
+                "Student is already in this group", ErrorType.BadRequest);
 
-    logger.LogInformation(
-        "Student {StudentId} transferred from group {From} to group {To}",
-        current.StudentId, current.GroupId, request.TargetGroupId);
+        // 4. уже активно в целевой группе?
+        var alreadyInTarget = await unitOfWork.GroupStudents
+            .IsActiveEnrollmentAsync(request.TargetGroupId, current.StudentId);
+        if (alreadyInTarget)
+            return Result<GroupStudentResponse>.Fail(
+                "Student is already enrolled in target group", ErrorType.Conflict);
 
-    var created = await unitOfWork.GroupStudents.GetByIdAsync(newEnrollment.Id);
-    return Result<GroupStudentResponse>.Ok(MapToResponse(created!));
-}
+        // 5. место в целевой группе есть?
+        var activeCount = await unitOfWork.GroupStudents
+            .CountActiveInGroupAsync(request.TargetGroupId);
+        if (activeCount >= targetGroup.MaxStudents)
+            return Result<GroupStudentResponse>.Fail("Target group is full", ErrorType.BadRequest);
 
-    private static GroupStudentResponse MapToResponse(Domain.Entities.GroupStudent gs) => new()
+        // создаём НОВУЮ запись в целевой группе
+        var newEnrollment = new GroupStudent
+        {
+            GroupId = request.TargetGroupId,
+            StudentId = current.StudentId,
+            JoinedAt = DateTime.UtcNow,
+            IsActive = true,
+            TransferredFrom = current // связь по навигации (FK проставит EF)
+        };
+
+        // старую запись закрываем и связываем с новой
+        current.IsActive = false;
+        current.LeftAt = DateTime.UtcNow;
+        current.RemoveReason = request.Reason ?? $"Transferred to group {request.TargetGroupId}";
+        current.TransferredTo = newEnrollment;
+
+        await unitOfWork.GroupStudents.CreateAsync(newEnrollment);
+        await unitOfWork.GroupStudents.UpdateAsync(current);
+        await unitOfWork.SaveChangesAsync(); // обе записи РАЗОМ, в одной транзакции
+
+        await cache.RemoveByPrefixAsync(GroupStudentCachePrefix);
+
+        logger.LogInformation(
+            "Student {StudentId} transferred from group {From} to group {To}",
+            current.StudentId, current.GroupId, request.TargetGroupId);
+
+        var created = await unitOfWork.GroupStudents.GetByIdAsync(newEnrollment.Id);
+        return Result<GroupStudentResponse>.Ok(MapToResponse(created!));
+    }
+
+    private static GroupStudentResponse MapToResponse(GroupStudent gs)
     {
-        Id = gs.Id,
-        GroupId = gs.GroupId,
-        GroupName = gs.Group.Name,
-        StudentId = gs.StudentId,
-        StudentName = gs.Student.User.FullName,
-        StudentEmail = gs.Student.User.Email,
-        JoinedAt = gs.JoinedAt,
-        LeftAt = gs.LeftAt,
-        IsActive = gs.IsActive,
-        RemoveReason = gs.RemoveReason
-    };
+        return new GroupStudentResponse
+        {
+            Id = gs.Id,
+            GroupId = gs.GroupId,
+            GroupName = gs.Group.Name,
+            StudentId = gs.StudentId,
+            StudentName = gs.Student.User.FullName,
+            StudentEmail = gs.Student.User.Email,
+            JoinedAt = gs.JoinedAt,
+            LeftAt = gs.LeftAt,
+            IsActive = gs.IsActive,
+            RemoveReason = gs.RemoveReason
+        };
+    }
 }

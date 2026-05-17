@@ -1,5 +1,3 @@
-using EduCrm.Application.Common;
-using EduCrm.Application.DTOs.Files.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Entities;
@@ -13,61 +11,56 @@ public class FileStorageService(
     IUnitOfWork unitOfWork,
     ILogger<FileStorageService> logger) : IFileStorageService
 {
-    private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
+    private static readonly string[] AllowedImageTypes =
+        ["image/jpeg", "image/png", "image/webp", "image/gif"];
 
-    private static readonly string[] AllowedExtensions =
-        { ".jpg", ".jpeg", ".png", ".webp", ".pdf", ".docx" };
+    private const long MaxFileSize = 5 * 1024 * 1024; // 5MB
 
-    private const string UploadsRoot = "wwwroot/uploads";
-
-    public async Task<Result<FileUploadResponse>> UploadAsync(
+    public async Task<FileStorage> UploadAsync(
         IFormFile file,
         FileOwnerType ownerType,
         int ownerId,
-        int uploadedByUserId)
+        int? uploadedByUserId = null,
+        CancellationToken cancellationToken = default)
     {
-        // 1. файл вообще есть?
-        if (file is null || file.Length == 0)
-            return Result<FileUploadResponse>.Fail("File is empty", ErrorType.BadRequest);
+        // валидация
+        if (file.Length == 0)
+            throw new ArgumentException("File is empty");
 
-        // 2. размер в пределах лимита?
-        if (file.Length > MaxFileSizeBytes)
-            return Result<FileUploadResponse>.Fail(
-                "File is too large (max 10 MB)", ErrorType.BadRequest);
+        if (file.Length > MaxFileSize)
+            throw new ArgumentException("File size exceeds 5MB");
 
-        // 3. расширение разрешено?
-        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (!AllowedExtensions.Contains(extension))
-            return Result<FileUploadResponse>.Fail(
-                "File type is not allowed", ErrorType.BadRequest);
+        if (!AllowedImageTypes.Contains(file.ContentType.ToLower()))
+            throw new ArgumentException("Invalid file type. Only images are allowed");
 
-        // 4. генерируем БЕЗОПАСНОЕ имя (не доверяем имени от юзера)
+        // определяем папку по типу
+        var folder = ownerType switch
+        {
+            FileOwnerType.Course => "courses",
+            FileOwnerType.Profile => "profiles",
+            FileOwnerType.Homework => "homeworks",
+            FileOwnerType.HomeworkSubmission => "submissions",
+            FileOwnerType.PaymentReceipt => "payments",
+            FileOwnerType.Lesson => "lessons",
+            _ => "others"
+        };
+
+        // генерируем уникальное имя
+        var extension = Path.GetExtension(file.FileName).ToLower();
         var storedFileName = $"{Guid.NewGuid()}{extension}";
 
-        // 5. папка по типу владельца: wwwroot/uploads/Course/
-        var folder = Path.Combine(UploadsRoot, ownerType.ToString());
-        Directory.CreateDirectory(folder); // создаст, если нет
+        // путь для сохранения
+        var uploadPath = Path.Combine("wwwroot", "uploads", folder);
+        Directory.CreateDirectory(uploadPath);
 
-        var filePath = Path.Combine(folder, storedFileName);
+        var filePath = Path.Combine(uploadPath, storedFileName);
 
-        // 6. физически сохраняем файл на диск
-        try
-        {
-            await using var stream = new FileStream(filePath, FileMode.Create);
-            await file.CopyToAsync(stream);
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Failed to save file to disk: {Path}", filePath);
-            return Result<FileUploadResponse>.Fail(
-                "Could not save file", ErrorType.BadRequest);
-        }
+        // сохраняем файл
+        await using var stream = new FileStream(filePath, FileMode.Create);
+        await file.CopyToAsync(stream, cancellationToken);
 
-        // 7. публичный URL (относительный путь от wwwroot)
-        var url = $"/uploads/{ownerType}/{storedFileName}";
-
-        // 8. запись в реестр FileStorage
-        var fileRecord = new FileStorage
+        // создаём запись в БД
+        var fileStorage = new FileStorage
         {
             OwnerType = ownerType,
             OwnerId = ownerId,
@@ -75,27 +68,42 @@ public class FileStorageService(
             OriginalFileName = file.FileName,
             StoredFileName = storedFileName,
             FilePath = filePath,
-            Url = url,
+            Url = $"/uploads/{folder}/{storedFileName}",
             FileSize = file.Length,
             MimeType = file.ContentType,
-            Extension = extension,
-            UploadedAt = DateTime.UtcNow
+            Extension = extension
         };
 
-        await unitOfWork.Files.CreateAsync(fileRecord);
-        await unitOfWork.SaveChangesAsync();
+        await unitOfWork.Files.CreateAsync(fileStorage, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
-            "File uploaded: {Original} -> {Stored} for {OwnerType}:{OwnerId}",
-            file.FileName, storedFileName, ownerType, ownerId);
+            "File uploaded: {FileName} for {OwnerType} {OwnerId}",
+            storedFileName, ownerType, ownerId);
 
-        return Result<FileUploadResponse>.Ok(new FileUploadResponse
-        {
-            Id = fileRecord.Id,
-            OriginalFileName = fileRecord.OriginalFileName,
-            Url = url,
-            FileSize = fileRecord.FileSize,
-            MimeType = fileRecord.MimeType
-        });
+        return fileStorage;
     }
+
+    public async Task DeleteAsync(
+        int fileId,
+        CancellationToken cancellationToken = default)
+    {
+        var file = await unitOfWork.Files.GetByIdAsync(fileId, cancellationToken);
+        if (file is null) return;
+
+        // удаляем физический файл
+        if (File.Exists(file.FilePath))
+            File.Delete(file.FilePath);
+
+        await unitOfWork.Files.DeleteAsync(fileId, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        logger.LogInformation("File deleted: {FileName}", file.StoredFileName);
+    }
+
+    public async Task<FileStorage?> GetByOwnerAsync(
+        FileOwnerType ownerType,
+        int ownerId,
+        CancellationToken cancellationToken = default)
+        => await unitOfWork.Files.GetByOwnerAsync(ownerType, ownerId, cancellationToken);
 }

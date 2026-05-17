@@ -4,7 +4,6 @@ using EduCrm.Application.DTOs.Users.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Entities;
-using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
@@ -74,7 +73,7 @@ public class UserService(
         if (user is null)
         {
             logger.LogWarning("GetUserById {UserId} - user not found", id);
-            return Result<UserDetailResponse>.Fail("User not found", ErrorType.NotFound);
+            return Result<UserDetailResponse>.Fail("User not found");
         }
 
         var response = MapToDetailResponse(user);
@@ -91,7 +90,7 @@ public class UserService(
         if (user is null)
         {
             logger.LogWarning("UpdateUser {UserId} - user not found", id);
-            return Result<UserDetailResponse>.Fail("User not found", ErrorType.NotFound);
+            return Result<UserDetailResponse>.Fail("User not found");
         }
 
         user.FirstName = request.FirstName;
@@ -114,7 +113,7 @@ public class UserService(
         if (user is null)
         {
             logger.LogWarning("SetActiveUser {UserId} - user not found", id);
-            return Result<bool>.Fail("User not found", ErrorType.NotFound);
+            return Result<bool>.Fail("User not found");
         }
 
         user.IsActive = isActive;
@@ -136,7 +135,7 @@ public class UserService(
         if (user is null)
         {
             logger.LogWarning("DeleteUser {UserId} - user not found", id);
-            return Result<bool>.Fail("User not found", ErrorType.NotFound);
+            return Result<bool>.Fail("User not found");
         }
 
         await unitOfWork.Users.DeleteAsync(id);
@@ -149,33 +148,39 @@ public class UserService(
         return Result<bool>.Ok(true);
     }
 
-    private static UserResponse MapToResponse(User user) => new()
+    private static UserResponse MapToResponse(User user)
     {
-        Id = user.Id,
-        FullName = user.FullName,
-        Email = user.Email,
-        PhoneNumber = user.PhoneNumber,
-        Role = user.Role.Name,
-        IsActive = user.IsActive,
-        CreatedAt = user.CreatedAt
-    };
+        return new UserResponse
+        {
+            Id = user.Id,
+            FullName = user.FullName,
+            Email = user.Email,
+            PhoneNumber = user.PhoneNumber,
+            Role = user.Role.Name,
+            IsActive = user.IsActive,
+            CreatedAt = user.CreatedAt
+        };
+    }
 
-    private static UserDetailResponse MapToDetailResponse(User user) => new()
+    private static UserDetailResponse MapToDetailResponse(User user)
     {
-        Id = user.Id,
-        FirstName = user.FirstName,
-        LastName = user.LastName,
-        FullName = user.FullName,
-        Email = user.Email,
-        PhoneNumber = user.PhoneNumber,
-        Role = user.Role.Name,
-        IsActive = user.IsActive,
-        IsPasswordSet = user.IsPasswordSet,
-        CreatedAt = user.CreatedAt,
-        UpdatedAt = user.UpdatedAt,
-        AvatarUrl = user.Profile?.AvatarUrl,
-        TelegramUsername = user.Profile?.TelegramUsername,
-        GithubUrl = user.Profile?.GithubUrl,
-        AboutMe = user.Profile?.AboutMe
-    };
+        return new UserDetailResponse
+        {
+            Id = user.Id,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            FullName = user.FullName,
+            Email = user.Email,
+            PhoneNumber = user.PhoneNumber,
+            Role = user.Role.Name,
+            IsActive = user.IsActive,
+            IsPasswordSet = user.IsPasswordSet,
+            CreatedAt = user.CreatedAt,
+            UpdatedAt = user.UpdatedAt,
+            AvatarUrl = user.Profile?.AvatarUrl,
+            TelegramUsername = user.Profile?.TelegramUsername,
+            GithubUrl = user.Profile?.GithubUrl,
+            AboutMe = user.Profile?.AboutMe
+        };
+    }
 }
