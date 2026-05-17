@@ -80,23 +80,23 @@ public class GroupService(
         if (await unitOfWork.Groups.ExistsByNameAsync(request.Name))
         {
             logger.LogWarning("Create failed - group name exists: {Name}", request.Name);
-            return Result<GroupResponse>.Fail("Group with this name already exists", ErrorType.Conflict);
+            return Result<GroupResponse>.Fail(
+                "Group with this name already exists", 
+                ErrorType.Conflict);
         }
 
-        // курс существует?
         var course = await unitOfWork.Courses.GetByIdAsync(request.CourseId);
         if (course is null)
             return Result<GroupResponse>.Fail("Course not found", ErrorType.BadRequest);
 
-        // ментор существует?
         var mentor = await unitOfWork.Mentors.GetByIdAsync(request.MentorId);
         if (mentor is null)
             return Result<GroupResponse>.Fail("Mentor not found", ErrorType.BadRequest);
 
-        // даты логичны?
-        if (request.EndDate is not null && request.EndDate <= request.StartDate)
+        if (request.EndDate <= request.StartDate)
             return Result<GroupResponse>.Fail(
-                "EndDate must be after StartDate", ErrorType.BadRequest);
+                "EndDate must be after StartDate", 
+                ErrorType.BadRequest);
 
         var group = new Group
         {
@@ -107,18 +107,20 @@ public class GroupService(
             EndDate = request.EndDate,
             MaxStudents = request.MaxStudents,
             Status = GroupStatus.Active,
-            CreatedAt = DateTime.UtcNow // <-- ВОТ ФИКС: явно ставим UTC-время создания
+            CreatedAt = DateTime.UtcNow  
         };
 
         await unitOfWork.Groups.CreateAsync(group);
         await unitOfWork.SaveChangesAsync();
 
+        
         await cache.RemoveByPrefixAsync(GroupCachePrefix);
 
-        logger.LogInformation("Group created: {GroupId} {Name}", group.Id, group.Name);
+        logger.LogInformation(
+            "Group created: {GroupId} {Name}", 
+            group.Id, group.Name);
 
-        var created = await unitOfWork.Groups.GetByIdAsync(group.Id);
-        return Result<GroupResponse>.Ok(MapToResponse(created!));
+        return Result<GroupResponse>.Ok(MapToResponse(group));  
     }
 
     public async Task<Result<GroupResponse>> UpdateAsync(int id, UpdateGroupRequest request)

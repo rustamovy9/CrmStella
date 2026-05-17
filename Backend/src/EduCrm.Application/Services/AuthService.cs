@@ -81,73 +81,78 @@ public class AuthService(
     }
 
     public async Task<Result<RegisterResponse>> RegisterAsync(int adminUserId, RegisterRequest request)
+{
+    if (request.RoleId < 1 || request.RoleId > 3)
+        return Result<RegisterResponse>.Fail("Invalid role", ErrorType.BadRequest);
+
+    if (await unitOfWork.Users.ExistsByEmailAsync(request.Email))
+        return Result<RegisterResponse>.Fail("Email already exists", ErrorType.Conflict);
+
+    var tempPassword = GenerateTempPassword();
+
+    var user = new User
     {
-        if (request.RoleId < 1 || request.RoleId > 3)
-            return Result<RegisterResponse>.Fail("Invalid role", ErrorType.BadRequest);
+        FirstName = request.FirstName,
+        LastName = request.LastName,
+        Email = request.Email.ToLower(),
+        PhoneNumber = request.PhoneNumber,
+        PasswordHash = BCrypt.Net.BCrypt.HashPassword(tempPassword),
+        RoleId = request.RoleId,
+        IsActive = true,
+        IsPasswordSet = false
+    };
 
-        if (await unitOfWork.Users.ExistsByEmailAsync(request.Email))
-            return Result<RegisterResponse>.Fail("Email already exists", ErrorType.Conflict);
+    await unitOfWork.Users.CreateAsync(user);
+    await unitOfWork.SaveChangesAsync();  
 
-        var tempPassword = GenerateTempPassword();
+    switch (request.RoleId)
+    {
+        case 2: // Mentor
+            var mentor = new Mentor
+            {
+                UserId = user.Id,  
+                HireDate = DateTime.UtcNow,
+                IsActive = true
+            };
+            await unitOfWork.Mentors.CreateAsync(mentor);
+            break;
 
-        var user = new User
-        {
-            FirstName = request.FirstName,
-            LastName = request.LastName,
-            Email = request.Email.ToLower(),
-            PhoneNumber = request.PhoneNumber,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword(tempPassword),
-            RoleId = request.RoleId,
-            IsActive = true,
-            IsPasswordSet = false
-        };
+        case 3: // Student
+            var student = new Student
+            {
+                UserId = user.Id, 
+                Balance = 0,
+                IsActive = true,
+                EnrolledAt = DateTime.UtcNow
+            };
+            await unitOfWork.Students.CreateAsync(student);
+            break;
 
-        switch (request.RoleId)
-        {
-            case 2: // Mentor
-                await unitOfWork.Mentors.CreateAsync(new Mentor
-                {
-                    User = user, // связь по навигации, FK проставится сам
-                    HireDate = DateTime.UtcNow,
-                    IsActive = true
-                });
-                break;
-            case 3: // Student
-                await unitOfWork.Students.CreateAsync(new Student
-                {
-                    User = user,
-                    Balance = 0,
-                    IsActive = true,
-                    EnrolledAt = DateTime.UtcNow
-                });
-                break;
-
-            // case 1 (Admin) — профиль роли не нужен
-        }
-
-        await unitOfWork.Users.CreateAsync(user);
-        await unitOfWork.SaveChangesAsync();
-        await unitOfWork.Users.LoadRoleAsync(user);
-
-        logger.LogInformation(
-            "New user registered by Admin {AdminId}: {Email} Role: {RoleId}",
-            adminUserId, user.Email, user.RoleId);
-
-        // очищаем кэш после создания
-        await cache.RemoveByPrefixAsync(UserCachePrefix);
-
-        await emailService.SendWelcomeAsync(user.Email, user.FullName, tempPassword);
-
-        return Result<RegisterResponse>.Ok(new RegisterResponse
-        {
-            Id = user.Id,
-            FullName = user.FullName,
-            Email = user.Email,
-            PhoneNumber = user.PhoneNumber,
-            Role = user.Role?.Name ?? string.Empty,
-            CreatedAt = user.CreatedAt
-        });
+        // case 1 (Admin) — профиль роли не нужен
     }
+
+    await unitOfWork.SaveChangesAsync();
+
+    await unitOfWork.Users.LoadRoleAsync(user);
+
+    logger.LogInformation(
+        "New user registered by Admin {AdminId}: {Email} Role: {RoleId}",
+        adminUserId, user.Email, user.RoleId);
+
+    await cache.RemoveByPrefixAsync(UserCachePrefix);
+
+    await emailService.SendWelcomeAsync(user.Email, user.FullName, tempPassword);
+
+    return Result<RegisterResponse>.Ok(new RegisterResponse
+    {
+        Id = user.Id,
+        FullName = user.FullName,
+        Email = user.Email,
+        PhoneNumber = user.PhoneNumber,
+        Role = user.Role?.Name ?? string.Empty,
+        CreatedAt = user.CreatedAt
+    });
+}
 
     public async Task<Result<AuthResponse>> RefreshTokenAsync(RefreshTokenRequest request)
     {
