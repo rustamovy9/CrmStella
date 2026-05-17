@@ -126,7 +126,6 @@ public class MentorService(
         ExperienceYears = m.ExperienceYears,
         HireDate = m.HireDate,
         IsActive = m.IsActive,
-        GroupsCount = m.Groups?.Count ?? 0,
-        CoursesCount = m.Courses?.Count ?? 0
+        GroupsCount = m.Groups?.Count ?? 0
     };
 }

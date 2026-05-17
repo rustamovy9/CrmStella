@@ -89,7 +89,8 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseHttpsRedirection();
-app.UseMiddleware<LoggingMiddleware>(); 
+app.UseMiddleware<LoggingMiddleware>();
+app.UseStaticFiles(); 
 app.MapControllers();
 app.UseAuthentication();   
 app.UseAuthorization(); 

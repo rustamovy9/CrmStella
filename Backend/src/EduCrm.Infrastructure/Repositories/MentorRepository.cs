@@ -22,7 +22,6 @@ public class MentorRepository(AppDbContext context) : IMentorRepository
             .Include(m => m.User)
             .ThenInclude(u => u.Profile)
             .Include(m => m.Groups)
-            .Include(m => m.Courses)
             .FirstOrDefaultAsync(m => m.Id == id, cancellationToken);
 
     public async Task<Mentor?> GetByUserIdAsync(

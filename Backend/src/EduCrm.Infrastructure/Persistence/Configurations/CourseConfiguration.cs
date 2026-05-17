@@ -28,11 +28,7 @@ public class CourseConfiguration : IEntityTypeConfiguration<Course>
 
         builder.Property(x => x.IsActive)
             .IsRequired();
-
-        builder.HasOne(x => x.Mentor)
-            .WithMany(x => x.Courses)
-            .HasForeignKey(x => x.MentorId)
-            .OnDelete(DeleteBehavior.SetNull);
+        
 
         builder.HasMany(x => x.Groups)
             .WithOne(x => x.Course)
