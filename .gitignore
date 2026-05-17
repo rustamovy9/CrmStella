@@ -33,3 +33,7 @@ Thumbs.db
 # Rider
 **/.idea/
 **/*.DotSettings.user
+
+# Uploads
+**/wwwroot/uploads/
+!**/wwwroot/uploads/.gitkeep
