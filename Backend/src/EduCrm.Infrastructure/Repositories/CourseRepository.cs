@@ -9,28 +9,36 @@ public class CourseRepository(AppDbContext context) : ICourseRepository
 {
     public async Task<List<Course>> GetAllAsync(
         CancellationToken cancellationToken = default)
-        => await context.Courses
+    {
+        return await context.Courses
             .Include(c => c.Groups)
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<Course?> GetByIdAsync(
         int id,
         CancellationToken cancellationToken = default)
-        => await context.Courses
+    {
+        return await context.Courses
             .Include(c => c.Groups)
             .FirstOrDefaultAsync(c => c.Id == id, cancellationToken);
+    }
 
     public async Task<bool> ExistsByNameAsync(
         string name,
         CancellationToken cancellationToken = default)
-        => await context.Courses
+    {
+        return await context.Courses
             .AnyAsync(c => c.Name.ToLower() == name.ToLower(), cancellationToken);
+    }
 
     public async Task CreateAsync(
         Course course,
         CancellationToken cancellationToken = default)
-        => await context.Courses.AddAsync(course, cancellationToken);
+    {
+        await context.Courses.AddAsync(course, cancellationToken);
+    }
 
     public Task UpdateAsync(
         Course course,

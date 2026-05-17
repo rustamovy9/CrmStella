@@ -38,6 +38,7 @@ public class GroupStudentController(IGroupStudentService groupStudentService) : 
 
         return Ok(result);
     }
+
     [HttpPost("transfer")]
     public async Task<IActionResult> Transfer([FromBody] TransferStudentRequest request)
     {

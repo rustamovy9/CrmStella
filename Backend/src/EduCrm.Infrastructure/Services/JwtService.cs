@@ -25,9 +25,9 @@ public class JwtService(IConfiguration configuration) : IJwtService
         };
 
         var token = new JwtSecurityToken(
-            issuer: configuration["Jwt:Issuer"],
-            audience: configuration["Jwt:Audience"],
-            claims: claims,
+            configuration["Jwt:Issuer"],
+            configuration["Jwt:Audience"],
+            claims,
             expires: DateTime.UtcNow.AddMinutes(
                 int.Parse(configuration["Jwt:AccessTokenExpiryMinutes"]!)),
             signingCredentials: new SigningCredentials(key, SecurityAlgorithms.HmacSha256)

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.AspNetCore.Http;
 
 namespace EduCrm.Application.DTOs.Course.Request;
 
@@ -16,4 +17,6 @@ public class CreateCourseRequest
 
     [Range(1, 520, ErrorMessage = "Duration must be between 1 and 520 weeks")]
     public int DurationWeeks { get; set; }
+
+    public IFormFile? Icon { get; set; }
 }

@@ -16,11 +16,91 @@ public class FilesController(IFileStorageService fileStorageService) : BaseContr
         [FromQuery] FileOwnerType ownerType,
         [FromQuery] int ownerId)
     {
-        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var result = await fileStorageService.UploadAsync(file, ownerType, ownerId, userId);
-        if (!result.IsSuccess)
-            return HandleError(result);
+        // Валидация файла
+        if (file is null || file.Length == 0)
+            return BadRequest(new { error = "File is required" });
 
-        return Ok(result);
+        // Получаем ID пользователя
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+        try
+        {
+            // FileStorageService не возвращает Result, а выбрасывает исключение
+            var fileRecord = await fileStorageService.UploadAsync(
+                file, 
+                ownerType, 
+                ownerId, 
+                userId);
+
+            return Ok(new
+            {
+                success = true,
+                data = new
+                {
+                    fileRecord.Id,
+                    fileRecord.Url,
+                    fileRecord.OriginalFileName,
+                    fileRecord.FileSize,
+                    fileRecord.MimeType
+                }
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new { error = "File upload failed" });
+        }
+    }
+
+    [HttpDelete("{fileId:int}")]
+    public async Task<IActionResult> Delete(int fileId)
+    {
+        try
+        {
+            await fileStorageService.DeleteAsync(fileId);
+            return Ok(new { success = true, message = "File deleted successfully" });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new { error = "Failed to delete file" });
+        }
+    }
+
+    [HttpGet("owner/{ownerType}/{ownerId:int}")]
+    public async Task<IActionResult> GetByOwner(FileOwnerType ownerType, int ownerId)
+    {
+        try
+        {
+            var file = await fileStorageService.GetByOwnerAsync(ownerType, ownerId);
+            
+            if (file is null)
+                return NotFound(new { error = "File not found" });
+
+            return Ok(new
+            {
+                success = true,
+                data = new
+                {
+                    file.Id,
+                    file.Url,
+                    file.OriginalFileName,
+                    file.FileSize,
+                    file.MimeType
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new { error = "Failed to retrieve file" });
+        }
     }
 }

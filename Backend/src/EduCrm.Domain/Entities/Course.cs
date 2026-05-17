@@ -9,7 +9,7 @@ public class Course
     public string? IconUrl { get; set; }
     public int DurationWeeks { get; set; }
     public bool IsActive { get; set; } = true;
-    
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
 

@@ -3,7 +3,7 @@ using EduCrm.Application.DTOs.Students.Request;
 using EduCrm.Application.DTOs.Students.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
-using EduCrm.Domain.Enums;
+using EduCrm.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
@@ -54,7 +54,7 @@ public class StudentService(
         if (student is null)
         {
             logger.LogWarning("Student not found: {StudentId}", id);
-            return Result<StudentResponse>.Fail("Student not found", ErrorType.NotFound);
+            return Result<StudentResponse>.Fail("Student not found");
         }
 
         var response = MapToResponse(student);
@@ -69,7 +69,7 @@ public class StudentService(
         if (student is null)
         {
             logger.LogWarning("Update failed - student not found: {StudentId}", id);
-            return Result<StudentResponse>.Fail("Student not found", ErrorType.NotFound);
+            return Result<StudentResponse>.Fail("Student not found");
         }
 
         if (request.Balance is not null)
@@ -94,7 +94,7 @@ public class StudentService(
         if (student is null)
         {
             logger.LogWarning("SetStatus failed - student not found: {StudentId}", id);
-            return Result<bool>.Fail("Student not found", ErrorType.NotFound);
+            return Result<bool>.Fail("Student not found");
         }
 
         student.IsActive = request.IsActive;
@@ -110,17 +110,20 @@ public class StudentService(
         return Result<bool>.Ok(true);
     }
 
-    private static StudentResponse MapToResponse(Domain.Entities.Student s) => new()
+    private static StudentResponse MapToResponse(Student s)
     {
-        Id = s.Id,
-        UserId = s.UserId,
-        FullName = s.User.FullName,
-        Email = s.User.Email,
-        PhoneNumber = s.User.PhoneNumber,
-        AvatarUrl = s.User.Profile?.AvatarUrl,
-        Balance = s.Balance,
-        IsActive = s.IsActive,
-        EnrolledAt = s.EnrolledAt,
-        GroupsCount = s.GroupStudents?.Count ?? 0
-    };
+        return new StudentResponse
+        {
+            Id = s.Id,
+            UserId = s.UserId,
+            FullName = s.User.FullName,
+            Email = s.User.Email,
+            PhoneNumber = s.User.PhoneNumber,
+            AvatarUrl = s.User.Profile?.AvatarUrl,
+            Balance = s.Balance,
+            IsActive = s.IsActive,
+            EnrolledAt = s.EnrolledAt,
+            GroupsCount = s.GroupStudents?.Count ?? 0
+        };
+    }
 }

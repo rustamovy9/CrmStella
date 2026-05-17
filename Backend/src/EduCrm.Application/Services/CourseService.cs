@@ -4,6 +4,7 @@ using EduCrm.Application.DTOs.Course.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Enums;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
@@ -11,6 +12,7 @@ namespace EduCrm.Application.Services;
 public class CourseService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
+    IFileStorageService fileStorage,
     ILogger<CourseService> logger) : ICourseService
 {
     private const string CourseCachePrefix = "courses:";
@@ -70,7 +72,7 @@ public class CourseService(
         return Result<CourseResponse>.Ok(response);
     }
 
-    public async Task<Result<CourseResponse>> CreateAsync(CreateCourseRequest request)
+    public async Task<Result<CourseResponse>> CreateAsync(CreateCourseRequest request, int uploadedByUserId)
     {
         if (await unitOfWork.Courses.ExistsByNameAsync(request.Name))
         {
@@ -91,6 +93,30 @@ public class CourseService(
 
         await unitOfWork.Courses.CreateAsync(course);
         await unitOfWork.SaveChangesAsync();
+
+        // Загружаем иконку если она есть
+        if (request.Icon is not null && request.Icon.Length > 0)
+        {
+            try
+            {
+                var fileRecord = await fileStorage.UploadAsync(
+                    request.Icon,
+                    FileOwnerType.Course,
+                    course.Id,
+                    uploadedByUserId);
+
+                course.IconUrl = fileRecord.Url;
+                await unitOfWork.Courses.UpdateAsync(course);
+                await unitOfWork.SaveChangesAsync();
+
+                logger.LogInformation("Course icon uploaded: {CourseId}", course.Id);
+            }
+            catch (ArgumentException ex)
+            {
+                logger.LogWarning(ex, "Failed to upload course icon: {CourseId}", course.Id);
+                // Не критично - курс создан, иконка не загружена
+            }
+        }
 
         await cache.RemoveByPrefixAsync(CourseCachePrefix);
 
@@ -152,41 +178,81 @@ public class CourseService(
         return Result<bool>.Ok(true);
     }
 
-    public async Task<Result<CourseResponse>> SetIconAsync(int fileId)
+    public async Task<Result<CourseResponse>> SetCourseIconAsync(
+        int courseId, 
+        IFormFile iconFile, 
+        int uploadedByUserId)
     {
-        var file = await unitOfWork.Files.GetByIdAsync(fileId);
-        if (file is null)
-        {
-            logger.LogWarning("SetIcon failed - file not found: {FileId}", fileId);
-            return Result<CourseResponse>.Fail("File not found", ErrorType.NotFound);
-        }
-
-        if (file.OwnerType != FileOwnerType.Course)
-            return Result<CourseResponse>.Fail(
-                "File is not for a course", ErrorType.BadRequest);
-
-        var course = await unitOfWork.Courses.GetByIdAsync(file.OwnerId);
+        // 1. Проверяем, существует ли курс
+        var course = await unitOfWork.Courses.GetByIdAsync(courseId);
         if (course is null)
         {
-            logger.LogWarning("SetIcon failed - course not found: {CourseId}", file.OwnerId);
+            logger.LogWarning("SetCourseIcon failed - course not found: {CourseId}", courseId);
             return Result<CourseResponse>.Fail("Course not found", ErrorType.NotFound);
         }
 
-        if (!string.IsNullOrEmpty(course.IconUrl))
+        try
+        {
+            // 2. Удаляем старую иконку если она есть
+            if (!string.IsNullOrEmpty(course.IconUrl))
+            {
+                var oldFile = await unitOfWork.Files.GetByOwnerAsync(
+                    FileOwnerType.Course,
+                    courseId);
+
+                if (oldFile is not null)
+                {
+                    try
+                    {
+                        await fileStorage.DeleteAsync(oldFile.Id);
+                        logger.LogInformation(
+                            "Old course icon deleted: {CourseId}", courseId);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(
+                            ex,
+                            "Failed to delete old icon: {CourseId}",
+                            courseId);
+                        // Не критично - продолжаем
+                    }
+                }
+            }
+
+            // 3. Загружаем новую иконку
+            var newFileRecord = await fileStorage.UploadAsync(
+                iconFile,
+                FileOwnerType.Course,
+                courseId,
+                uploadedByUserId);
+
+            // 4. Обновляем курс с новым URL
+            course.IconUrl = newFileRecord.Url;
+
+            await unitOfWork.Courses.UpdateAsync(course);
+            await unitOfWork.SaveChangesAsync();
+
+            // 5. Инвалидируем кэш
+            await cache.RemoveByPrefixAsync(CourseCachePrefix);
+
             logger.LogInformation(
-                "Course {CourseId} icon replaced. Old: {Old}, New: {New}",
-                course.Id, course.IconUrl, file.Url);
+                "Course icon set: {CourseId} - {Url}",
+                courseId, newFileRecord.Url);
 
-        course.IconUrl = file.Url;
-
-        await unitOfWork.Courses.UpdateAsync(course);
-        await unitOfWork.SaveChangesAsync();
-
-        await cache.RemoveByPrefixAsync(CourseCachePrefix);
-
-        logger.LogInformation("Course {CourseId} icon set to {Url}", course.Id, file.Url);
-
-        return Result<CourseResponse>.Ok(MapToResponse(course));
+            return Result<CourseResponse>.Ok(MapToResponse(course));
+        }
+        catch (ArgumentException ex)
+        {
+            logger.LogWarning(ex, "SetCourseIcon validation failed: {CourseId}", courseId);
+            return Result<CourseResponse>.Fail(ex.Message, ErrorType.BadRequest);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "SetCourseIcon error: {CourseId}", courseId);
+            return Result<CourseResponse>.Fail(
+                "Could not set course icon",
+                ErrorType.Unknown);
+        }
     }
 
     private static CourseResponse MapToResponse(Domain.Entities.Course c) => new()

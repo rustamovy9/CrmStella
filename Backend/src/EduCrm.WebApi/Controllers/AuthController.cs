@@ -18,7 +18,7 @@ public class AuthController(IAuthService authService) : BaseController
 
         return Ok(result);
     }
-    
+
     [Authorize(Roles = "Admin")]
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)

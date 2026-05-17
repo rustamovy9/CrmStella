@@ -4,11 +4,6 @@ namespace EduCrm.Application.Common;
 
 public class Result<T>
 {
-    public bool IsSuccess { get; }
-    public T? Data { get; set; }
-    public string? Error { get; }
-    public ErrorType? ErrorType { get; }
-
     private Result(T? data)
     {
         IsSuccess = true;
@@ -22,7 +17,18 @@ public class Result<T>
         ErrorType = errorType;
     }
 
-    public static Result<T> Ok(T? data) => new(data);
+    public bool IsSuccess { get; }
+    public T? Data { get; set; }
+    public string? Error { get; }
+    public ErrorType? ErrorType { get; }
 
-    public static Result<T> Fail(string error, ErrorType errorType = Domain.Enums.ErrorType.NotFound) => new(error, errorType);
+    public static Result<T> Ok(T? data)
+    {
+        return new Result<T>(data);
+    }
+
+    public static Result<T> Fail(string error, ErrorType errorType = Domain.Enums.ErrorType.NotFound)
+    {
+        return new Result<T>(error, errorType);
+    }
 }

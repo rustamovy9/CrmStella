@@ -8,5 +8,6 @@ public class VerifyCodeRequest
     [EmailAddress(ErrorMessage = "Invalid email format")]
     [MaxLength(200, ErrorMessage = "Email must not exceed 200 characters")]
     public string Email { get; set; } = null!;
+
     public string Code { get; set; } = null!;
 }

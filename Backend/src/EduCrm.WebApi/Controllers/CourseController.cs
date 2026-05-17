@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using EduCrm.Application.DTOs.Course.Request;
 using EduCrm.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -30,13 +31,14 @@ public class CourseController(ICourseService courseService) : BaseController
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateCourseRequest request)
+    public async Task<IActionResult> Create([FromForm] CreateCourseRequest request)
     {
-        var result = await courseService.CreateAsync(request);
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var result = await courseService.CreateAsync(request, userId);
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok(result);
+        return CreatedAtAction(nameof(GetById), new { id = result.Data.Id }, result.Data);
     }
 
     [HttpPut("{id:int}")]
@@ -58,11 +60,12 @@ public class CourseController(ICourseService courseService) : BaseController
 
         return Ok(result);
     }
-    
-    [HttpPatch("icon")]
-    public async Task<IActionResult> SetIcon([FromQuery] int fileId)
+
+    [HttpPatch("{id:int}/icon")]
+    public async Task<IActionResult> SetCourseIcon(int id, IFormFile file)
     {
-        var result = await courseService.SetIconAsync(fileId);
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var result = await courseService.SetCourseIconAsync(id, file, userId);
         if (!result.IsSuccess)
             return HandleError(result);
 
