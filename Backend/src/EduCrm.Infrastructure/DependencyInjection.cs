@@ -33,7 +33,8 @@ public static class DependencyInjection
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IUserService, UserService>();
-
+        services.AddScoped<IMentorService, MentorService>();
+        services.AddScoped<IStudentService, StudentService>();
         // Settings
         services.Configure<EmailSettings>(
             configuration.GetSection("EmailSettings"));
