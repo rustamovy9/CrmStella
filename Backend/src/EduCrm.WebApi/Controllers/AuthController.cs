@@ -16,7 +16,7 @@ public class AuthController(IAuthService authService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok(result.Data);
+        return Ok(result);
     }
     
     [Authorize(Roles = "Admin")]
@@ -28,7 +28,7 @@ public class AuthController(IAuthService authService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok(result.Data);
+        return Ok(result);
     }
 
     [HttpPost("refresh")]
@@ -38,7 +38,7 @@ public class AuthController(IAuthService authService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok(result.Data);
+        return Ok(result);
     }
 
     [HttpPost("forgot-password")]
@@ -48,7 +48,7 @@ public class AuthController(IAuthService authService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok(result.Data);
+        return Ok(result);
     }
 
     [HttpPost("verify-code")]
@@ -58,7 +58,7 @@ public class AuthController(IAuthService authService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok(result.Data);
+        return Ok(result);
     }
 
     [HttpPost("reset-password")]
@@ -68,7 +68,7 @@ public class AuthController(IAuthService authService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok(result.Data);
+        return Ok(result);
     }
 
     [Authorize]
@@ -80,7 +80,7 @@ public class AuthController(IAuthService authService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok(result.Data);
+        return Ok(result);
     }
 
     [Authorize]
@@ -92,6 +92,6 @@ public class AuthController(IAuthService authService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok(result.Data);
+        return Ok(result);
     }
 }

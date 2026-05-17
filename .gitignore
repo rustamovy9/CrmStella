@@ -1,8 +1,35 @@
+# Build outputs
 **/bin/
 **/obj/
+
+# IDE
 .vs/
 .idea/
 *.user
 *.lscache
+
+# Logs
+logs/
+*.log
+
+# Environment & secrets
 .env
+.env.*
 appsettings.Development.json
+appsettings.Production.json
+
+# Database
+*.db
+*.sqlite
+
+# OS
+.DS_Store
+Thumbs.db
+
+# NuGet
+*.nupkg
+.nuget/
+
+# Rider
+**/.idea/
+**/*.DotSettings.user

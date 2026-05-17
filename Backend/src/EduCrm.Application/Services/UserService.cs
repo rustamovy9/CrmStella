@@ -3,126 +3,179 @@ using EduCrm.Application.DTOs.Users.Request;
 using EduCrm.Application.DTOs.Users.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
+using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
 
-public class UserService(IUserRepository userRepository) : IUserService
+public class UserService(
+    IUnitOfWork unitOfWork,
+    ICacheService cache,
+    ILogger<UserService> logger) : IUserService
 {
+    private const string AllUsersCacheKey = "users:all";
+    private const string UserCachePrefix = "users:";
+
     public async Task<Result<List<UserResponse>>> GetAllAsync()
     {
-        var users = await userRepository.GetAllAsync();
-
-        var response = users.Select(x => new UserResponse
+        var cached = await cache.GetAsync<List<UserResponse>>(AllUsersCacheKey);
+        if (cached is not null)
         {
-            Id = x.Id,
-            FullName = x.FullName,
-            Email = x.Email,
-            PhoneNumber = x.PhoneNumber,
-            Role = x.Role.Name,
-            IsActive = x.IsActive,
-            CreatedAt = x.CreatedAt
-        }).ToList();
+            logger.LogInformation("GetAllUsers - returned from cache");
+            return Result<List<UserResponse>>.Ok(cached);
+        }
+
+        var users = await unitOfWork.Users.GetAllAsync();
+        var response = users.Select(MapToResponse).ToList();
+
+        await cache.SetAsync(AllUsersCacheKey, response, TimeSpan.FromMinutes(5));
+
+        logger.LogInformation("GetAllUsers - returned {Count} users from database", response.Count);
 
         return Result<List<UserResponse>>.Ok(response);
     }
 
     public async Task<Result<List<UserResponse>>> GetByRoleAsync(int roleId)
     {
-        var users = await userRepository.GetByRoleAsync(roleId);
+        var cacheKey = $"users:role:{roleId}";
 
-        var response = users.Select(x => new UserResponse
+        var cached = await cache.GetAsync<List<UserResponse>>(cacheKey);
+        if (cached is not null)
         {
-            Id = x.Id,
-            FullName = x.FullName,
-            Email = x.Email,
-            PhoneNumber = x.PhoneNumber,
-            Role = x.Role.Name,
-            IsActive = x.IsActive,
-            CreatedAt = x.CreatedAt
-        }).ToList();
+            logger.LogInformation("GetUsersByRole {RoleId} - returned from cache", roleId);
+            return Result<List<UserResponse>>.Ok(cached);
+        }
+
+        var users = await unitOfWork.Users.GetByRoleAsync(roleId);
+        var response = users.Select(MapToResponse).ToList();
+
+        await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(5));
+
+        logger.LogInformation(
+            "GetUsersByRole {RoleId} - returned {Count} users from database",
+            roleId, response.Count);
 
         return Result<List<UserResponse>>.Ok(response);
     }
 
     public async Task<Result<UserDetailResponse>> GetByIdAsync(int id)
     {
-        var user = await userRepository.GetByIdAsync(id);
-        if (user is null)
-            return Result<UserDetailResponse>.Fail("User not found", ErrorType.NotFound);
+        var cacheKey = $"users:{id}";
 
-        return Result<UserDetailResponse>.Ok(new UserDetailResponse
+        var cached = await cache.GetAsync<UserDetailResponse>(cacheKey);
+        if (cached is not null)
         {
-            Id = user.Id,
-            FirstName = user.FirstName,
-            LastName = user.LastName,
-            FullName = user.FullName,
-            Email = user.Email,
-            PhoneNumber = user.PhoneNumber,
-            Role = user.Role.Name,
-            IsActive = user.IsActive,
-            IsPasswordSet = user.IsPasswordSet,
-            CreatedAt = user.CreatedAt,
-            UpdatedAt = user.UpdatedAt,
-            AvatarUrl = user.Profile?.AvatarUrl,
-            TelegramUsername = user.Profile?.TelegramUsername,
-            GithubUrl = user.Profile?.GithubUrl,
-            AboutMe = user.Profile?.AboutMe
-        });
+            logger.LogInformation("GetUserById {UserId} - returned from cache", id);
+            return Result<UserDetailResponse>.Ok(cached);
+        }
+
+        var user = await unitOfWork.Users.GetByIdAsync(id);
+        if (user is null)
+        {
+            logger.LogWarning("GetUserById {UserId} - user not found", id);
+            return Result<UserDetailResponse>.Fail("User not found", ErrorType.NotFound);
+        }
+
+        var response = MapToDetailResponse(user);
+        await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(5));
+
+        logger.LogInformation("GetUserById {UserId} - returned from database", id);
+
+        return Result<UserDetailResponse>.Ok(response);
     }
 
     public async Task<Result<UserDetailResponse>> UpdateAsync(int id, UpdateUserRequest request)
     {
-        var user = await userRepository.GetByIdAsync(id);
+        var user = await unitOfWork.Users.GetByIdAsync(id);
         if (user is null)
+        {
+            logger.LogWarning("UpdateUser {UserId} - user not found", id);
             return Result<UserDetailResponse>.Fail("User not found", ErrorType.NotFound);
+        }
 
         user.FirstName = request.FirstName;
         user.LastName = request.LastName;
         user.PhoneNumber = request.PhoneNumber;
 
-        await userRepository.UpdateAsync(user);
+        await unitOfWork.Users.UpdateAsync(user);
+        await unitOfWork.SaveChangesAsync();
 
-        return Result<UserDetailResponse>.Ok(new UserDetailResponse
-        {
-            Id = user.Id,
-            FirstName = user.FirstName,
-            LastName = user.LastName,
-            FullName = user.FullName,
-            Email = user.Email,
-            PhoneNumber = user.PhoneNumber,
-            Role = user.Role.Name,
-            IsActive = user.IsActive,
-            IsPasswordSet = user.IsPasswordSet,
-            CreatedAt = user.CreatedAt,
-            UpdatedAt = user.UpdatedAt,
-            AvatarUrl = user.Profile?.AvatarUrl,
-            TelegramUsername = user.Profile?.TelegramUsername,
-            GithubUrl = user.Profile?.GithubUrl,
-            AboutMe = user.Profile?.AboutMe
-        });
+        await cache.RemoveByPrefixAsync(UserCachePrefix);
+
+        logger.LogInformation("UpdateUser {UserId} - updated successfully", id);
+
+        return Result<UserDetailResponse>.Ok(MapToDetailResponse(user));
     }
 
     public async Task<Result<bool>> SetActiveAsync(int id, bool isActive)
     {
-        var user = await userRepository.GetByIdAsync(id);
+        var user = await unitOfWork.Users.GetByIdAsync(id);
         if (user is null)
+        {
+            logger.LogWarning("SetActiveUser {UserId} - user not found", id);
             return Result<bool>.Fail("User not found", ErrorType.NotFound);
+        }
 
         user.IsActive = isActive;
-        await userRepository.UpdateAsync(user);
+        await unitOfWork.Users.UpdateAsync(user);
+        await unitOfWork.SaveChangesAsync();
+
+        await cache.RemoveByPrefixAsync(UserCachePrefix);
+
+        logger.LogInformation(
+            "SetActiveUser {UserId} - IsActive set to {IsActive}",
+            id, isActive);
 
         return Result<bool>.Ok(true);
     }
 
     public async Task<Result<bool>> DeleteAsync(int id)
     {
-        var user = await userRepository.GetByIdAsync(id);
+        var user = await unitOfWork.Users.GetByIdAsync(id);
         if (user is null)
+        {
+            logger.LogWarning("DeleteUser {UserId} - user not found", id);
             return Result<bool>.Fail("User not found", ErrorType.NotFound);
+        }
 
-        await userRepository.DeleteAsync(id);
+        await unitOfWork.Users.DeleteAsync(id);
+        await unitOfWork.SaveChangesAsync();
+
+        await cache.RemoveByPrefixAsync(UserCachePrefix);
+
+        logger.LogInformation("DeleteUser {UserId} - deleted successfully", id);
 
         return Result<bool>.Ok(true);
     }
+
+    private static UserResponse MapToResponse(User user) => new()
+    {
+        Id = user.Id,
+        FullName = user.FullName,
+        Email = user.Email,
+        PhoneNumber = user.PhoneNumber,
+        Role = user.Role.Name,
+        IsActive = user.IsActive,
+        CreatedAt = user.CreatedAt
+    };
+
+    private static UserDetailResponse MapToDetailResponse(User user) => new()
+    {
+        Id = user.Id,
+        FirstName = user.FirstName,
+        LastName = user.LastName,
+        FullName = user.FullName,
+        Email = user.Email,
+        PhoneNumber = user.PhoneNumber,
+        Role = user.Role.Name,
+        IsActive = user.IsActive,
+        IsPasswordSet = user.IsPasswordSet,
+        CreatedAt = user.CreatedAt,
+        UpdatedAt = user.UpdatedAt,
+        AvatarUrl = user.Profile?.AvatarUrl,
+        TelegramUsername = user.Profile?.TelegramUsername,
+        GithubUrl = user.Profile?.GithubUrl,
+        AboutMe = user.Profile?.AboutMe
+    };
 }

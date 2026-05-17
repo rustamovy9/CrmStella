@@ -15,7 +15,7 @@ public class UserController(IUserService userService) : BaseController
     public async Task<IActionResult> GetAll()
     {
         var result = await userService.GetAllAsync();
-        return Ok(result.Data);
+        return Ok(result);
     }
 
     [Authorize(Roles = "Admin")]
@@ -23,7 +23,7 @@ public class UserController(IUserService userService) : BaseController
     public async Task<IActionResult> GetByRole(int roleId)
     {
         var result = await userService.GetByRoleAsync(roleId);
-        return Ok(result.Data);
+        return Ok(result);
     }
 
     [HttpGet("{id}")]
@@ -51,7 +51,7 @@ public class UserController(IUserService userService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok(result.Data);
+        return Ok(result);
     }
 
     [Authorize(Roles = "Admin")]
@@ -62,7 +62,7 @@ public class UserController(IUserService userService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok("User status updated");
+        return Ok(result);
     }
 
     [Authorize(Roles = "Admin")]
@@ -73,6 +73,6 @@ public class UserController(IUserService userService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok("User deleted");
+        return Ok(result);
     }
 }

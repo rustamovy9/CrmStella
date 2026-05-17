@@ -2,13 +2,21 @@ using System.Text;
 using EduCrm.Infrastructure;
 using EduCrm.Infrastructure.Persistence.Data;
 using EduCrm.Infrastructure.Persistence.Seeds;
+using EduCrm.WebApi.Middleware;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using Serilog;
+
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .WriteTo.File("Logs/educrm-.log", rollingInterval: RollingInterval.Day)
+    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Host.UseSerilog();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
@@ -81,6 +89,7 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseHttpsRedirection();
+app.UseMiddleware<LoggingMiddleware>(); 
 app.MapControllers();
 app.UseAuthentication();   
 app.UseAuthorization(); 

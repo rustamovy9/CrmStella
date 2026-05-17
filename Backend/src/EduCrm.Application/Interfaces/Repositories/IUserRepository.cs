@@ -4,13 +4,14 @@ namespace EduCrm.Application.Interfaces.Repositories;
 
 public interface IUserRepository
 {
-    Task<User?> GetByIdAsync(int id);
-    Task<User?> GetByEmailAsync(string email);
-    Task<User?> GetByRefreshTokenAsync(string refreshToken);
-    Task<bool> ExistsByEmailAsync(string email);
-    Task<List<User>> GetAllAsync();
-    Task<List<User>> GetByRoleAsync(int roleId);
-    Task<User> CreateAsync(User user);
-    Task<User> UpdateAsync(User user);
-    Task DeleteAsync(int id);
+    Task<User?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<User?> GetByEmailAsync(string email, CancellationToken cancellationToken = default);
+    Task<User?> GetByRefreshTokenAsync(string refreshToken, CancellationToken cancellationToken = default);
+    Task<bool> ExistsByEmailAsync(string email, CancellationToken cancellationToken = default);
+    Task<List<User>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<List<User>> GetByRoleAsync(int roleId, CancellationToken cancellationToken = default);
+    Task<User> CreateAsync(User user, CancellationToken cancellationToken = default);
+    Task<User> UpdateAsync(User user, CancellationToken cancellationToken = default);
+    Task DeleteAsync(int id, CancellationToken cancellationToken = default);
+    Task LoadRoleAsync(User user, CancellationToken cancellationToken = default);
 }
