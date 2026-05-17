@@ -16,5 +16,4 @@ public class MentorResponse
     public bool IsActive { get; set; }
 
     public int GroupsCount { get; set; }
-    public int CoursesCount { get; set; }
 }

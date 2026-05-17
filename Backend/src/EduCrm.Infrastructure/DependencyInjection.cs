@@ -35,6 +35,10 @@ public static class DependencyInjection
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMentorService, MentorService>();
         services.AddScoped<IStudentService, StudentService>();
+        services.AddScoped<ICourseService, CourseService>();
+        services.AddScoped<IGroupStudentService, GroupStudentService>();
+        services.AddScoped<IGroupService, GroupService>();
+        services.AddScoped<IFileStorageService, FileStorageService>();
         // Settings
         services.Configure<EmailSettings>(
             configuration.GetSection("EmailSettings"));

@@ -12,5 +12,4 @@ public class Mentor
 
     public User User { get; set; } = null!;
     public ICollection<Group> Groups { get; set; } = new List<Group>();
-    public ICollection<Course> Courses { get; set; } = new List<Course>();
 }
