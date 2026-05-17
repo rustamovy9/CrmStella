@@ -101,6 +101,29 @@ public class AuthService(
             IsActive = true,
             IsPasswordSet = false
         };
+        
+        switch (request.RoleId)
+        {
+            case 2: // Mentor
+                await unitOfWork.Mentors.CreateAsync(new Mentor
+                {
+                    User = user,        // связь по навигации, FK проставится сам
+                    HireDate = DateTime.UtcNow,
+                    IsActive = true
+                });
+                break;
+            case 3: // Student
+                await unitOfWork.Students.CreateAsync(new Student
+                {
+                    User = user,
+                    Balance = 0,
+                    IsActive = true,
+                    EnrolledAt = DateTime.UtcNow
+                });
+                break;
+
+            // case 1 (Admin) — профиль роли не нужен
+        }
 
         await unitOfWork.Users.CreateAsync(user);
         await unitOfWork.SaveChangesAsync();
