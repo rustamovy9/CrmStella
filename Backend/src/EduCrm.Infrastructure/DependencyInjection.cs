@@ -20,12 +20,15 @@ public static class DependencyInjection
         // DbContext
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(configuration.GetConnectionString("DefaultConnection")));
+        
+        // Memory Cache
+        services.AddMemoryCache();
 
         // Repositories
-        services.AddScoped<IUserRepository, UserRepository>();
-        services.AddScoped<IVerificationCodeRepository, VerificationCodeRepository>();
+        services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Services
+        services.AddSingleton<ICacheService, CacheService>();
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IEmailService, EmailService>();

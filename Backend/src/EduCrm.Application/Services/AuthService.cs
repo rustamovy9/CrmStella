@@ -8,28 +8,42 @@ using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
 
 public class AuthService(
-    IUserRepository userRepository,
-    IVerificationCodeRepository verificationCodeRepository,
+    IUnitOfWork unitOfWork,
     IJwtService jwtService,
     IEmailService emailService,
-    IConfiguration configuration)
-    : IAuthService
+    ICacheService cache,
+    ILogger<AuthService> logger,
+    IConfiguration configuration) : IAuthService
 {
+    private const string UserCachePrefix = "users:";
+
     public async Task<Result<AuthResponse>> LoginAsync(LoginRequest request)
     {
-        var user = await userRepository.GetByEmailAsync(request.Email);
+        var user = await unitOfWork.Users.GetByEmailAsync(request.Email);
         if (user is null)
+        {
+            logger.LogWarning("Login failed - user not found: {Email}", request.Email);
             return Result<AuthResponse>.Fail("Invalid email or password", ErrorType.NotFound);
+        }
 
         if (!user.IsActive)
+        {
+            logger.LogWarning("Login failed - account disabled: {Email}", request.Email);
             return Result<AuthResponse>.Fail("Account is disabled", ErrorType.Forbidden);
+        }
 
         if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        {
+            logger.LogWarning("Login failed - wrong password: {Email}", request.Email);
             return Result<AuthResponse>.Fail("Invalid email or password", ErrorType.Unauthorized);
+        }
+        
+        logger.LogInformation("User logged in: {Email} Role: {Role}", user.Email, user.Role.Name);
 
         var accessToken = jwtService.GenerateAccessToken(user);
         var refreshToken = jwtService.GenerateRefreshToken();
@@ -38,7 +52,23 @@ public class AuthService(
         user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(
             int.Parse(configuration["Jwt:RefreshTokenExpiryDays"]!));
 
-        await userRepository.UpdateAsync(user);
+        await unitOfWork.Users.UpdateAsync(user);
+        await unitOfWork.SaveChangesAsync();
+
+        var userInfo = new UserInfoResponse
+        {
+            Id = user.Id,
+            FullName = user.FullName,
+            Email = user.Email,
+            PhoneNumber = user.PhoneNumber,
+            Role = user.Role.Name,
+            AvatarUrl = user.Profile?.AvatarUrl
+        };
+
+        await cache.SetAsync(
+            $"auth:user:{user.Id}",
+            userInfo,
+            TimeSpan.FromMinutes(60));
 
         return Result<AuthResponse>.Ok(new AuthResponse
         {
@@ -46,24 +76,16 @@ public class AuthService(
             RefreshToken = refreshToken,
             ExpiresAt = DateTime.UtcNow.AddMinutes(
                 int.Parse(configuration["Jwt:AccessTokenExpiryMinutes"]!)),
-            User = new UserInfoResponse
-            {
-                Id = user.Id,
-                FullName = user.FullName,
-                Email = user.Email,
-                PhoneNumber = user.PhoneNumber,
-                Role = user.Role.Name,
-                AvatarUrl = user.Profile?.AvatarUrl
-            }
+            User = userInfo
         });
     }
-    
+
     public async Task<Result<RegisterResponse>> RegisterAsync(int adminUserId, RegisterRequest request)
     {
         if (request.RoleId < 1 || request.RoleId > 3)
             return Result<RegisterResponse>.Fail("Invalid role", ErrorType.BadRequest);
 
-        if (await userRepository.ExistsByEmailAsync(request.Email))
+        if (await unitOfWork.Users.ExistsByEmailAsync(request.Email))
             return Result<RegisterResponse>.Fail("Email already exists", ErrorType.Conflict);
 
         var tempPassword = GenerateTempPassword();
@@ -80,7 +102,17 @@ public class AuthService(
             IsPasswordSet = false
         };
 
-        await userRepository.CreateAsync(user);
+        await unitOfWork.Users.CreateAsync(user);
+        await unitOfWork.SaveChangesAsync();
+        await unitOfWork.Users.LoadRoleAsync(user);
+        
+        logger.LogInformation(
+            "New user registered by Admin {AdminId}: {Email} Role: {RoleId}",
+            adminUserId, user.Email, user.RoleId);
+
+        // очищаем кэш после создания
+        await cache.RemoveByPrefixAsync(UserCachePrefix);
+
         await emailService.SendWelcomeAsync(user.Email, user.FullName, tempPassword);
 
         return Result<RegisterResponse>.Ok(new RegisterResponse
@@ -96,9 +128,9 @@ public class AuthService(
 
     public async Task<Result<AuthResponse>> RefreshTokenAsync(RefreshTokenRequest request)
     {
-        var user = await userRepository.GetByRefreshTokenAsync(request.RefreshToken);
+        var user = await unitOfWork.Users.GetByRefreshTokenAsync(request.RefreshToken);
         if (user is null)
-            return Result<AuthResponse>.Fail("Invalid refresh token", ErrorType.Unauthorized);
+            return Result<AuthResponse>.Fail("Invalid refresh token", ErrorType.NotFound);
 
         if (user.RefreshTokenExpiry < DateTime.UtcNow)
             return Result<AuthResponse>.Fail("Refresh token expired", ErrorType.Unauthorized);
@@ -110,7 +142,8 @@ public class AuthService(
         user.RefreshTokenExpiry = DateTime.UtcNow.AddDays(
             int.Parse(configuration["Jwt:RefreshTokenExpiryDays"]!));
 
-        await userRepository.UpdateAsync(user);
+        await unitOfWork.Users.UpdateAsync(user);
+        await unitOfWork.SaveChangesAsync();
 
         return Result<AuthResponse>.Ok(new AuthResponse
         {
@@ -132,16 +165,16 @@ public class AuthService(
 
     public async Task<Result<bool>> ForgotPasswordAsync(ForgotPasswordRequest request)
     {
-        var user = await userRepository.GetByEmailAsync(request.Email);
+        var user = await unitOfWork.Users.GetByEmailAsync(request.Email);
         if (user is null)
             return Result<bool>.Fail("User not found", ErrorType.NotFound);
 
-        await verificationCodeRepository.InvalidateAllAsync(user.Id, VerificationCodeType.PasswordReset);
+        await unitOfWork.VerificationCodes.InvalidateAllAsync(user.Id, VerificationCodeType.PasswordReset);
 
         var code = GenerateCode();
         var codeHash = HashCode(code);
 
-        await verificationCodeRepository.CreateAsync(new VerificationCode
+        await unitOfWork.VerificationCodes.CreateAsync(new VerificationCode
         {
             UserId = user.Id,
             CodeHash = codeHash,
@@ -149,6 +182,7 @@ public class AuthService(
             Expiration = DateTime.UtcNow.AddMinutes(5)
         });
 
+        await unitOfWork.SaveChangesAsync();
         await emailService.SendPasswordResetAsync(user.Email, user.FullName, code);
 
         return Result<bool>.Ok(true);
@@ -156,11 +190,11 @@ public class AuthService(
 
     public async Task<Result<bool>> VerifyCodeAsync(VerifyCodeRequest request)
     {
-        var user = await userRepository.GetByEmailAsync(request.Email);
+        var user = await unitOfWork.Users.GetByEmailAsync(request.Email);
         if (user is null)
             return Result<bool>.Fail("User not found", ErrorType.NotFound);
 
-        var verificationCode = await verificationCodeRepository
+        var verificationCode = await unitOfWork.VerificationCodes
             .GetActiveCodeAsync(user.Id, VerificationCodeType.PasswordReset);
 
         if (verificationCode is null)
@@ -170,13 +204,15 @@ public class AuthService(
 
         if (verificationCode.CodeHash != HashCode(request.Code))
         {
-            await verificationCodeRepository.UpdateAsync(verificationCode);
+            await unitOfWork.VerificationCodes.UpdateAsync(verificationCode);
+            await unitOfWork.SaveChangesAsync();
             return Result<bool>.Fail("Invalid code", ErrorType.BadRequest);
         }
 
         verificationCode.IsUsed = true;
         verificationCode.UsedAt = DateTime.UtcNow;
-        await verificationCodeRepository.UpdateAsync(verificationCode);
+        await unitOfWork.VerificationCodes.UpdateAsync(verificationCode);
+        await unitOfWork.SaveChangesAsync();
 
         return Result<bool>.Ok(true);
     }
@@ -186,14 +222,18 @@ public class AuthService(
         if (request.NewPassword != request.ConfirmPassword)
             return Result<bool>.Fail("Passwords do not match", ErrorType.BadRequest);
 
-        var user = await userRepository.GetByEmailAsync(request.Email);
+        var user = await unitOfWork.Users.GetByEmailAsync(request.Email);
         if (user is null)
             return Result<bool>.Fail("User not found", ErrorType.NotFound);
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
         user.RefreshToken = null;
         user.RefreshTokenExpiry = null;
-        await userRepository.UpdateAsync(user);
+
+        await unitOfWork.Users.UpdateAsync(user);
+        await unitOfWork.SaveChangesAsync();
+
+        await cache.RemoveByPrefixAsync(UserCachePrefix);
 
         return Result<bool>.Ok(true);
     }
@@ -203,7 +243,7 @@ public class AuthService(
         if (request.NewPassword != request.ConfirmPassword)
             return Result<bool>.Fail("Passwords do not match", ErrorType.BadRequest);
 
-        var user = await userRepository.GetByIdAsync(userId);
+        var user = await unitOfWork.Users.GetByIdAsync(userId);
         if (user is null)
             return Result<bool>.Fail("User not found", ErrorType.NotFound);
 
@@ -211,20 +251,28 @@ public class AuthService(
             return Result<bool>.Fail("Current password is incorrect", ErrorType.BadRequest);
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-        await userRepository.UpdateAsync(user);
+        await unitOfWork.Users.UpdateAsync(user);
+        await unitOfWork.SaveChangesAsync();
+
+        await cache.RemoveByPrefixAsync(UserCachePrefix);
 
         return Result<bool>.Ok(true);
     }
 
     public async Task<Result<bool>> LogoutAsync(int userId)
     {
-        var user = await userRepository.GetByIdAsync(userId);
+        var user = await unitOfWork.Users.GetByIdAsync(userId);
         if (user is null)
             return Result<bool>.Fail("User not found", ErrorType.NotFound);
 
         user.RefreshToken = null;
         user.RefreshTokenExpiry = null;
-        await userRepository.UpdateAsync(user);
+        await unitOfWork.Users.UpdateAsync(user);
+        await unitOfWork.SaveChangesAsync();
+        
+        logger.LogInformation("User logged out: {UserId}", userId);
+
+        await cache.RemoveByPrefixAsync(UserCachePrefix);
 
         return Result<bool>.Ok(true);
     }
@@ -237,7 +285,7 @@ public class AuthService(
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(code));
         return Convert.ToHexString(bytes);
     }
-    
+
     private static string GenerateTempPassword()
     {
         const string chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";

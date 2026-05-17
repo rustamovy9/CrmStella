@@ -1,6 +1,5 @@
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Domain.Entities;
-using EduCrm.Infrastructure.Persistence;
 using EduCrm.Infrastructure.Persistence.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,67 +7,98 @@ namespace EduCrm.Infrastructure.Repositories;
 
 public class UserRepository(AppDbContext context) : IUserRepository
 {
-    public async Task<List<User>> GetAllAsync()
+    // AsNoTracking для методов чтения
+    public async Task<List<User>> GetAllAsync(
+        CancellationToken cancellationToken = default)
         => await context.Users
+            .AsNoTracking()
             .Include(x => x.Role)
             .Include(x => x.Profile)
             .OrderByDescending(x => x.CreatedAt)
-            .ToListAsync();
+            .ToListAsync(cancellationToken);
 
-    public async Task<List<User>> GetByRoleAsync(int roleId)
+    public async Task<List<User>> GetByRoleAsync(
+        int roleId,
+        CancellationToken cancellationToken = default)
         => await context.Users
+            .AsNoTracking()
             .Include(x => x.Role)
             .Include(x => x.Profile)
             .Where(x => x.RoleId == roleId)
             .OrderByDescending(x => x.CreatedAt)
-            .ToListAsync();
-    
-    public async Task<User?> GetByIdAsync(int id)
+            .ToListAsync(cancellationToken);
+
+    public async Task<User?> GetByIdAsync(
+        int id,
+        CancellationToken cancellationToken = default)
         => await context.Users
+            .AsNoTracking()
             .Include(x => x.Role)
             .Include(x => x.Profile)
-            .FirstOrDefaultAsync(x => x.Id == id);
+            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
 
-    public async Task<User?> GetByEmailAsync(string email)
+    public async Task<User?> GetByEmailAsync(
+        string email,
+        CancellationToken cancellationToken = default)
         => await context.Users
+            .AsNoTracking()
             .Include(x => x.Role)
             .Include(x => x.Profile)
-            .FirstOrDefaultAsync(x => x.Email == email.ToLower());
-    
-    public async Task<User?> GetByRefreshTokenAsync(string refreshToken)
+            .FirstOrDefaultAsync(x => x.Email == email.ToLower(), cancellationToken);
+
+    public async Task<User?> GetByRefreshTokenAsync(
+        string refreshToken,
+        CancellationToken cancellationToken = default)
         => await context.Users
+            .AsNoTracking()
             .Include(x => x.Role)
             .Include(x => x.Profile)
-            .FirstOrDefaultAsync(x => x.RefreshToken == refreshToken);
+            .FirstOrDefaultAsync(x => x.RefreshToken == refreshToken, cancellationToken);
 
-    public async Task<bool> ExistsByEmailAsync(string email)
+    public async Task<bool> ExistsByEmailAsync(
+        string email,
+        CancellationToken cancellationToken = default)
         => await context.Users
-            .AnyAsync(x => x.Email == email.ToLower());
+            .AsNoTracking()
+            .AnyAsync(x => x.Email == email.ToLower(), cancellationToken);
 
-    public async Task<User> CreateAsync(User user)
+    public async Task LoadRoleAsync(
+        User user,
+        CancellationToken cancellationToken = default)
+    {
+        await context.Entry(user)
+            .Reference(x => x.Role)
+            .LoadAsync(cancellationToken);
+    }
+
+    // БЕЗ AsNoTracking для методов записи
+    public async Task<User> CreateAsync(
+        User user,
+        CancellationToken cancellationToken = default)
     {
         user.Email = user.Email.ToLower();
-        context.Users.Add(user);
-        await context.SaveChangesAsync();
-        
-        await context.Entry(user).Reference(x => x.Role).LoadAsync();
-
+        await context.Users.AddAsync(user, cancellationToken);
         return user;
     }
 
-    public async Task<User> UpdateAsync(User user)
+    public Task<User> UpdateAsync(
+        User user,
+        CancellationToken cancellationToken = default)
     {
         user.UpdatedAt = DateTime.UtcNow;
         context.Users.Update(user);
-        await context.SaveChangesAsync();
-        return user;
+        return Task.FromResult(user);
     }
 
-    public async Task DeleteAsync(int id)
+    public async Task DeleteAsync(
+        int id,
+        CancellationToken cancellationToken = default)
     {
-        var user = await context.Users.FindAsync(id);
+        var user = await context.Users
+            .FindAsync([id], cancellationToken);
+
         if (user is null) return;
+
         context.Users.Remove(user);
-        await context.SaveChangesAsync();
     }
 }
