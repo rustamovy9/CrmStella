@@ -11,10 +11,10 @@ public class FileStorageService(
     IUnitOfWork unitOfWork,
     ILogger<FileStorageService> logger) : IFileStorageService
 {
+    private const long MaxFileSize = 5 * 1024 * 1024; // 5MB
+
     private static readonly string[] AllowedImageTypes =
         ["image/jpeg", "image/png", "image/webp", "image/gif"];
-
-    private const long MaxFileSize = 5 * 1024 * 1024; // 5MB
 
     public async Task<FileStorage> UploadAsync(
         IFormFile file,
@@ -105,5 +105,7 @@ public class FileStorageService(
         FileOwnerType ownerType,
         int ownerId,
         CancellationToken cancellationToken = default)
-        => await unitOfWork.Files.GetByOwnerAsync(ownerType, ownerId, cancellationToken);
+    {
+        return await unitOfWork.Files.GetByOwnerAsync(ownerType, ownerId, cancellationToken);
+    }
 }

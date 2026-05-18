@@ -1,4 +1,5 @@
 // Application/Services/ProfileService.cs
+
 using EduCrm.Application.Common;
 using EduCrm.Application.DTOs.Profile.Request;
 using EduCrm.Application.DTOs.Profile.Response;
@@ -31,7 +32,7 @@ public class ProfileService(
         if (profile is null)
         {
             logger.LogWarning("Profile not found for user: {UserId}", userId);
-            return Result<ProfileResponse>.Fail("Profile not found", ErrorType.NotFound);
+            return Result<ProfileResponse>.Fail("Profile not found");
         }
 
         var response = MapToResponse(profile);
@@ -41,88 +42,88 @@ public class ProfileService(
     }
 
     public async Task<Result<ProfileResponse>> CreateAsync(
-    int userId,
-    CreateProfileRequest request)
-{
-    var user = await unitOfWork.Users.GetByIdAsync(userId);
-    if (user is null)
+        int userId,
+        CreateProfileRequest request)
     {
-        logger.LogWarning("Create profile failed - user not found: {UserId}", userId);
-        return Result<ProfileResponse>.Fail("User not found", ErrorType.NotFound);
+        var user = await unitOfWork.Users.GetByIdAsync(userId);
+        if (user is null)
+        {
+            logger.LogWarning("Create profile failed - user not found: {UserId}", userId);
+            return Result<ProfileResponse>.Fail("User not found");
+        }
+
+        var existingProfile = await unitOfWork.Profiles.GetByUserIdAsync(userId);
+        if (existingProfile is not null)
+        {
+            logger.LogWarning("Create profile failed - profile already exists: {UserId}", userId);
+            return Result<ProfileResponse>.Fail(
+                "Profile already exists for this user",
+                ErrorType.Conflict);
+        }
+
+        var profile = new Profile
+        {
+            UserId = userId,
+            AboutMe = request.AboutMe?.Trim(),
+            DateOfBirth = request.DateOfBirth,
+            Address = request.Address?.Trim(),
+            TelegramUsername = request.TelegramUsername?.Trim(),
+            LinkedInUrl = request.LinkedInUrl?.Trim(),
+            GithubUrl = request.GithubUrl?.Trim(),
+            CreatedAt = DateTime.UtcNow
+        };
+
+        await unitOfWork.Profiles.CreateAsync(profile);
+        await unitOfWork.SaveChangesAsync();
+
+        await cache.RemoveByPrefixAsync(ProfileCachePrefix);
+
+        logger.LogInformation("Profile created: {ProfileId} for UserId: {UserId}", profile.Id, userId);
+
+        return Result<ProfileResponse>.Ok(MapToResponse(profile));
     }
 
-    var existingProfile = await unitOfWork.Profiles.GetByUserIdAsync(userId);
-    if (existingProfile is not null)
+    public async Task<Result<ProfileResponse>> UpdateAsync(
+        int userId,
+        UpdateProfileRequest request)
     {
-        logger.LogWarning("Create profile failed - profile already exists: {UserId}", userId);
-        return Result<ProfileResponse>.Fail(
-            "Profile already exists for this user",
-            ErrorType.Conflict);
+        var profile = await unitOfWork.Profiles.GetByUserIdAsync(userId);
+        if (profile is null)
+        {
+            logger.LogWarning("Update profile failed - profile not found: {UserId}", userId);
+            return Result<ProfileResponse>.Fail("Profile not found");
+        }
+
+        // Обновляем ТОЛЬКО те поля, которые были отправлены
+        if (request.AboutMe is not null)
+            profile.AboutMe = request.AboutMe.Trim();
+
+        if (request.DateOfBirth is not null)
+            profile.DateOfBirth = request.DateOfBirth;
+
+        if (request.Address is not null)
+            profile.Address = request.Address.Trim();
+
+        if (request.TelegramUsername is not null)
+            profile.TelegramUsername = request.TelegramUsername.Trim();
+
+        if (request.LinkedInUrl is not null)
+            profile.LinkedInUrl = request.LinkedInUrl.Trim();
+
+        if (request.GithubUrl is not null)
+            profile.GithubUrl = request.GithubUrl.Trim();
+
+        profile.UpdatedAt = DateTime.UtcNow;
+
+        await unitOfWork.Profiles.UpdateAsync(profile);
+        await unitOfWork.SaveChangesAsync();
+
+        await cache.RemoveByPrefixAsync(ProfileCachePrefix);
+
+        logger.LogInformation("Profile updated: {ProfileId} for UserId: {UserId}", profile.Id, userId);
+
+        return Result<ProfileResponse>.Ok(MapToResponse(profile));
     }
-
-    var profile = new Profile
-    {
-        UserId = userId,
-        AboutMe = request.AboutMe?.Trim(),
-        DateOfBirth = request.DateOfBirth,
-        Address = request.Address?.Trim(),
-        TelegramUsername = request.TelegramUsername?.Trim(),
-        LinkedInUrl = request.LinkedInUrl?.Trim(),
-        GithubUrl = request.GithubUrl?.Trim(),
-        CreatedAt = DateTime.UtcNow
-    };
-
-    await unitOfWork.Profiles.CreateAsync(profile);
-    await unitOfWork.SaveChangesAsync();
-
-    await cache.RemoveByPrefixAsync(ProfileCachePrefix);
-
-    logger.LogInformation("Profile created: {ProfileId} for UserId: {UserId}", profile.Id, userId);
-
-    return Result<ProfileResponse>.Ok(MapToResponse(profile));
-}
-
-public async Task<Result<ProfileResponse>> UpdateAsync(
-    int userId,
-    UpdateProfileRequest request)
-{
-    var profile = await unitOfWork.Profiles.GetByUserIdAsync(userId);
-    if (profile is null)
-    {
-        logger.LogWarning("Update profile failed - profile not found: {UserId}", userId);
-        return Result<ProfileResponse>.Fail("Profile not found", ErrorType.NotFound);
-    }
-
-    // Обновляем ТОЛЬКО те поля, которые были отправлены
-    if (request.AboutMe is not null)
-        profile.AboutMe = request.AboutMe.Trim();
-
-    if (request.DateOfBirth is not null)
-        profile.DateOfBirth = request.DateOfBirth;
-
-    if (request.Address is not null)
-        profile.Address = request.Address.Trim();
-
-    if (request.TelegramUsername is not null)
-        profile.TelegramUsername = request.TelegramUsername.Trim();
-
-    if (request.LinkedInUrl is not null)
-        profile.LinkedInUrl = request.LinkedInUrl.Trim();
-
-    if (request.GithubUrl is not null)
-        profile.GithubUrl = request.GithubUrl.Trim();
-
-    profile.UpdatedAt = DateTime.UtcNow;
-
-    await unitOfWork.Profiles.UpdateAsync(profile);
-    await unitOfWork.SaveChangesAsync();
-
-    await cache.RemoveByPrefixAsync(ProfileCachePrefix);
-
-    logger.LogInformation("Profile updated: {ProfileId} for UserId: {UserId}", profile.Id, userId);
-
-    return Result<ProfileResponse>.Ok(MapToResponse(profile));
-}
 
     public async Task<Result<ProfileResponse>> SetAvatarAsync(
         int userId,
@@ -133,7 +134,7 @@ public async Task<Result<ProfileResponse>> UpdateAsync(
         if (profile is null)
         {
             logger.LogWarning("SetAvatar failed - profile not found: {UserId}", userId);
-            return Result<ProfileResponse>.Fail("Profile not found", ErrorType.NotFound);
+            return Result<ProfileResponse>.Fail("Profile not found");
         }
 
         try
@@ -146,7 +147,6 @@ public async Task<Result<ProfileResponse>> UpdateAsync(
                     userId);
 
                 if (oldFile is not null)
-                {
                     try
                     {
                         await fileStorage.DeleteAsync(oldFile.Id);
@@ -156,7 +156,6 @@ public async Task<Result<ProfileResponse>> UpdateAsync(
                     {
                         logger.LogWarning(ex, "Failed to delete old avatar: {UserId}", userId);
                     }
-                }
             }
 
             // Загружаем новый аватар
@@ -200,7 +199,7 @@ public async Task<Result<ProfileResponse>> UpdateAsync(
         if (profile is null)
         {
             logger.LogWarning("Delete profile failed - profile not found: {UserId}", userId);
-            return Result<bool>.Fail("Profile not found", ErrorType.NotFound);
+            return Result<bool>.Fail("Profile not found");
         }
 
         // Удаляем аватар если есть
@@ -211,7 +210,6 @@ public async Task<Result<ProfileResponse>> UpdateAsync(
                 userId);
 
             if (file is not null)
-            {
                 try
                 {
                     await fileStorage.DeleteAsync(file.Id);
@@ -220,7 +218,6 @@ public async Task<Result<ProfileResponse>> UpdateAsync(
                 {
                     logger.LogWarning(ex, "Failed to delete avatar: {UserId}", userId);
                 }
-            }
         }
 
         await unitOfWork.Profiles.DeleteAsync(profile.Id);
@@ -233,20 +230,23 @@ public async Task<Result<ProfileResponse>> UpdateAsync(
         return Result<bool>.Ok(true);
     }
 
-    private static ProfileResponse MapToResponse(Profile p) => new()
+    private static ProfileResponse MapToResponse(Profile p)
     {
-        Id = p.Id,
-        UserId = p.UserId,
-        FullName = p.User?.FullName,
-        Email = p.User?.Email,
-        AvatarUrl = p.AvatarUrl,
-        DateOfBirth = p.DateOfBirth,
-        Address = p.Address,
-        TelegramUsername = p.TelegramUsername,
-        LinkedInUrl = p.LinkedInUrl,
-        GithubUrl = p.GithubUrl,
-        AboutMe = p.AboutMe,
-        CreatedAt = p.CreatedAt,
-        UpdatedAt = p.UpdatedAt
-    };
+        return new ProfileResponse
+        {
+            Id = p.Id,
+            UserId = p.UserId,
+            FullName = p.User?.FullName,
+            Email = p.User?.Email,
+            AvatarUrl = p.AvatarUrl,
+            DateOfBirth = p.DateOfBirth,
+            Address = p.Address,
+            TelegramUsername = p.TelegramUsername,
+            LinkedInUrl = p.LinkedInUrl,
+            GithubUrl = p.GithubUrl,
+            AboutMe = p.AboutMe,
+            CreatedAt = p.CreatedAt,
+            UpdatedAt = p.UpdatedAt
+        };
+    }
 }

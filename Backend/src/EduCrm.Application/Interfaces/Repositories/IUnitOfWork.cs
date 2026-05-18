@@ -13,5 +13,7 @@ public interface IUnitOfWork
     IPaymentRepository Payments { get; }
     IProfileRepository Profiles { get; }
     ILessonRepository Lessons { get; }
+    IScheduleRepository Schedules { get; }
+    IAttendanceRepository Attendances { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

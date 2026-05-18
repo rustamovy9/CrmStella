@@ -11,19 +11,23 @@ public class FileStorageRepository(AppDbContext context) : IFileStorageRepositor
     public async Task<FileStorage?> GetByIdAsync(
         int id,
         CancellationToken cancellationToken = default)
-        => await context.FileStorages
+    {
+        return await context.FileStorages
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+    }
 
     public async Task<FileStorage?> GetByOwnerAsync(
         FileOwnerType ownerType,
         int ownerId,
         CancellationToken cancellationToken = default)
-        => await context.FileStorages
+    {
+        return await context.FileStorages
             .AsNoTracking()
             .FirstOrDefaultAsync(
                 x => x.OwnerType == ownerType && x.OwnerId == ownerId,
                 cancellationToken);
+    }
 
     public async Task<FileStorage> CreateAsync(
         FileStorage fileStorage,

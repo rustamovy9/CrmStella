@@ -5,7 +5,7 @@ public class Profile
     public int Id { get; set; }
     public int UserId { get; set; }
     public string? AvatarUrl { get; set; }
-    public DateOnly? DateOfBirth { get; set; } 
+    public DateOnly? DateOfBirth { get; set; }
     public string? Address { get; set; }
     public string? TelegramUsername { get; set; }
     public string? LinkedInUrl { get; set; }

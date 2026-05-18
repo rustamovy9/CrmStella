@@ -27,14 +27,11 @@ public class UpdateLessonRequest
     [MaxLength(1000, ErrorMessage = "Description cannot exceed 1000 characters")]
     public string? Description { get; set; }
 
-    [Required]
-    public DateTime LessonDate { get; set; }
+    [Required] public DateTime LessonDate { get; set; }
 
-    [Required]
-    public TimeSpan StartTime { get; set; }
+    [Required] public TimeSpan StartTime { get; set; }
 
-    [Required]
-    public TimeSpan EndTime { get; set; }
+    [Required] public TimeSpan EndTime { get; set; }
 
     public bool IsCompleted { get; set; }
 }

@@ -19,17 +19,16 @@ public static class DependencyInjection
     {
         // ДИАГНОСТИКА
         var connectionString = configuration.GetConnectionString("DefaultConnection");
-        Console.WriteLine($"[DependencyInjection] ConnectionString: {(string.IsNullOrEmpty(connectionString) ? "NULL or EMPTY" : connectionString)}");
-        
+        Console.WriteLine(
+            $"[DependencyInjection] ConnectionString: {(string.IsNullOrEmpty(connectionString) ? "NULL or EMPTY" : connectionString)}");
+
         if (string.IsNullOrEmpty(connectionString))
-        {
             throw new Exception("DefaultConnection is not configured! Check your appsettings.json");
-        }
 
         // DbContext
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(connectionString));
-        
+
         // Memory Cache
         services.AddMemoryCache();
 
@@ -51,7 +50,9 @@ public static class DependencyInjection
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IProfileService, ProfileService>();
         services.AddScoped<ILessonService, LessonService>();
-        
+        services.AddScoped<IScheduleService, ScheduleService>();
+        services.AddScoped<IAttendanceService, AttendanceService>();
+
         // Settings
         services.Configure<EmailSettings>(
             configuration.GetSection("EmailSettings"));

@@ -1,0 +1,27 @@
+using EduCrm.Application.Common;
+using EduCrm.Application.DTOs.Attendance.Request;
+using EduCrm.Application.DTOs.Attendance.Response;
+
+namespace EduCrm.Application.Interfaces.Services;
+
+public interface IAttendanceService
+{
+    Task<Result<List<AttendanceListItemResponse>>> GetByLessonIdAsync(int lessonId,
+        CancellationToken cancellationToken = default);
+
+    Task<Result<List<AttendanceListItemResponse>>> GetByStudentIdAsync(int studentId,
+        CancellationToken cancellationToken = default);
+
+    Task<Result<AttendanceResponse>> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+
+    Task<Result<AttendanceResponse>> CreateAsync(CreateAttendanceRequest request, int mentorUserId,
+        CancellationToken cancellationToken = default);
+
+    Task<Result<List<AttendanceResponse>>> BulkCreateAsync(BulkCreateAttendanceRequest request, int mentorUserId,
+        CancellationToken cancellationToken = default);
+
+    Task<Result<AttendanceResponse>> UpdateAsync(int id, UpdateAttendanceRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<Result<bool>> DeleteAsync(int id, CancellationToken cancellationToken = default);
+}

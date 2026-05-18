@@ -23,7 +23,7 @@ public class GroupConfiguration : IEntityTypeConfiguration<Group>
 
         builder.Property(x => x.CreatedAt)
             .HasDefaultValueSql("NOW()");
-        
+
         builder.HasOne(x => x.Course)
             .WithMany(x => x.Groups)
             .HasForeignKey(x => x.CourseId)
