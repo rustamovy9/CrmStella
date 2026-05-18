@@ -1,25 +1,16 @@
 ﻿using EduCrm.Application.DTOs.Lesson.Request;
 using EduCrm.Application.Interfaces.Services;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace EduCrm.WebApi.Controllers;
 
 [Route("api/lessons")]
-
-public class LessonController : BaseController
+public class LessonController(ILessonService lessonService) : BaseController
 {
-    private readonly ILessonService _lessonService;
-
-    public LessonController(ILessonService lessonService)
-    {
-        _lessonService = lessonService;
-    }
-
     [HttpGet]
     public async Task<IActionResult> GetAll(CancellationToken cancellationToken = default)
     {
-        var result = await _lessonService.GetAllAsync(cancellationToken);
+        var result = await lessonService.GetAllAsync(cancellationToken);
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -29,7 +20,7 @@ public class LessonController : BaseController
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken = default)
     {
-        var result = await _lessonService.GetByIdAsync(id, cancellationToken);
+        var result = await lessonService.GetByIdAsync(id, cancellationToken);
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -39,7 +30,7 @@ public class LessonController : BaseController
     [HttpGet("group/{groupId:int}")]
     public async Task<IActionResult> GetByGroupId(int groupId, CancellationToken cancellationToken = default)
     {
-        var result = await _lessonService.GetByGroupIdAsync(groupId, cancellationToken);
+        var result = await lessonService.GetByGroupIdAsync(groupId, cancellationToken);
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -47,9 +38,10 @@ public class LessonController : BaseController
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateLessonRequest request, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Create([FromBody] CreateLessonRequest request,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _lessonService.CreateAsync(request, cancellationToken);
+        var result = await lessonService.CreateAsync(request, cancellationToken);
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -57,9 +49,10 @@ public class LessonController : BaseController
     }
 
     [HttpPut]
-    public async Task<IActionResult> Update([FromBody] UpdateLessonRequest request, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Update([FromBody] UpdateLessonRequest request,
+        CancellationToken cancellationToken = default)
     {
-        var result = await _lessonService.UpdateAsync(request, cancellationToken);
+        var result = await lessonService.UpdateAsync(request, cancellationToken);
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -69,7 +62,7 @@ public class LessonController : BaseController
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken = default)
     {
-        var result = await _lessonService.DeleteAsync(id, cancellationToken);
+        var result = await lessonService.DeleteAsync(id, cancellationToken);
         if (!result.IsSuccess)
             return HandleError(result);
 

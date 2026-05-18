@@ -81,7 +81,7 @@ public class GroupService(
         {
             logger.LogWarning("Create failed - group name exists: {Name}", request.Name);
             return Result<GroupResponse>.Fail(
-                "Group with this name already exists", 
+                "Group with this name already exists",
                 ErrorType.Conflict);
         }
 
@@ -95,7 +95,7 @@ public class GroupService(
 
         if (request.EndDate <= request.StartDate)
             return Result<GroupResponse>.Fail(
-                "EndDate must be after StartDate", 
+                "EndDate must be after StartDate",
                 ErrorType.BadRequest);
 
         var group = new Group
@@ -107,20 +107,20 @@ public class GroupService(
             EndDate = request.EndDate,
             MaxStudents = request.MaxStudents,
             Status = GroupStatus.Active,
-            CreatedAt = DateTime.UtcNow  
+            CreatedAt = DateTime.UtcNow
         };
 
         await unitOfWork.Groups.CreateAsync(group);
         await unitOfWork.SaveChangesAsync();
 
-        
+
         await cache.RemoveByPrefixAsync(GroupCachePrefix);
 
         logger.LogInformation(
-            "Group created: {GroupId} {Name}", 
+            "Group created: {GroupId} {Name}",
             group.Id, group.Name);
 
-        return Result<GroupResponse>.Ok(MapToResponse(group));  
+        return Result<GroupResponse>.Ok(MapToResponse(group));
     }
 
     public async Task<Result<GroupResponse>> UpdateAsync(int id, UpdateGroupRequest request)

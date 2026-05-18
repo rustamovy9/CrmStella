@@ -3,6 +3,7 @@ using EduCrm.Application.DTOs.Course.Request;
 using EduCrm.Application.DTOs.Course.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
@@ -63,7 +64,7 @@ public class CourseService(
         if (course is null)
         {
             logger.LogWarning("Course not found: {CourseId}", id);
-            return Result<CourseResponse>.Fail("Course not found", ErrorType.NotFound);
+            return Result<CourseResponse>.Fail("Course not found");
         }
 
         var response = MapToResponse(course);
@@ -81,7 +82,7 @@ public class CourseService(
                 "Course with this name already exists", ErrorType.Conflict);
         }
 
-        var course = new Domain.Entities.Course
+        var course = new Course
         {
             Name = request.Name.Trim(),
             Description = request.Description?.Trim(),
@@ -96,7 +97,6 @@ public class CourseService(
 
         // Загружаем иконку если она есть
         if (request.Icon is not null && request.Icon.Length > 0)
-        {
             try
             {
                 var fileRecord = await fileStorage.UploadAsync(
@@ -116,7 +116,6 @@ public class CourseService(
                 logger.LogWarning(ex, "Failed to upload course icon: {CourseId}", course.Id);
                 // Не критично - курс создан, иконка не загружена
             }
-        }
 
         await cache.RemoveByPrefixAsync(CourseCachePrefix);
 
@@ -131,7 +130,7 @@ public class CourseService(
         if (course is null)
         {
             logger.LogWarning("Update failed - course not found: {CourseId}", id);
-            return Result<CourseResponse>.Fail("Course not found", ErrorType.NotFound);
+            return Result<CourseResponse>.Fail("Course not found");
         }
 
         if (request.Name is not null)
@@ -162,7 +161,7 @@ public class CourseService(
         if (course is null)
         {
             logger.LogWarning("SetStatus failed - course not found: {CourseId}", id);
-            return Result<bool>.Fail("Course not found", ErrorType.NotFound);
+            return Result<bool>.Fail("Course not found");
         }
 
         course.IsActive = request.IsActive;
@@ -179,8 +178,8 @@ public class CourseService(
     }
 
     public async Task<Result<CourseResponse>> SetCourseIconAsync(
-        int courseId, 
-        IFormFile iconFile, 
+        int courseId,
+        IFormFile iconFile,
         int uploadedByUserId)
     {
         // 1. Проверяем, существует ли курс
@@ -188,7 +187,7 @@ public class CourseService(
         if (course is null)
         {
             logger.LogWarning("SetCourseIcon failed - course not found: {CourseId}", courseId);
-            return Result<CourseResponse>.Fail("Course not found", ErrorType.NotFound);
+            return Result<CourseResponse>.Fail("Course not found");
         }
 
         try
@@ -201,7 +200,6 @@ public class CourseService(
                     courseId);
 
                 if (oldFile is not null)
-                {
                     try
                     {
                         await fileStorage.DeleteAsync(oldFile.Id);
@@ -216,7 +214,6 @@ public class CourseService(
                             courseId);
                         // Не критично - продолжаем
                     }
-                }
             }
 
             // 3. Загружаем новую иконку
@@ -255,16 +252,19 @@ public class CourseService(
         }
     }
 
-    private static CourseResponse MapToResponse(Domain.Entities.Course c) => new()
+    private static CourseResponse MapToResponse(Course c)
     {
-        Id = c.Id,
-        Name = c.Name,
-        Description = c.Description,
-        Price = c.Price,
-        IconUrl = c.IconUrl,
-        DurationWeeks = c.DurationWeeks,
-        IsActive = c.IsActive,
-        GroupsCount = c.Groups?.Count ?? 0,
-        CreatedAt = c.CreatedAt
-    };
+        return new CourseResponse
+        {
+            Id = c.Id,
+            Name = c.Name,
+            Description = c.Description,
+            Price = c.Price,
+            IconUrl = c.IconUrl,
+            DurationWeeks = c.DurationWeeks,
+            IsActive = c.IsActive,
+            GroupsCount = c.Groups?.Count ?? 0,
+            CreatedAt = c.CreatedAt
+        };
+    }
 }

@@ -5,17 +5,19 @@ namespace EduCrm.Infrastructure.Repositories;
 
 public class UnitOfWork(AppDbContext context) : IUnitOfWork
 {
+    private IAttendanceRepository? _attendances;
     private ICourseRepository? _courses;
     private IFileStorageRepository? _files;
     private IGroupRepository? _groups;
     private IGroupStudentRepository? _groupStudents;
+    private ILessonRepository? _lessons;
     private IMentorRepository? _mentors;
+    private IPaymentRepository? _payments;
+    private IProfileRepository? _profiles;
+    private IScheduleRepository? _schedules;
     private IStudentRepository? _students;
     private IUserRepository? _users;
     private IVerificationCodeRepository? _verificationCodes;
-    private IPaymentRepository? _payments;
-    private IProfileRepository? _profiles;
-    private ILessonRepository? _lessons;
 
     public IUserRepository Users
         => _users ??= new UserRepository(context);
@@ -40,14 +42,21 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
 
     public IGroupStudentRepository GroupStudents
         => _groupStudents ??= new GroupStudentRepository(context);
+
     public IPaymentRepository Payments
-    => _payments ??= new PaymentRepository(context);
-    
+        => _payments ??= new PaymentRepository(context);
+
     public IProfileRepository Profiles =>
         _profiles ??= new ProfileRepository(context);
-    
+
     public ILessonRepository Lessons =>
         _lessons ??= new LessonRepository(context);
+
+    public IScheduleRepository Schedules
+        => _schedules ??= new ScheduleRepository(context);
+
+    public IAttendanceRepository Attendances
+        => _attendances ??= new AttendanceRepository(context);
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

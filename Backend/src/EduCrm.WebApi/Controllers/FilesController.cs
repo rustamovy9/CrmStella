@@ -27,9 +27,9 @@ public class FilesController(IFileStorageService fileStorageService) : BaseContr
         {
             // FileStorageService не возвращает Result, а выбрасывает исключение
             var fileRecord = await fileStorageService.UploadAsync(
-                file, 
-                ownerType, 
-                ownerId, 
+                file,
+                ownerType,
+                ownerId,
                 userId);
 
             return Ok(new
@@ -79,7 +79,7 @@ public class FilesController(IFileStorageService fileStorageService) : BaseContr
         try
         {
             var file = await fileStorageService.GetByOwnerAsync(ownerType, ownerId);
-            
+
             if (file is null)
                 return NotFound(new { error = "File not found" });
 
