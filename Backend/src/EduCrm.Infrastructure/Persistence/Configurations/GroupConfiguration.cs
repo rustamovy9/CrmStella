@@ -21,6 +21,9 @@ public class GroupConfiguration : IEntityTypeConfiguration<Group>
             .HasConversion<string>()
             .HasMaxLength(30);
 
+        builder.Property(x => x.CreatedAt)
+            .HasDefaultValueSql("NOW()");
+        
         builder.HasOne(x => x.Course)
             .WithMany(x => x.Groups)
             .HasForeignKey(x => x.CourseId)

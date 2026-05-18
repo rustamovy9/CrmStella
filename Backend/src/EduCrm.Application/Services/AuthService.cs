@@ -103,6 +103,7 @@ public class AuthService(
     };
 
     await unitOfWork.Users.CreateAsync(user);
+    
     await unitOfWork.SaveChangesAsync();  
 
     switch (request.RoleId)

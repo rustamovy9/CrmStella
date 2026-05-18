@@ -10,5 +10,6 @@ public interface IUnitOfWork
     IGroupRepository Groups { get; }
     IGroupStudentRepository GroupStudents { get; }
     IFileStorageRepository Files { get; }
+    IProfileRepository Profiles { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
