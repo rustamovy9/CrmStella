@@ -16,6 +16,11 @@ Log.Logger = new LoggerConfiguration()
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Configuration
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: true)
+    .AddEnvironmentVariables();
+
 builder.Host.UseSerilog();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -50,10 +55,8 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
-// Infrastructure (DbContext + Repositories + Services)
 builder.Services.AddInfrastructure(builder.Configuration);
 
-// JWT
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -80,7 +83,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Seed database
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<AppDbContext>();
@@ -91,7 +93,6 @@ using (var scope = app.Services.CreateScope())
 app.UseHttpsRedirection();
 app.UseMiddleware<LoggingMiddleware>();
 app.UseStaticFiles();
-app.MapControllers();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
