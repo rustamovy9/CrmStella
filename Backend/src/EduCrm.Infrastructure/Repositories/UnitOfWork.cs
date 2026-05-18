@@ -15,6 +15,7 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
     private IVerificationCodeRepository? _verificationCodes;
     private IPaymentRepository? _payments;
     private IProfileRepository? _profiles;
+    private ILessonRepository? _lessons;
 
     public IUserRepository Users
         => _users ??= new UserRepository(context);
@@ -44,6 +45,9 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
     
     public IProfileRepository Profiles =>
         _profiles ??= new ProfileRepository(context);
+    
+    public ILessonRepository Lessons =>
+        _lessons ??= new LessonRepository(context);
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

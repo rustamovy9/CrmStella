@@ -12,5 +12,6 @@ public interface IUnitOfWork
     IFileStorageRepository Files { get; }
     IPaymentRepository Payments { get; }
     IProfileRepository Profiles { get; }
+    ILessonRepository Lessons { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
