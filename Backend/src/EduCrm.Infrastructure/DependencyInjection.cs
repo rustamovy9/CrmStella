@@ -40,6 +40,7 @@ public static class DependencyInjection
         services.AddScoped<IGroupService, GroupService>();
         services.AddScoped<IFileStorageService, FileStorageService>();
         services.AddScoped<IPaymentService, PaymentService>();
+        services.AddScoped<IProfileService, ProfileService>();
         // Settings
         services.Configure<EmailSettings>(
             configuration.GetSection("EmailSettings"));
