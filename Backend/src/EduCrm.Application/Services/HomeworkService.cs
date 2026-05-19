@@ -3,6 +3,7 @@ using EduCrm.Application.DTOs.Homework.Request;
 using EduCrm.Application.DTOs.Homework.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -16,14 +17,14 @@ public class HomeworkService(
     private const string HomeworkCachePrefix = "homeworks:";
     private const string HomeworkListCacheKey = "homeworks:list";
 
+    // =========================
+    // GET LIST (optimized for UI)
+    // =========================
     public async Task<Result<List<HomeworkListItemResponse>>> GetAllAsync()
     {
         var cached = await cache.GetAsync<List<HomeworkListItemResponse>>(HomeworkListCacheKey);
         if (cached is not null)
-        {
-            logger.LogInformation("Homeworks list served from cache");
             return Result<List<HomeworkListItemResponse>>.Ok(cached);
-        }
 
         var homeworks = await unitOfWork.Homeworks.GetAllAsync();
 
@@ -42,7 +43,11 @@ public class HomeworkService(
         if (cached is not null)
             return Result<List<HomeworkListItemResponse>>.Ok(cached);
 
-        var homeworks = await unitOfWork.Homeworks.GetByLessonAsync(lessonId);
+        var lesson = await unitOfWork.Lessons.GetByIdAsync(lessonId);
+        if (lesson is null)
+            return Result<List<HomeworkListItemResponse>>.Fail("Lesson not found", ErrorType.NotFound);
+
+        var homeworks = await unitOfWork.Homeworks.GetByLessonIdAsync(lessonId);
 
         var result = homeworks.Select(MapToListItem).ToList();
 
@@ -51,6 +56,9 @@ public class HomeworkService(
         return Result<List<HomeworkListItemResponse>>.Ok(result);
     }
 
+    // =========================
+    // GET DETAILS
+    // =========================
     public async Task<Result<HomeworkResponse>> GetByIdAsync(int id)
     {
         var cacheKey = $"{HomeworkCachePrefix}{id}";
@@ -67,34 +75,43 @@ public class HomeworkService(
         }
 
         var response = MapToResponse(homework);
+
         await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(15));
 
         return Result<HomeworkResponse>.Ok(response);
     }
 
+    // =========================
+    // CREATE
+    // =========================
     public async Task<Result<HomeworkResponse>> CreateAsync(CreateHomeworkRequest request)
     {
-        // урок существует?
         var lesson = await unitOfWork.Lessons.GetByIdAsync(request.LessonId);
         if (lesson is null)
-        {
-            logger.LogWarning("Create failed - lesson not found: {LessonId}", request.LessonId);
             return Result<HomeworkResponse>.Fail("Lesson not found", ErrorType.BadRequest);
-        }
 
-        // дедлайн в прошлом?
         if (request.Deadline <= DateTime.UtcNow)
             return Result<HomeworkResponse>.Fail(
-                "Deadline must be in the future", ErrorType.BadRequest);
+                "Deadline must be in the future",
+                ErrorType.BadRequest);
 
-        var homework = new Domain.Entities.Homework
+        var exists = await unitOfWork.Homeworks
+            .ExistsByTitleInLessonAsync(request.LessonId, request.Title);
+
+        if (exists)
+            return Result<HomeworkResponse>.Fail(
+                "Homework with this title already exists",
+                ErrorType.Conflict);
+
+        var homework = new Homework
         {
             LessonId = request.LessonId,
             Title = request.Title.Trim(),
             Description = request.Description?.Trim(),
+            FileUrl = request.FileUrl,
             Deadline = request.Deadline,
             MaxScore = request.MaxScore,
-            IsActive = true,
+            IsActive = request.IsActive,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -103,22 +120,17 @@ public class HomeworkService(
 
         await cache.RemoveByPrefixAsync(HomeworkCachePrefix);
 
-        logger.LogInformation(
-            "Homework created: {HomeworkId} for lesson {LessonId}",
-            homework.Id, homework.LessonId);
-
-        var created = await unitOfWork.Homeworks.GetByIdAsync(homework.Id);
-        return Result<HomeworkResponse>.Ok(MapToResponse(created!));
+        return Result<HomeworkResponse>.Ok(MapToResponse(homework));
     }
 
+    // =========================
+    // UPDATE
+    // =========================
     public async Task<Result<HomeworkResponse>> UpdateAsync(int id, UpdateHomeworkRequest request)
     {
         var homework = await unitOfWork.Homeworks.GetByIdAsync(id);
         if (homework is null)
-        {
-            logger.LogWarning("Update failed - homework not found: {HomeworkId}", id);
             return Result<HomeworkResponse>.Fail("Homework not found", ErrorType.NotFound);
-        }
 
         if (request.Title is not null)
             homework.Title = request.Title.Trim();
@@ -129,8 +141,8 @@ public class HomeworkService(
         if (request.Deadline is not null)
         {
             if (request.Deadline <= DateTime.UtcNow)
-                return Result<HomeworkResponse>.Fail(
-                    "Deadline must be in the future", ErrorType.BadRequest);
+                return Result<HomeworkResponse>.Fail("Deadline must be in future", ErrorType.BadRequest);
+
             homework.Deadline = request.Deadline.Value;
         }
 
@@ -142,19 +154,34 @@ public class HomeworkService(
 
         await cache.RemoveByPrefixAsync(HomeworkCachePrefix);
 
-        logger.LogInformation("Homework updated: {HomeworkId}", id);
-
         return Result<HomeworkResponse>.Ok(MapToResponse(homework));
     }
 
+    // =========================
+    // DELETE
+    // =========================
+    public async Task<Result<bool>> DeleteAsync(int id)
+    {
+        var homework = await unitOfWork.Homeworks.GetByIdAsync(id);
+        if (homework is null)
+            return Result<bool>.Fail("Homework not found", ErrorType.NotFound);
+
+        await unitOfWork.Homeworks.DeleteAsync(id);
+        await unitOfWork.SaveChangesAsync();
+
+        await cache.RemoveByPrefixAsync(HomeworkCachePrefix);
+
+        return Result<bool>.Ok(true);
+    }
+
+    // =========================
+    // STATUS
+    // =========================
     public async Task<Result<bool>> SetStatusAsync(int id, SetHomeworkStatusRequest request)
     {
         var homework = await unitOfWork.Homeworks.GetByIdAsync(id);
         if (homework is null)
-        {
-            logger.LogWarning("SetStatus failed - homework not found: {HomeworkId}", id);
             return Result<bool>.Fail("Homework not found", ErrorType.NotFound);
-        }
 
         homework.IsActive = request.IsActive;
 
@@ -163,27 +190,30 @@ public class HomeworkService(
 
         await cache.RemoveByPrefixAsync(HomeworkCachePrefix);
 
-        logger.LogInformation(
-            "Homework status changed: {HomeworkId} IsActive: {IsActive}", id, request.IsActive);
-
         return Result<bool>.Ok(true);
     }
 
-    private static HomeworkResponse MapToResponse(Domain.Entities.Homework h) => new()
+    // =========================
+    // MAPPERS
+    // =========================
+    private static HomeworkResponse MapToResponse(Homework h) => new()
     {
         Id = h.Id,
         LessonId = h.LessonId,
         LessonTitle = h.Lesson?.Title ?? string.Empty,
         Title = h.Title,
         Description = h.Description,
+        FileUrl = h.FileUrl,
         Deadline = h.Deadline,
         MaxScore = h.MaxScore,
         IsActive = h.IsActive,
         IsOverdue = h.Deadline < DateTime.UtcNow,
-        CreatedAt = h.CreatedAt
+        CreatedAt = h.CreatedAt,
+        UpdatedAt = h.UpdatedAt,
+        SubmissionsCount = h.Submissions?.Count ?? 0
     };
 
-    private static HomeworkListItemResponse MapToListItem(Domain.Entities.Homework h) => new()
+    private static HomeworkListItemResponse MapToListItem(Homework h) => new()
     {
         Id = h.Id,
         LessonId = h.LessonId,

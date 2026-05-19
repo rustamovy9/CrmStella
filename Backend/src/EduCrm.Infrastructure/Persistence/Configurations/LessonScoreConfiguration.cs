@@ -11,7 +11,7 @@ public class LessonScoreConfiguration : IEntityTypeConfiguration<LessonScore>
         builder.HasKey(x => x.Id);
 
         builder.Property(x => x.Score)
-            .HasPrecision(3, 1)
+            .HasPrecision(5, 2)
             .IsRequired();
 
         builder.Property(x => x.MentorFeedback)

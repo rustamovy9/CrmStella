@@ -11,8 +11,14 @@ public class HomeworkSubmissionResponse
     public string StudentName { get; set; } = string.Empty;
 
     public string? TextAnswer { get; set; }
+
     public string? FileUrl { get; set; }
 
     public DateTime SubmittedAt { get; set; }
+
     public bool IsLate { get; set; }
+
+    public decimal? Score { get; set; }
+
+    public string? Feedback { get; set; }
 }

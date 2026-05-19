@@ -29,31 +29,38 @@ public static class DependencyInjection
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(connectionString));
 
-        // Memory Cache
+        // Cache
         services.AddMemoryCache();
 
         // Repositories
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        // Services
+        // Core Services
         services.AddSingleton<ICacheService, CacheService>();
+
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IEmailService, EmailService>();
+
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMentorService, MentorService>();
         services.AddScoped<IStudentService, StudentService>();
+
         services.AddScoped<ICourseService, CourseService>();
-        services.AddScoped<IGroupStudentService, GroupStudentService>();
         services.AddScoped<IGroupService, GroupService>();
-        services.AddScoped<IFileStorageService, FileStorageService>();
-        services.AddScoped<IPaymentService, PaymentService>();
-        services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<IGroupStudentService, GroupStudentService>();
+
         services.AddScoped<ILessonService, LessonService>();
         services.AddScoped<IScheduleService, ScheduleService>();
         services.AddScoped<IAttendanceService, AttendanceService>();
+
+        services.AddScoped<IFileStorageService, FileStorageService>();
+        services.AddScoped<IPaymentService, PaymentService>();
+        services.AddScoped<IProfileService, ProfileService>();
+
+        // Homework module
         services.AddScoped<IHomeworkService, HomeworkService>();
-        services.AddScoped<IStudentProgressService, StudentProgressService>();
+        services.AddScoped<IHomeworkSubmissionService, HomeworkSubmissionService>();
 
         // Settings
         services.Configure<EmailSettings>(

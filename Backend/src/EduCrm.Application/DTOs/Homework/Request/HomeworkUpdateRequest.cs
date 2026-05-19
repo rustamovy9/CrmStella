@@ -1,28 +1,32 @@
-using System.ComponentModel.DataAnnotations;
-
+﻿using System.ComponentModel.DataAnnotations;
 namespace EduCrm.Application.DTOs.Homework.Request;
 
-public class CreateHomeworkRequest
+public class HomeworkUpdateRequest
 {
-    [Required(ErrorMessage = "LessonId is required")]
+    [Required]
+    [Range(1, int.MaxValue, ErrorMessage = "Id must be a positive integer")]
+    public int Id { get; set; }
+
+    [Required]
     [Range(1, int.MaxValue, ErrorMessage = "LessonId must be a positive integer")]
     public int LessonId { get; set; }
 
-    [Required(ErrorMessage = "Title is required")]
+    [Required]
     [MaxLength(200, ErrorMessage = "Title cannot exceed 200 characters")]
-    public string Title { get; set; } = string.Empty;
+    public string Title { get; set; } = null!;
 
+    [Required]
     [MaxLength(2000, ErrorMessage = "Description cannot exceed 2000 characters")]
-    public string? Description { get; set; }
+    public string Description { get; set; } = null!;
 
     [MaxLength(500, ErrorMessage = "FileUrl cannot exceed 500 characters")]
     public string? FileUrl { get; set; }
 
-    [Required(ErrorMessage = "Deadline is required")]
+    [Required]
     public DateTime Deadline { get; set; }
 
     [Range(1, 100, ErrorMessage = "MaxScore must be between 1 and 100")]
-    public int MaxScore { get; set; } = 100;
+    public int MaxScore { get; set; }
 
-    public bool IsActive { get; set; } = true;
+    public bool IsActive { get; set; }
 }
