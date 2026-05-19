@@ -5,21 +5,22 @@ namespace EduCrm.Infrastructure.Repositories;
 
 public class UnitOfWork(AppDbContext context) : IUnitOfWork
 {
-    private IAttendanceRepository? _attendances;
-    private ICourseRepository? _courses;
-    private IFileStorageRepository? _files;
-    private IGroupRepository? _groups;
-    private IGroupStudentRepository? _groupStudents;
-    private IHomeworkRepository? _homeworks;
-    private IHomeworkSubmissionRepository? _homeworkSubmissions;
-    private ILessonRepository? _lessons;
-    private IMentorRepository? _mentors;
-    private IPaymentRepository? _payments;
-    private IProfileRepository? _profiles;
-    private IScheduleRepository? _schedules;
-    private IStudentRepository? _students;
     private IUserRepository? _users;
     private IVerificationCodeRepository? _verificationCodes;
+    private IMentorRepository? _mentors;
+    private IStudentRepository? _students;
+    private ICourseRepository? _courses;
+    private IGroupRepository? _groups;
+    private IGroupStudentRepository? _groupStudents;
+    private IFileStorageRepository? _files;
+    private IPaymentRepository? _payments;
+    private IProfileRepository? _profiles;
+    private ILessonRepository? _lessons;
+    private IScheduleRepository? _schedules;
+    private IAttendanceRepository? _attendances;
+    private IHomeworkRepository? _homeworks;
+    private IHomeworkSubmissionRepository? _homeworkSubmissions;
+    private ILessonScoreRepository? _lessonScores;
     private IStudentProgressRepository? _studentProgress;
 
     public IUserRepository Users =>
@@ -66,6 +67,9 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
 
     public IHomeworkSubmissionRepository HomeworkSubmissions =>
         _homeworkSubmissions ??= new HomeworkSubmissionRepository(context);
+
+    public ILessonScoreRepository LessonScores =>
+        _lessonScores ??= new LessonScoreRepository(context);
 
     public IStudentProgressRepository StudentProgress =>
         _studentProgress ??= new StudentProgressRepository(context);

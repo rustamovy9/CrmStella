@@ -51,6 +51,7 @@ public static class DependencyInjection
         services.AddScoped<IGroupStudentService, GroupStudentService>();
 
         services.AddScoped<ILessonService, LessonService>();
+        services.AddScoped<ILessonScoreService, LessonScoreService>();
         services.AddScoped<IScheduleService, ScheduleService>();
         services.AddScoped<IAttendanceService, AttendanceService>();
 

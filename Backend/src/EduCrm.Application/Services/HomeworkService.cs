@@ -16,10 +16,7 @@ public class HomeworkService(
 {
     private const string HomeworkCachePrefix = "homeworks:";
     private const string HomeworkListCacheKey = "homeworks:list";
-
-    // =========================
-    // GET LIST (optimized for UI)
-    // =========================
+    
     public async Task<Result<List<HomeworkListItemResponse>>> GetAllAsync()
     {
         var cached = await cache.GetAsync<List<HomeworkListItemResponse>>(HomeworkListCacheKey);
@@ -55,10 +52,7 @@ public class HomeworkService(
 
         return Result<List<HomeworkListItemResponse>>.Ok(result);
     }
-
-    // =========================
-    // GET DETAILS
-    // =========================
+    
     public async Task<Result<HomeworkResponse>> GetByIdAsync(int id)
     {
         var cacheKey = $"{HomeworkCachePrefix}{id}";
@@ -80,10 +74,7 @@ public class HomeworkService(
 
         return Result<HomeworkResponse>.Ok(response);
     }
-
-    // =========================
-    // CREATE
-    // =========================
+    
     public async Task<Result<HomeworkResponse>> CreateAsync(CreateHomeworkRequest request)
     {
         var lesson = await unitOfWork.Lessons.GetByIdAsync(request.LessonId);
@@ -122,10 +113,7 @@ public class HomeworkService(
 
         return Result<HomeworkResponse>.Ok(MapToResponse(homework));
     }
-
-    // =========================
-    // UPDATE
-    // =========================
+    
     public async Task<Result<HomeworkResponse>> UpdateAsync(int id, UpdateHomeworkRequest request)
     {
         var homework = await unitOfWork.Homeworks.GetByIdAsync(id);
@@ -156,10 +144,7 @@ public class HomeworkService(
 
         return Result<HomeworkResponse>.Ok(MapToResponse(homework));
     }
-
-    // =========================
-    // DELETE
-    // =========================
+    
     public async Task<Result<bool>> DeleteAsync(int id)
     {
         var homework = await unitOfWork.Homeworks.GetByIdAsync(id);
@@ -173,10 +158,7 @@ public class HomeworkService(
 
         return Result<bool>.Ok(true);
     }
-
-    // =========================
-    // STATUS
-    // =========================
+    
     public async Task<Result<bool>> SetStatusAsync(int id, SetHomeworkStatusRequest request)
     {
         var homework = await unitOfWork.Homeworks.GetByIdAsync(id);
@@ -192,10 +174,7 @@ public class HomeworkService(
 
         return Result<bool>.Ok(true);
     }
-
-    // =========================
-    // MAPPERS
-    // =========================
+    
     private static HomeworkResponse MapToResponse(Homework h) => new()
     {
         Id = h.Id,

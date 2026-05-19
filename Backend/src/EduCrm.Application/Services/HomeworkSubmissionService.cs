@@ -16,10 +16,7 @@ public class HomeworkSubmissionService(
     : IHomeworkSubmissionService
 {
     private const string SubmissionCachePrefix = "submissions:";
-
-    // =========================
-    // STUDENT FLOW (mobile API)
-    // =========================
+    
     public async Task<Result<HomeworkSubmissionResponse>> SubmitAsync(
         SubmitHomeworkRequest request,
         int studentUserId)
@@ -65,6 +62,7 @@ public class HomeworkSubmissionService(
                 studentUserId);
 
             submission.FileUrl = file.Url;
+
             await unitOfWork.HomeworkSubmissions.UpdateAsync(submission);
             await unitOfWork.SaveChangesAsync();
         }
@@ -75,11 +73,8 @@ public class HomeworkSubmissionService(
 
         return Result<HomeworkSubmissionResponse>.Ok(MapToResponse(created!));
     }
-
-    // =========================
-    // ADMIN / MENTOR FLOW
-    // =========================
-    public async Task<Result<List<HomeworkSubmissionResponse>>> GetByHomeworkIdAsync(int homeworkId)
+    
+    public async Task<Result<List<HomeworkSubmissionResponse>>> GetByHomeworkAsync(int homeworkId)
     {
         var cacheKey = $"{SubmissionCachePrefix}homework:{homeworkId}";
 
@@ -95,7 +90,7 @@ public class HomeworkSubmissionService(
 
         return Result<List<HomeworkSubmissionResponse>>.Ok(result);
     }
-
+    
     public async Task<Result<HomeworkSubmissionResponse>> GetByIdAsync(int id)
     {
         var cacheKey = $"{SubmissionCachePrefix}{id}";
@@ -109,12 +104,13 @@ public class HomeworkSubmissionService(
         if (submission is null)
             return Result<HomeworkSubmissionResponse>.Fail("Not found", ErrorType.NotFound);
 
-        return Result<HomeworkSubmissionResponse>.Ok(MapToResponse(submission));
-    }
+        var result = MapToResponse(submission);
 
-    // =========================
-    // GRADING SYSTEM
-    // =========================
+        await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(15));
+
+        return Result<HomeworkSubmissionResponse>.Ok(result);
+    }
+    
     public async Task<Result<HomeworkSubmissionResponse>> GradeAsync(
         GradeHomeworkRequest request)
     {
@@ -139,17 +135,11 @@ public class HomeworkSubmissionService(
         await unitOfWork.LessonScores.CreateAsync(score);
         await unitOfWork.SaveChangesAsync();
 
-        submission.Score = score.Score;
-        submission.Feedback = score.MentorFeedback;
-
         await cache.RemoveByPrefixAsync(SubmissionCachePrefix);
 
         return Result<HomeworkSubmissionResponse>.Ok(MapToResponse(submission));
     }
-
-    // =========================
-    // MAPPER
-    // =========================
+    
     private static HomeworkSubmissionResponse MapToResponse(Domain.Entities.HomeworkSubmission s) => new()
     {
         Id = s.Id,
@@ -160,8 +150,6 @@ public class HomeworkSubmissionService(
         TextAnswer = s.TextAnswer,
         FileUrl = s.FileUrl,
         SubmittedAt = s.SubmittedAt,
-        IsLate = s.IsLate,
-        Score = s.LessonScore?.Score,
-        Feedback = s.LessonScore?.MentorFeedback
+        IsLate = s.IsLate
     };
 }
