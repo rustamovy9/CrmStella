@@ -21,6 +21,7 @@ public interface IUnitOfWork
 
     ILessonScoreRepository LessonScores { get; }
     IStudentProgressRepository StudentProgress { get; }
+    IExamRepository Exams { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
