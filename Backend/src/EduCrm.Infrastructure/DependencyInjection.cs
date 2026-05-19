@@ -51,13 +51,15 @@ public static class DependencyInjection
         services.AddScoped<IGroupStudentService, GroupStudentService>();
 
         services.AddScoped<ILessonService, LessonService>();
+        services.AddScoped<ILessonScoreService, LessonScoreService>();
         services.AddScoped<IScheduleService, ScheduleService>();
         services.AddScoped<IAttendanceService, AttendanceService>();
 
         services.AddScoped<IFileStorageService, FileStorageService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IProfileService, ProfileService>();
-
+        //Exam module
+        services.AddScoped<IExamService, ExamService>();
         // Homework module
         services.AddScoped<IHomeworkService, HomeworkService>();
         services.AddScoped<IHomeworkSubmissionService, HomeworkSubmissionService>();

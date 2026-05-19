@@ -8,7 +8,8 @@ public class Exam
 
     public string Title { get; set; } = null!;
     public string? Description { get; set; }
-
+    
+    public bool IsActive { get; set; }
     public DateTime ExamDate { get; set; }
     public TimeSpan? StartTime { get; set; }
     public TimeSpan? EndTime { get; set; }
