@@ -15,5 +15,7 @@ public interface IUnitOfWork
     ILessonRepository Lessons { get; }
     IScheduleRepository Schedules { get; }
     IAttendanceRepository Attendances { get; }
+    IHomeworkRepository Homeworks { get; }
+    IHomeworkSubmissionRepository HomeworkSubmissions { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
