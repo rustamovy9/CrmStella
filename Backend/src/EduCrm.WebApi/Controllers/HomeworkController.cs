@@ -7,22 +7,21 @@ namespace EduCrm.WebApi.Controllers;
 
 [Route("api/homeworks")]
 [Authorize(Roles = "Admin,Mentor")]
-public class HomeworkController(IHomeworkService homeworkService) : BaseController
+public class HomeworkController : BaseController
 {
-    [HttpGet]
-    public async Task<IActionResult> GetAll()
-    {
-        var result = await homeworkService.GetAllAsync();
-        if (!result.IsSuccess)
-            return HandleError(result);
+    private readonly IHomeworkService _homeworkService;
 
-        return Ok(result);
+    public HomeworkController(IHomeworkService homeworkService)
+    {
+        _homeworkService = homeworkService;
     }
 
-    [HttpGet("lesson/{lessonId:int}")]
-    public async Task<IActionResult> GetByLesson(int lessonId)
+    [HttpGet]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> GetAll(CancellationToken cancellationToken = default)
     {
-        var result = await homeworkService.GetByLessonAsync(lessonId);
+        var result = await _homeworkService.GetAllAsync(cancellationToken);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -30,9 +29,21 @@ public class HomeworkController(IHomeworkService homeworkService) : BaseControll
     }
 
     [HttpGet("{id:int}")]
-    public async Task<IActionResult> GetById(int id)
+    public async Task<IActionResult> GetById(int id, CancellationToken cancellationToken = default)
     {
-        var result = await homeworkService.GetByIdAsync(id);
+        var result = await _homeworkService.GetByIdAsync(id, cancellationToken);
+
+        if (!result.IsSuccess)
+            return HandleError(result);
+
+        return Ok(result);
+    }
+
+    [HttpGet("lesson/{lessonId:int}")]
+    public async Task<IActionResult> GetByLessonId(int lessonId, CancellationToken cancellationToken = default)
+    {
+        var result = await _homeworkService.GetByLessonIdAsync(lessonId, cancellationToken);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -40,29 +51,41 @@ public class HomeworkController(IHomeworkService homeworkService) : BaseControll
     }
 
     [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateHomeworkRequest request)
+    [Authorize(Roles = "Admin,Mentor")]
+    public async Task<IActionResult> Create(
+        [FromBody] CreateHomeworkRequest request,
+        CancellationToken cancellationToken = default)
     {
-        var result = await homeworkService.CreateAsync(request);
+        var result = await _homeworkService.CreateAsync(request, cancellationToken);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
         return Ok(result);
     }
 
-    [HttpPut("{id:int}")]
-    public async Task<IActionResult> Update(int id, [FromBody] UpdateHomeworkRequest request)
+    [HttpPut]
+    [Authorize(Roles = "Admin,Mentor")]
+    public async Task<IActionResult> Update(
+        [FromBody] HomeworkUpdateRequest request,
+        CancellationToken cancellationToken = default)
     {
-        var result = await homeworkService.UpdateAsync(id, request);
+        var result = await _homeworkService.UpdateAsync(request, cancellationToken);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
         return Ok(result);
     }
 
-    [HttpPatch("{id:int}/status")]
-    public async Task<IActionResult> SetStatus(int id, [FromBody] SetHomeworkStatusRequest request)
+    [HttpDelete("{id:int}")]
+    [Authorize(Roles = "Admin")]
+    public async Task<IActionResult> Delete(
+        int id,
+        CancellationToken cancellationToken = default)
     {
-        var result = await homeworkService.SetStatusAsync(id, request);
+        var result = await _homeworkService.DeleteAsync(id, cancellationToken);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
