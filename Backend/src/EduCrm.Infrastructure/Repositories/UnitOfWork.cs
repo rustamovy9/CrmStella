@@ -23,6 +23,7 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
     private ILessonScoreRepository? _lessonScores;
     private IStudentProgressRepository? _studentProgress;
     private IExamRepository? _exams;
+    private IExamResultRepository? _examResults;
 
     public IUserRepository Users =>
         _users ??= new UserRepository(context);
@@ -76,6 +77,8 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
         _studentProgress ??= new StudentProgressRepository(context);
     public IExamRepository Exams =>
     _exams ??= new ExamRepository(context);
+
+    public IExamResultRepository ExamResults => _examResults ??= new ExamResultRepository(context);
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         => await context.SaveChangesAsync(cancellationToken);
