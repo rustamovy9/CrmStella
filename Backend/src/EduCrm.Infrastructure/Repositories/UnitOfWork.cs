@@ -10,6 +10,7 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
     private IFileStorageRepository? _files;
     private IGroupRepository? _groups;
     private IGroupStudentRepository? _groupStudents;
+    private IHomeworkRepository? _homeworks;
     private ILessonRepository? _lessons;
     private IMentorRepository? _mentors;
     private IPaymentRepository? _payments;
@@ -18,6 +19,9 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
     private IStudentRepository? _students;
     private IUserRepository? _users;
     private IVerificationCodeRepository? _verificationCodes;
+    private IHomeworkSubmissionRepository? _homeworkSubmissions;
+    private ILessonScoreRepository? _lessonScores;
+
 
     public IUserRepository Users
         => _users ??= new UserRepository(context);
@@ -57,6 +61,15 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
 
     public IAttendanceRepository Attendances
         => _attendances ??= new AttendanceRepository(context);
+
+    public IHomeworkRepository Homeworks
+        => _homeworks ??= new HomeworkRepository(context);
+    
+    
+    public IHomeworkSubmissionRepository HomeworkSubmissions
+        => _homeworkSubmissions ??= new HomeworkSubmissionRepository(context);
+    public ILessonScoreRepository LessonScores
+        => _lessonScores ??= new LessonScoreRepository(context);
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

@@ -8,9 +8,7 @@ using EduCrm.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-
 namespace EduCrm.Infrastructure;
-
 public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
@@ -52,6 +50,10 @@ public static class DependencyInjection
         services.AddScoped<ILessonService, LessonService>();
         services.AddScoped<IScheduleService, ScheduleService>();
         services.AddScoped<IAttendanceService, AttendanceService>();
+        services.AddScoped<IHomeworkService, HomeworkService>();
+        services.AddScoped<IHomeworkSubmissionService , HomeworkSubmissionService>();
+        services.AddScoped<IUserService, UserService>();
+        services.AddScoped<ILessonScoreService , LessonScoreService>();
 
         // Settings
         services.Configure<EmailSettings>(
