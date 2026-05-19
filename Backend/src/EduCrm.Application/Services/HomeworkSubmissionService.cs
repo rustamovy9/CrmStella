@@ -1,9 +1,8 @@
-﻿using EduCrm.Application.Common;
+using EduCrm.Application.Common;
 using EduCrm.Application.DTOs.HomeworkSubmission.Request;
 using EduCrm.Application.DTOs.HomeworkSubmission.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
-using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -12,198 +11,122 @@ namespace EduCrm.Application.Services;
 public class HomeworkSubmissionService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
-    ILogger<HomeworkSubmissionService> logger) : IHomeworkSubmissionService
+    IFileStorageService fileStorage,
+    ILogger<HomeworkSubmissionService> logger)
+    : IHomeworkSubmissionService
 {
     private const string SubmissionCachePrefix = "submissions:";
-    private const string SubmissionListCacheKey = "submissions:list";
 
-    public async Task<Result<List<HomeworkSubmissionResponse>>> GetAllAsync(CancellationToken cancellationToken = default)
+    // =========================
+    // STUDENT FLOW (mobile API)
+    // =========================
+    public async Task<Result<HomeworkSubmissionResponse>> SubmitAsync(
+        SubmitHomeworkRequest request,
+        int studentUserId)
     {
-        var cached = await cache.GetAsync<List<HomeworkSubmissionResponse>>(SubmissionListCacheKey);
-        if (cached is not null)
-        {
-            logger.LogInformation("Submissions list served from cache");
-            return Result<List<HomeworkSubmissionResponse>>.Ok(cached);
-        }
-
-        var submissions = await unitOfWork.HomeworkSubmissions.GetAllAsync(cancellationToken);
-        var result = submissions.Select(MapToResponse).ToList();
-
-        await cache.SetAsync(SubmissionListCacheKey, result, TimeSpan.FromMinutes(30));
-        return Result<List<HomeworkSubmissionResponse>>.Ok(result);
-    }
-
-    public async Task<Result<HomeworkSubmissionResponse>> GetByIdAsync(int id, CancellationToken cancellationToken = default)
-    {
-        var cacheKey = $"{SubmissionCachePrefix}{id}";
-        var cached = await cache.GetAsync<HomeworkSubmissionResponse>(cacheKey);
-        if (cached is not null)
-        {
-            return Result<HomeworkSubmissionResponse>.Ok(cached);
-        }
-
-        var submission = await unitOfWork.HomeworkSubmissions.GetByIdAsync(id, cancellationToken);
-        if (submission is null)
-        {
-            logger.LogWarning("Submission not found: {SubmissionId}", id);
-            return Result<HomeworkSubmissionResponse>.Fail("Submission not found");
-        }
-
-        var response = MapToResponse(submission);
-        await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(30));
-        return Result<HomeworkSubmissionResponse>.Ok(response);
-    }
-
-    public async Task<Result<List<HomeworkSubmissionResponse>>> GetByHomeworkIdAsync(int homeworkId, CancellationToken cancellationToken = default)
-    {
-        var cacheKey = $"{SubmissionCachePrefix}homework:{homeworkId}";
-        var cached = await cache.GetAsync<List<HomeworkSubmissionResponse>>(cacheKey);
-        if (cached is not null)
-        {
-            logger.LogInformation("Submissions for homework {HomeworkId} served from cache", homeworkId);
-            return Result<List<HomeworkSubmissionResponse>>.Ok(cached);
-        }
-
-        var homework = await unitOfWork.Homeworks.GetByIdAsync(homeworkId, cancellationToken);
+        var homework = await unitOfWork.Homeworks.GetByIdAsync(request.HomeworkId);
         if (homework is null)
-        {
-            return Result<List<HomeworkSubmissionResponse>>.Fail("Homework not found", ErrorType.BadRequest);
-        }
+            return Result<HomeworkSubmissionResponse>.Fail("Homework not found", ErrorType.NotFound);
 
-        var submissions = await unitOfWork.HomeworkSubmissions.GetByHomeworkIdAsync(homeworkId, cancellationToken);
-        var result = submissions.Select(MapToResponse).ToList();
+        if (!homework.IsActive)
+            return Result<HomeworkSubmissionResponse>.Fail("Homework is closed", ErrorType.BadRequest);
 
-        await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(30));
-        return Result<List<HomeworkSubmissionResponse>>.Ok(result);
-    }
-
-    public async Task<Result<List<HomeworkSubmissionResponse>>> GetByStudentIdAsync(int studentId, CancellationToken cancellationToken = default)
-    {
-        var cacheKey = $"{SubmissionCachePrefix}student:{studentId}";
-        var cached = await cache.GetAsync<List<HomeworkSubmissionResponse>>(cacheKey);
-        if (cached is not null)
-        {
-            logger.LogInformation("Submissions for student {StudentId} served from cache", studentId);
-            return Result<List<HomeworkSubmissionResponse>>.Ok(cached);
-        }
-
-        var student = await unitOfWork.Students.GetByIdAsync(studentId, cancellationToken);
+        var student = await unitOfWork.Students.GetByUserIdAsync(studentUserId);
         if (student is null)
-        {
-            return Result<List<HomeworkSubmissionResponse>>.Fail("Student not found", ErrorType.BadRequest);
-        }
+            return Result<HomeworkSubmissionResponse>.Fail("Student not found", ErrorType.NotFound);
 
-        var submissions = await unitOfWork.HomeworkSubmissions.GetByStudentIdAsync(studentId, cancellationToken);
-        var result = submissions.Select(MapToResponse).ToList();
+        var exists = await unitOfWork.HomeworkSubmissions
+            .GetByHomeworkAndStudentAsync(request.HomeworkId, student.Id);
 
-        await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(30));
-        return Result<List<HomeworkSubmissionResponse>>.Ok(result);
-    }
+        if (exists is not null)
+            return Result<HomeworkSubmissionResponse>.Fail("Already submitted", ErrorType.Conflict);
 
-    public async Task<Result<HomeworkSubmissionResponse>> CreateAsync(CreateHomeworkSubmissionRequest request, CancellationToken cancellationToken = default)
-    {
-        var homework = await unitOfWork.Homeworks.GetByIdAsync(request.HomeworkId, cancellationToken);
-        if (homework is null)
-        {
-            logger.LogWarning("Create failed - homework not found: {HomeworkId}", request.HomeworkId);
-            return Result<HomeworkSubmissionResponse>.Fail("Homework not found", ErrorType.BadRequest);
-        }
+        var now = DateTime.UtcNow;
 
-        var student = await unitOfWork.Students.GetByIdAsync(request.StudentId, cancellationToken);
-        if (student is null)
-        {
-            logger.LogWarning("Create failed - student not found: {StudentId}", request.StudentId);
-            return Result<HomeworkSubmissionResponse>.Fail("Student not found", ErrorType.BadRequest);
-        }
-
-        var hasSubmitted = await unitOfWork.HomeworkSubmissions.HasSubmittedAsync(request.HomeworkId, request.StudentId, cancellationToken);
-        if (hasSubmitted)
-        {
-            return Result<HomeworkSubmissionResponse>.Fail("Student has already submitted this homework", ErrorType.Conflict);
-        }
-
-        var isLate = DateTime.UtcNow > homework.Deadline;
-
-        var submission = new HomeworkSubmission
+        var submission = new Domain.Entities.HomeworkSubmission
         {
             HomeworkId = request.HomeworkId,
-            StudentId = request.StudentId,
-            TextAnswer = request.TextAnswer,
-            FileUrl = request.FileUrl,
-            SubmittedAt = DateTime.UtcNow,
-            IsLate = isLate
+            StudentId = student.Id,
+            TextAnswer = request.TextAnswer?.Trim(),
+            SubmittedAt = now,
+            IsLate = now > homework.Deadline
         };
 
-        await unitOfWork.HomeworkSubmissions.CreateAsync(submission, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await unitOfWork.HomeworkSubmissions.CreateAsync(submission);
+        await unitOfWork.SaveChangesAsync();
+
+        // file upload
+        if (request.File is not null)
+        {
+            var file = await fileStorage.UploadAsync(
+                request.File,
+                FileOwnerType.HomeworkSubmission,
+                submission.Id,
+                studentUserId);
+
+            submission.FileUrl = file.Url;
+            await unitOfWork.HomeworkSubmissions.UpdateAsync(submission);
+            await unitOfWork.SaveChangesAsync();
+        }
 
         await cache.RemoveByPrefixAsync(SubmissionCachePrefix);
 
-        logger.LogInformation("Submission created: {SubmissionId} for homework {HomeworkId} by student {StudentId}", 
-            submission.Id, submission.HomeworkId, submission.StudentId);
+        var created = await unitOfWork.HomeworkSubmissions.GetByIdAsync(submission.Id);
 
-        var response = MapToResponse(submission);
-        return Result<HomeworkSubmissionResponse>.Ok(response);
+        return Result<HomeworkSubmissionResponse>.Ok(MapToResponse(created!));
     }
 
-    public async Task<Result<HomeworkSubmissionResponse>> UpdateAsync(UpdateHomeworkSubmissionRequest request, CancellationToken cancellationToken = default)
+    // =========================
+    // ADMIN / MENTOR FLOW
+    // =========================
+    public async Task<Result<List<HomeworkSubmissionResponse>>> GetByHomeworkIdAsync(int homeworkId)
     {
-        var submission = await unitOfWork.HomeworkSubmissions.GetByIdAsync(request.Id, cancellationToken);
-        if (submission is null)
-        {
-            logger.LogWarning("Update failed - submission not found: {SubmissionId}", request.Id);
-            return Result<HomeworkSubmissionResponse>.Fail("Submission not found");
-        }
+        var cacheKey = $"{SubmissionCachePrefix}homework:{homeworkId}";
 
-        submission.TextAnswer = request.TextAnswer ?? submission.TextAnswer;
-        submission.FileUrl = request.FileUrl ?? submission.FileUrl;
-        
+        var cached = await cache.GetAsync<List<HomeworkSubmissionResponse>>(cacheKey);
+        if (cached is not null)
+            return Result<List<HomeworkSubmissionResponse>>.Ok(cached);
 
-        await unitOfWork.HomeworkSubmissions.UpdateAsync(submission, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var submissions = await unitOfWork.HomeworkSubmissions.GetByHomeworkIdAsync(homeworkId);
 
-        await cache.RemoveByPrefixAsync(SubmissionCachePrefix);
+        var result = submissions.Select(MapToResponse).ToList();
 
-        logger.LogInformation("Submission updated: {SubmissionId}", submission.Id);
+        await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(15));
 
-        var response = MapToResponse(submission);
-        return Result<HomeworkSubmissionResponse>.Ok(response);
+        return Result<List<HomeworkSubmissionResponse>>.Ok(result);
     }
 
-    public async Task<Result<bool>> DeleteAsync(int id, CancellationToken cancellationToken = default)
+    public async Task<Result<HomeworkSubmissionResponse>> GetByIdAsync(int id)
     {
-        var submission = await unitOfWork.HomeworkSubmissions.GetByIdAsync(id, cancellationToken);
+        var cacheKey = $"{SubmissionCachePrefix}{id}";
+
+        var cached = await cache.GetAsync<HomeworkSubmissionResponse>(cacheKey);
+        if (cached is not null)
+            return Result<HomeworkSubmissionResponse>.Ok(cached);
+
+        var submission = await unitOfWork.HomeworkSubmissions.GetByIdAsync(id);
+
         if (submission is null)
-        {
-            logger.LogWarning("Delete failed - submission not found: {SubmissionId}", id);
-            return Result<bool>.Fail("Submission not found");
-        }
+            return Result<HomeworkSubmissionResponse>.Fail("Not found", ErrorType.NotFound);
 
-        await unitOfWork.HomeworkSubmissions.DeleteAsync(id, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        await cache.RemoveByPrefixAsync(SubmissionCachePrefix);
-
-        logger.LogInformation("Submission deleted: {SubmissionId}", id);
-        return Result<bool>.Ok(true);
+        return Result<HomeworkSubmissionResponse>.Ok(MapToResponse(submission));
     }
 
-    public async Task<Result<HomeworkSubmissionResponse>> GradeAsync(GradeHomeworkRequest request, CancellationToken cancellationToken = default)
+    // =========================
+    // GRADING SYSTEM
+    // =========================
+    public async Task<Result<HomeworkSubmissionResponse>> GradeAsync(
+        GradeHomeworkRequest request)
     {
-        var submission = await unitOfWork.HomeworkSubmissions.GetByIdAsync(request.Id, cancellationToken);
+        var submission = await unitOfWork.HomeworkSubmissions.GetByIdAsync(request.Id);
         if (submission is null)
-        {
-            logger.LogWarning("Grade failed - submission not found: {SubmissionId}", request.Id);
-            return Result<HomeworkSubmissionResponse>.Fail("Submission not found");
-        }
+            return Result<HomeworkSubmissionResponse>.Fail("Not found", ErrorType.NotFound);
 
-        var homework = await unitOfWork.Homeworks.GetByIdAsync(submission.HomeworkId, cancellationToken);
+        var homework = await unitOfWork.Homeworks.GetByIdAsync(submission.HomeworkId);
         if (homework is null)
-        {
-            return Result<HomeworkSubmissionResponse>.Fail("Homework not found", ErrorType.BadRequest);
-        }
+            return Result<HomeworkSubmissionResponse>.Fail("Homework not found", ErrorType.NotFound);
 
-        var lessonScore = new LessonScore
+        var score = new Domain.Entities.LessonScore
         {
             StudentId = submission.StudentId,
             LessonId = homework.LessonId,
@@ -213,35 +136,32 @@ public class HomeworkSubmissionService(
             ScoredAt = DateTime.UtcNow
         };
 
-        await unitOfWork.LessonScores.CreateAsync(lessonScore, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await unitOfWork.LessonScores.CreateAsync(score);
+        await unitOfWork.SaveChangesAsync();
+
+        submission.Score = score.Score;
+        submission.Feedback = score.MentorFeedback;
 
         await cache.RemoveByPrefixAsync(SubmissionCachePrefix);
 
-        logger.LogInformation("Submission graded: {SubmissionId} with score {Score}", submission.Id, request.Score);
-
-        var response = MapToResponse(submission);
-        response.Score = lessonScore.Score;
-        response.Feedback = lessonScore.MentorFeedback;
-        
-        return Result<HomeworkSubmissionResponse>.Ok(response);
+        return Result<HomeworkSubmissionResponse>.Ok(MapToResponse(submission));
     }
 
-    private static HomeworkSubmissionResponse MapToResponse(HomeworkSubmission s)
+    // =========================
+    // MAPPER
+    // =========================
+    private static HomeworkSubmissionResponse MapToResponse(Domain.Entities.HomeworkSubmission s) => new()
     {
-        return new HomeworkSubmissionResponse
-        {
-            Id = s.Id,
-            HomeworkId = s.HomeworkId,
-            HomeworkTitle = s.Homework?.Title ?? string.Empty,
-            StudentId = s.StudentId,
-            StudentName = s.Student?.User?.FullName ?? string.Empty,
-            TextAnswer = s.TextAnswer,
-            FileUrl = s.FileUrl,
-            SubmittedAt = s.SubmittedAt,
-            IsLate = s.IsLate,
-            Score = s.LessonScore?.Score,
-            Feedback = s.LessonScore?.MentorFeedback
-        };
-    }
+        Id = s.Id,
+        HomeworkId = s.HomeworkId,
+        HomeworkTitle = s.Homework?.Title ?? string.Empty,
+        StudentId = s.StudentId,
+        StudentName = s.Student?.User?.FullName ?? string.Empty,
+        TextAnswer = s.TextAnswer,
+        FileUrl = s.FileUrl,
+        SubmittedAt = s.SubmittedAt,
+        IsLate = s.IsLate,
+        Score = s.LessonScore?.Score,
+        Feedback = s.LessonScore?.MentorFeedback
+    };
 }

@@ -8,7 +8,9 @@ using EduCrm.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+
 namespace EduCrm.Infrastructure;
+
 public static class DependencyInjection
 {
     public static IServiceCollection AddInfrastructure(
@@ -27,33 +29,38 @@ public static class DependencyInjection
         services.AddDbContext<AppDbContext>(options =>
             options.UseNpgsql(connectionString));
 
-        // Memory Cache
+        // Cache
         services.AddMemoryCache();
 
         // Repositories
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
-        // Services
+        // Core Services
         services.AddSingleton<ICacheService, CacheService>();
+
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IEmailService, EmailService>();
+
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMentorService, MentorService>();
         services.AddScoped<IStudentService, StudentService>();
+
         services.AddScoped<ICourseService, CourseService>();
-        services.AddScoped<IGroupStudentService, GroupStudentService>();
         services.AddScoped<IGroupService, GroupService>();
-        services.AddScoped<IFileStorageService, FileStorageService>();
-        services.AddScoped<IPaymentService, PaymentService>();
-        services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<IGroupStudentService, GroupStudentService>();
+
         services.AddScoped<ILessonService, LessonService>();
         services.AddScoped<IScheduleService, ScheduleService>();
         services.AddScoped<IAttendanceService, AttendanceService>();
+
+        services.AddScoped<IFileStorageService, FileStorageService>();
+        services.AddScoped<IPaymentService, PaymentService>();
+        services.AddScoped<IProfileService, ProfileService>();
+
+        // Homework module
         services.AddScoped<IHomeworkService, HomeworkService>();
-        services.AddScoped<IHomeworkSubmissionService , HomeworkSubmissionService>();
-        services.AddScoped<IUserService, UserService>();
-        services.AddScoped<ILessonScoreService , LessonScoreService>();
+        services.AddScoped<IHomeworkSubmissionService, HomeworkSubmissionService>();
 
         // Settings
         services.Configure<EmailSettings>(
