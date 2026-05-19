@@ -53,6 +53,7 @@ public static class DependencyInjection
         services.AddScoped<IScheduleService, ScheduleService>();
         services.AddScoped<IAttendanceService, AttendanceService>();
         services.AddScoped<IHomeworkService, HomeworkService>();
+        services.AddScoped<IStudentProgressService, StudentProgressService>();
 
         // Settings
         services.Configure<EmailSettings>(

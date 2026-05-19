@@ -20,6 +20,7 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
     private IVerificationCodeRepository? _verificationCodes;
     private IHomeworkRepository? _homeworks;
     private IHomeworkSubmissionRepository? _homeworkSubmissions;
+    private IStudentProgressRepository? _studentProgress;
     public IUserRepository Users
         => _users ??= new UserRepository(context);
 
@@ -62,7 +63,8 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
    => _homeworks ??= new HomeworkRepository(context);
    public IHomeworkSubmissionRepository HomeworkSubmissions
    => _homeworkSubmissions ??= new HomeworkSubmissionRepository(context);
-   
+   public IStudentProgressRepository StudentProgress
+   => _studentProgress ??= new StudentProgressRepository(context);
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

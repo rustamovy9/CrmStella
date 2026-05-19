@@ -17,5 +17,6 @@ public interface IUnitOfWork
     IAttendanceRepository Attendances { get; }
     IHomeworkRepository Homeworks { get; }
     IHomeworkSubmissionRepository HomeworkSubmissions { get; }
+    IStudentProgressRepository StudentProgress { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
