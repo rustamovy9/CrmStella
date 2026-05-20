@@ -26,6 +26,7 @@ public interface IUnitOfWork
     INotificationRepository Notifications { get; }
     IExamResultRepository ExamResults { get; }
     IAuditLogRepository AuditLogs { get; }
+    IWeekResultRepository WeekResults { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
