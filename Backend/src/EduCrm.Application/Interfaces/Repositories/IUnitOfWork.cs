@@ -23,6 +23,7 @@ public interface IUnitOfWork
     IStudentProgressRepository StudentProgress { get; }
     IExamRepository Exams { get; }
     IExamResultRepository ExamResults { get; }
+    IAuditLogRepository AuditLogs { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
