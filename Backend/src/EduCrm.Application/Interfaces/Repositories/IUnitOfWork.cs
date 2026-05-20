@@ -22,7 +22,10 @@ public interface IUnitOfWork
     ILessonScoreRepository LessonScores { get; }
     IStudentProgressRepository StudentProgress { get; }
     IExamRepository Exams { get; }
+
     INotificationRepository Notifications { get; }
+    IExamResultRepository ExamResults { get; }
+    IAuditLogRepository AuditLogs { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

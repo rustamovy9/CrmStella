@@ -1,55 +1,62 @@
-using EduCrm.Application.Common;
 using EduCrm.Application.DTOs.Exam.Request;
-using EduCrm.Application.DTOs.Exam.Response;
 using EduCrm.Application.Interfaces.Services;
-using EduCrm.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
-namespace EduCrm.API.Controllers
+namespace EduCrm.WebApi.Controllers 
 {
     [Authorize(Roles = "Admin,Mentor")]
-    public class ExamsController : BaseController
+    [Route("api/exams")] 
+    public class ExamsController(IExamService examService) : BaseController
     {
-        private readonly IExamService _examService;
-
-        public ExamsController(IExamService examService)
-        {
-            _examService = examService;
-        }
-
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var result = await _examService.GetAllAsync();
-            return HandleResult(result);
+            var result = await examService.GetAllAsync();
+            
+            if (!result.IsSuccess)
+                return HandleError(result);
+
+            return Ok(result); 
         }
 
         [HttpGet("group/{groupId:int}")]
         public async Task<IActionResult> GetByGroup(int groupId)
         {
-            var result = await _examService.GetByGroupAsync(groupId);
-            return HandleResult(result);
+            var result = await examService.GetByGroupAsync(groupId);
+            
+            if (!result.IsSuccess)
+                return HandleError(result);
+
+            return Ok(result);
         }
 
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
-            var result = await _examService.GetByIdAsync(id);
-            return HandleResult(result);
+            var result = await examService.GetByIdAsync(id);
+            
+            if (!result.IsSuccess)
+                return HandleError(result);
+
+            return Ok(result);
         }
 
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] CreateExamRequest request)
         {
+            // ModelState.IsValid можно опустить, если на контроллере стоит [ApiController], 
+            // так как ASP.NET Core делает эту проверку автоматически. Но для надежности оставим.
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var result = await _examService.CreateAsync(request);
-            if (result.IsSuccess && result.Data != null)
-                return CreatedAtAction(nameof(GetById), new { id = result.Data.Id }, result.Data);
+            var result = await examService.CreateAsync(request);
             
-            return HandleResult(result);
+            if (!result.IsSuccess)
+                return HandleError(result);
+
+            // Возвращаем CreatedAtAction, передавая весь result, как требует твоя новая логика
+            return CreatedAtAction(nameof(GetById), new { id = result.Data!.Id }, result);
         }
 
         [HttpPut("{id:int}")]
@@ -58,8 +65,12 @@ namespace EduCrm.API.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var result = await _examService.UpdateAsync(id, request);
-            return HandleResult(result);
+            var result = await examService.UpdateAsync(id, request);
+            
+            if (!result.IsSuccess)
+                return HandleError(result);
+
+            return Ok(result);
         }
 
         [HttpPatch("{id:int}/status")]
@@ -68,31 +79,12 @@ namespace EduCrm.API.Controllers
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var result = await _examService.SetStatusAsync(id, request);
-            return HandleResult(result);
-        }
-    }
-}
+            var result = await examService.SetStatusAsync(id, request);
+            
+            if (!result.IsSuccess)
+                return HandleError(result);
 
-namespace EduCrm.API.Controllers
-{
-    [ApiController]
-    [Route("api/[controller]")]
-    public abstract class BaseController : ControllerBase
-    {
-        protected IActionResult HandleResult<T>(Result<T> result)
-        {
-            if (result.IsSuccess)
-                return Ok(result.Data);
-
-            return result.ErrorType switch
-            {
-                ErrorType.NotFound => NotFound(new { error = result.Error }),
-                ErrorType.BadRequest => BadRequest(new { error = result.Error }),
-                ErrorType.Unauthorized => Unauthorized(new { error = result.Error }),
-                ErrorType.Forbidden => Forbid(),
-                _ => StatusCode(500, new { error = result.Error })
-            };
+            return Ok(result);
         }
     }
 }

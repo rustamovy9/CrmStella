@@ -15,5 +15,8 @@ public interface IHomeworkSubmissionService
     Task<Result<List<HomeworkSubmissionResponse>>> GetByHomeworkAsync(int homeworkId);
 
     Task<Result<HomeworkSubmissionResponse>> GradeAsync(
-        GradeHomeworkRequest request);
+        GradeHomeworkRequest request,
+        int userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default);
 }

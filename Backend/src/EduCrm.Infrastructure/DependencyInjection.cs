@@ -60,6 +60,8 @@ public static class DependencyInjection
         services.AddScoped<IProfileService, ProfileService>();
         //Exam module
         services.AddScoped<IExamService, ExamService>();
+        services.AddScoped<IExamResultService, ExamResultService>();
+        services.AddScoped<IAuditLogService, AuditLogService>();
         // Homework module
         services.AddScoped<IHomeworkService, HomeworkService>();
         services.AddScoped<IHomeworkSubmissionService, HomeworkSubmissionService>();
