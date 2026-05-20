@@ -3,6 +3,7 @@ using EduCrm.Application.DTOs.Course.Request;
 using EduCrm.Application.DTOs.Course.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Constants;
 using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.AspNetCore.Http;
@@ -14,6 +15,7 @@ public class CourseService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
     IFileStorageService fileStorage,
+    IAuditLogService auditLogService,
     ILogger<CourseService> logger) : ICourseService
 {
     private const string CourseCachePrefix = "courses:";
@@ -23,10 +25,7 @@ public class CourseService(
     {
         var cached = await cache.GetAsync<List<CourseListItemResponse>>(CourseListCacheKey);
         if (cached is not null)
-        {
-            logger.LogInformation("Courses list served from cache");
             return Result<List<CourseListItemResponse>>.Ok(cached);
-        }
 
         var courses = await unitOfWork.Courses.GetAllAsync();
 
@@ -73,14 +72,12 @@ public class CourseService(
         return Result<CourseResponse>.Ok(response);
     }
 
-    public async Task<Result<CourseResponse>> CreateAsync(CreateCourseRequest request, int uploadedByUserId)
+    public async Task<Result<CourseResponse>> CreateAsync(CreateCourseRequest request, int userId)
     {
         if (await unitOfWork.Courses.ExistsByNameAsync(request.Name))
-        {
-            logger.LogWarning("Create failed - course name exists: {Name}", request.Name);
             return Result<CourseResponse>.Fail(
-                "Course with this name already exists", ErrorType.Conflict);
-        }
+                "Course with this name already exists",
+                ErrorType.Conflict);
 
         var course = new Course
         {
@@ -95,31 +92,40 @@ public class CourseService(
         await unitOfWork.Courses.CreateAsync(course);
         await unitOfWork.SaveChangesAsync();
 
-        // Загружаем иконку если она есть
-        if (request.Icon is not null && request.Icon.Length > 0)
+        if (request.Icon is not null)
+        {
             try
             {
-                var fileRecord = await fileStorage.UploadAsync(
+                var file = await fileStorage.UploadAsync(
                     request.Icon,
                     FileOwnerType.Course,
                     course.Id,
-                    uploadedByUserId);
+                    userId);
 
-                course.IconUrl = fileRecord.Url;
+                course.IconUrl = file.Url;
+
                 await unitOfWork.Courses.UpdateAsync(course);
                 await unitOfWork.SaveChangesAsync();
-
-                logger.LogInformation("Course icon uploaded: {CourseId}", course.Id);
             }
             catch (ArgumentException ex)
             {
-                logger.LogWarning(ex, "Failed to upload course icon: {CourseId}", course.Id);
-                // Не критично - курс создан, иконка не загружена
+                logger.LogWarning(ex, "Icon upload failed for course {CourseId}", course.Id);
             }
+        }
+
+        await auditLogService.LogAsync(
+            userId: userId,
+            action: AuditActions.CreateCourse,
+            entityName: "Course",
+            entityId: course.Id,
+            newValues: new
+            {
+                course.Name,
+                course.Price,
+                course.DurationWeeks
+            });
 
         await cache.RemoveByPrefixAsync(CourseCachePrefix);
-
-        logger.LogInformation("Course created: {CourseId} {Name}", course.Id, course.Name);
 
         return Result<CourseResponse>.Ok(MapToResponse(course));
     }
@@ -128,10 +134,7 @@ public class CourseService(
     {
         var course = await unitOfWork.Courses.GetByIdAsync(id);
         if (course is null)
-        {
-            logger.LogWarning("Update failed - course not found: {CourseId}", id);
             return Result<CourseResponse>.Fail("Course not found");
-        }
 
         if (request.Name is not null)
             course.Name = request.Name.Trim();
@@ -148,9 +151,19 @@ public class CourseService(
         await unitOfWork.Courses.UpdateAsync(course);
         await unitOfWork.SaveChangesAsync();
 
-        await cache.RemoveByPrefixAsync(CourseCachePrefix);
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.UpdateCourse,
+            entityName: "Course",
+            entityId: course.Id,
+            newValues: new
+            {
+                course.Name,
+                course.Price,
+                course.DurationWeeks
+            });
 
-        logger.LogInformation("Course updated: {CourseId}", id);
+        await cache.RemoveByPrefixAsync(CourseCachePrefix);
 
         return Result<CourseResponse>.Ok(MapToResponse(course));
     }
@@ -159,20 +172,21 @@ public class CourseService(
     {
         var course = await unitOfWork.Courses.GetByIdAsync(id);
         if (course is null)
-        {
-            logger.LogWarning("SetStatus failed - course not found: {CourseId}", id);
             return Result<bool>.Fail("Course not found");
-        }
 
         course.IsActive = request.IsActive;
 
         await unitOfWork.Courses.UpdateAsync(course);
         await unitOfWork.SaveChangesAsync();
 
-        await cache.RemoveByPrefixAsync(CourseCachePrefix);
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.SetCourseStatus,
+            entityName: "Course",
+            entityId: course.Id,
+            newValues: new { course.IsActive });
 
-        logger.LogInformation(
-            "Course status changed: {CourseId} IsActive: {IsActive}", id, request.IsActive);
+        await cache.RemoveByPrefixAsync(CourseCachePrefix);
 
         return Result<bool>.Ok(true);
     }
@@ -180,19 +194,14 @@ public class CourseService(
     public async Task<Result<CourseResponse>> SetCourseIconAsync(
         int courseId,
         IFormFile iconFile,
-        int uploadedByUserId)
+        int userId)
     {
-        // 1. Проверяем, существует ли курс
         var course = await unitOfWork.Courses.GetByIdAsync(courseId);
         if (course is null)
-        {
-            logger.LogWarning("SetCourseIcon failed - course not found: {CourseId}", courseId);
             return Result<CourseResponse>.Fail("Course not found");
-        }
 
         try
         {
-            // 2. Удаляем старую иконку если она есть
             if (!string.IsNullOrEmpty(course.IconUrl))
             {
                 var oldFile = await unitOfWork.Files.GetByOwnerAsync(
@@ -200,55 +209,38 @@ public class CourseService(
                     courseId);
 
                 if (oldFile is not null)
-                    try
-                    {
-                        await fileStorage.DeleteAsync(oldFile.Id);
-                        logger.LogInformation(
-                            "Old course icon deleted: {CourseId}", courseId);
-                    }
-                    catch (Exception ex)
-                    {
-                        logger.LogWarning(
-                            ex,
-                            "Failed to delete old icon: {CourseId}",
-                            courseId);
-                        // Не критично - продолжаем
-                    }
+                    await fileStorage.DeleteAsync(oldFile.Id);
             }
 
-            // 3. Загружаем новую иконку
-            var newFileRecord = await fileStorage.UploadAsync(
+            var file = await fileStorage.UploadAsync(
                 iconFile,
                 FileOwnerType.Course,
                 courseId,
-                uploadedByUserId);
+                userId);
 
-            // 4. Обновляем курс с новым URL
-            course.IconUrl = newFileRecord.Url;
+            course.IconUrl = file.Url;
 
             await unitOfWork.Courses.UpdateAsync(course);
             await unitOfWork.SaveChangesAsync();
 
-            // 5. Инвалидируем кэш
-            await cache.RemoveByPrefixAsync(CourseCachePrefix);
+            await auditLogService.LogAsync(
+                userId: userId,
+                action: AuditActions.UploadFile,
+                entityName: "Course",
+                entityId: courseId,
+                newValues: new { course.IconUrl });
 
-            logger.LogInformation(
-                "Course icon set: {CourseId} - {Url}",
-                courseId, newFileRecord.Url);
+            await cache.RemoveByPrefixAsync(CourseCachePrefix);
 
             return Result<CourseResponse>.Ok(MapToResponse(course));
         }
         catch (ArgumentException ex)
         {
-            logger.LogWarning(ex, "SetCourseIcon validation failed: {CourseId}", courseId);
             return Result<CourseResponse>.Fail(ex.Message, ErrorType.BadRequest);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            logger.LogError(ex, "SetCourseIcon error: {CourseId}", courseId);
-            return Result<CourseResponse>.Fail(
-                "Could not set course icon",
-                ErrorType.Unknown);
+            return Result<CourseResponse>.Fail("Could not set course icon", ErrorType.Unknown);
         }
     }
 

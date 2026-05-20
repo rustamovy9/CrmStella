@@ -3,6 +3,7 @@ using EduCrm.Application.DTOs.Mentor.Request;
 using EduCrm.Application.DTOs.Mentor.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Constants;
 using EduCrm.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
@@ -11,7 +12,8 @@ namespace EduCrm.Application.Services;
 public class MentorService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
-    ILogger<MentorService> logger) : IMentorService
+    ILogger<MentorService> logger,
+    IAuditLogService auditLogService) : IMentorService
 {
     private const string MentorCachePrefix = "mentors:";
     private const string MentorListCacheKey = "mentors:list";
@@ -20,10 +22,7 @@ public class MentorService(
     {
         var cached = await cache.GetAsync<List<MentorListItemResponse>>(MentorListCacheKey);
         if (cached is not null)
-        {
-            logger.LogInformation("Mentors list served from cache");
             return Result<List<MentorListItemResponse>>.Ok(cached);
-        }
 
         var mentors = await unitOfWork.Mentors.GetAllAsync();
 
@@ -59,6 +58,7 @@ public class MentorService(
         }
 
         var response = MapToResponse(mentor);
+
         await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(30));
 
         return Result<MentorResponse>.Ok(response);
@@ -73,11 +73,18 @@ public class MentorService(
             return Result<MentorResponse>.Fail("Mentor not found");
         }
 
+        var oldValues = new
+        {
+            mentor.Specialization,
+            mentor.ExperienceYears,
+            mentor.HireDate
+        };
+
         if (request.Specialization is not null)
             mentor.Specialization = request.Specialization.Trim();
 
         if (request.ExperienceYears is not null)
-            mentor.ExperienceYears = request.ExperienceYears;
+            mentor.ExperienceYears = request.ExperienceYears.Value;
 
         if (request.HireDate is not null)
             mentor.HireDate = request.HireDate.Value;
@@ -86,6 +93,15 @@ public class MentorService(
         await unitOfWork.SaveChangesAsync();
 
         await cache.RemoveByPrefixAsync(MentorCachePrefix);
+
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.UpdateMentor,
+            entityName: nameof(Mentor),
+            entityId: mentor.Id,
+            oldValues: oldValues,
+            newValues: request
+        );
 
         logger.LogInformation("Mentor updated: {MentorId}", id);
 
@@ -101,6 +117,8 @@ public class MentorService(
             return Result<bool>.Fail("Mentor not found");
         }
 
+        var oldValues = new { mentor.IsActive };
+
         mentor.IsActive = request.IsActive;
 
         await unitOfWork.Mentors.UpdateAsync(mentor);
@@ -108,8 +126,18 @@ public class MentorService(
 
         await cache.RemoveByPrefixAsync(MentorCachePrefix);
 
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.UpdateMentor,
+            entityName: nameof(Mentor),
+            entityId: mentor.Id,
+            oldValues: oldValues,
+            newValues: new { request.IsActive }
+        );
+
         logger.LogInformation(
-            "Mentor status changed: {MentorId} IsActive: {IsActive}", id, request.IsActive);
+            "Mentor status changed: {MentorId} IsActive: {IsActive}",
+            id, request.IsActive);
 
         return Result<bool>.Ok(true);
     }

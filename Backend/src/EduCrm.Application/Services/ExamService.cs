@@ -3,6 +3,7 @@ using EduCrm.Application.DTOs.Exam.Request;
 using EduCrm.Application.DTOs.Exam.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Constants;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -11,7 +12,8 @@ namespace EduCrm.Application.Services;
 public class ExamService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
-    ILogger<ExamService> logger) : IExamService
+    ILogger<ExamService> logger,
+    IAuditLogService auditLogService) : IExamService
 {
     private const string ExamCachePrefix = "exams:";
     private const string ExamListCacheKey = "exams:list";
@@ -72,9 +74,9 @@ public class ExamService(
         return Result<ExamResponse>.Ok(response);
     }
 
+  
     public async Task<Result<ExamResponse>> CreateAsync(CreateExamRequest request)
     {
-        // группа существует?
         var group = await unitOfWork.Groups.GetByIdAsync(request.GroupId);
         if (group is null)
         {
@@ -82,12 +84,10 @@ public class ExamService(
             return Result<ExamResponse>.Fail("Group not found", ErrorType.BadRequest);
         }
 
-        // проходной балл не больше максимального?
         if (request.PassScore > request.MaxScore)
             return Result<ExamResponse>.Fail(
                 "PassScore cannot be greater than MaxScore", ErrorType.BadRequest);
 
-        // дата экзамена не в прошлом?
         if (request.ExamDate <= DateTime.UtcNow)
             return Result<ExamResponse>.Fail(
                 "ExamDate must be in the future", ErrorType.BadRequest);
@@ -109,6 +109,21 @@ public class ExamService(
 
         await cache.RemoveByPrefixAsync(ExamCachePrefix);
 
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.CreateExam,
+            entityName: "Exam",
+            entityId: exam.Id,
+            newValues: new
+            {
+                exam.GroupId,
+                exam.Title,
+                exam.ExamDate,
+                exam.MaxScore,
+                exam.PassScore,
+                exam.IsActive
+            });
+
         logger.LogInformation(
             "Exam created: {ExamId} for group {GroupId}", exam.Id, exam.GroupId);
 
@@ -116,6 +131,7 @@ public class ExamService(
         return Result<ExamResponse>.Ok(MapToResponse(created!));
     }
 
+    
     public async Task<Result<ExamResponse>> UpdateAsync(int id, UpdateExamRequest request)
     {
         var exam = await unitOfWork.Exams.GetByIdAsync(id);
@@ -124,6 +140,15 @@ public class ExamService(
             logger.LogWarning("Update failed - exam not found: {ExamId}", id);
             return Result<ExamResponse>.Fail("Exam not found", ErrorType.NotFound);
         }
+
+        var oldValues = new
+        {
+            exam.Title,
+            exam.Description,
+            exam.ExamDate,
+            exam.MaxScore,
+            exam.PassScore
+        };
 
         if (request.Title is not null)
             exam.Title = request.Title.Trim();
@@ -136,6 +161,7 @@ public class ExamService(
             if (request.ExamDate <= DateTime.UtcNow)
                 return Result<ExamResponse>.Fail(
                     "ExamDate must be in the future", ErrorType.BadRequest);
+
             exam.ExamDate = request.ExamDate.Value;
         }
 
@@ -145,7 +171,6 @@ public class ExamService(
         if (request.PassScore is not null)
             exam.PassScore = request.PassScore.Value;
 
-        // финальная проверка после применения изменений
         if (exam.PassScore > exam.MaxScore)
             return Result<ExamResponse>.Fail(
                 "PassScore cannot be greater than MaxScore", ErrorType.BadRequest);
@@ -155,11 +180,27 @@ public class ExamService(
 
         await cache.RemoveByPrefixAsync(ExamCachePrefix);
 
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.UpdateExam,
+            entityName: "Exam",
+            entityId: exam.Id,
+            oldValues: oldValues,
+            newValues: new
+            {
+                exam.Title,
+                exam.Description,
+                exam.ExamDate,
+                exam.MaxScore,
+                exam.PassScore
+            });
+
         logger.LogInformation("Exam updated: {ExamId}", id);
 
         return Result<ExamResponse>.Ok(MapToResponse(exam));
     }
 
+    
     public async Task<Result<bool>> SetStatusAsync(int id, SetExamStatusRequest request)
     {
         var exam = await unitOfWork.Exams.GetByIdAsync(id);
@@ -169,6 +210,8 @@ public class ExamService(
             return Result<bool>.Fail("Exam not found", ErrorType.NotFound);
         }
 
+        var oldStatus = exam.IsActive;
+
         exam.IsActive = request.IsActive;
 
         await unitOfWork.Exams.UpdateAsync(exam);
@@ -176,12 +219,21 @@ public class ExamService(
 
         await cache.RemoveByPrefixAsync(ExamCachePrefix);
 
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.SetExamStatus,
+            entityName: "Exam",
+            entityId: exam.Id,
+            oldValues: new { IsActive = oldStatus },
+            newValues: new { exam.IsActive });
+
         logger.LogInformation(
             "Exam status changed: {ExamId} IsActive: {IsActive}", id, request.IsActive);
 
         return Result<bool>.Ok(true);
     }
-
+    
+    
     private static ExamResponse MapToResponse(Domain.Entities.Exam e) => new()
     {
         Id = e.Id,

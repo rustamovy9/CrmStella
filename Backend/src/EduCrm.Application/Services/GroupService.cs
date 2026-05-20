@@ -3,6 +3,7 @@ using EduCrm.Application.DTOs.Group.Request;
 using EduCrm.Application.DTOs.Group.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Constants;
 using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
@@ -12,7 +13,8 @@ namespace EduCrm.Application.Services;
 public class GroupService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
-    ILogger<GroupService> logger) : IGroupService
+    ILogger<GroupService> logger,
+    IAuditLogService auditLogService) : IGroupService
 {
     private const string GroupCachePrefix = "groups:";
     private const string GroupListCacheKey = "groups:list";
@@ -80,9 +82,7 @@ public class GroupService(
         if (await unitOfWork.Groups.ExistsByNameAsync(request.Name))
         {
             logger.LogWarning("Create failed - group name exists: {Name}", request.Name);
-            return Result<GroupResponse>.Fail(
-                "Group with this name already exists",
-                ErrorType.Conflict);
+            return Result<GroupResponse>.Fail("Group with this name already exists", ErrorType.Conflict);
         }
 
         var course = await unitOfWork.Courses.GetByIdAsync(request.CourseId);
@@ -94,9 +94,7 @@ public class GroupService(
             return Result<GroupResponse>.Fail("Mentor not found", ErrorType.BadRequest);
 
         if (request.EndDate <= request.StartDate)
-            return Result<GroupResponse>.Fail(
-                "EndDate must be after StartDate",
-                ErrorType.BadRequest);
+            return Result<GroupResponse>.Fail("EndDate must be after StartDate", ErrorType.BadRequest);
 
         var group = new Group
         {
@@ -113,12 +111,25 @@ public class GroupService(
         await unitOfWork.Groups.CreateAsync(group);
         await unitOfWork.SaveChangesAsync();
 
-
         await cache.RemoveByPrefixAsync(GroupCachePrefix);
 
-        logger.LogInformation(
-            "Group created: {GroupId} {Name}",
-            group.Id, group.Name);
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.CreateGroup,
+            entityName: "Group",
+            entityId: group.Id,
+            newValues: new
+            {
+                group.Name,
+                group.CourseId,
+                group.MentorId,
+                group.StartDate,
+                group.EndDate,
+                group.MaxStudents,
+                group.Status
+            });
+
+        logger.LogInformation("Group created: {GroupId} {Name}", group.Id, group.Name);
 
         return Result<GroupResponse>.Ok(MapToResponse(group));
     }
@@ -132,11 +143,21 @@ public class GroupService(
             return Result<GroupResponse>.Fail("Group not found");
         }
 
+        var oldValues = new
+        {
+            group.Name,
+            group.MentorId,
+            group.StartDate,
+            group.EndDate,
+            group.MaxStudents
+        };
+
         if (request.MentorId is not null)
         {
             var mentor = await unitOfWork.Mentors.GetByIdAsync(request.MentorId.Value);
             if (mentor is null)
                 return Result<GroupResponse>.Fail("Mentor not found", ErrorType.BadRequest);
+
             group.MentorId = request.MentorId.Value;
         }
 
@@ -152,15 +173,28 @@ public class GroupService(
         if (request.MaxStudents is not null)
             group.MaxStudents = request.MaxStudents.Value;
 
-        // финальная проверка дат после применения изменений
         if (group.EndDate is not null && group.EndDate <= group.StartDate)
-            return Result<GroupResponse>.Fail(
-                "EndDate must be after StartDate", ErrorType.BadRequest);
+            return Result<GroupResponse>.Fail("EndDate must be after StartDate", ErrorType.BadRequest);
 
         await unitOfWork.Groups.UpdateAsync(group);
         await unitOfWork.SaveChangesAsync();
 
         await cache.RemoveByPrefixAsync(GroupCachePrefix);
+
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.UpdateGroup,
+            entityName: "Group",
+            entityId: group.Id,
+            oldValues: oldValues,
+            newValues: new
+            {
+                group.Name,
+                group.MentorId,
+                group.StartDate,
+                group.EndDate,
+                group.MaxStudents
+            });
 
         logger.LogInformation("Group updated: {GroupId}", id);
 
@@ -176,6 +210,8 @@ public class GroupService(
             return Result<bool>.Fail("Group not found");
         }
 
+        var oldStatus = group.Status;
+
         group.Status = (GroupStatus)request.Status;
 
         await unitOfWork.Groups.UpdateAsync(group);
@@ -183,8 +219,15 @@ public class GroupService(
 
         await cache.RemoveByPrefixAsync(GroupCachePrefix);
 
-        logger.LogInformation(
-            "Group status changed: {GroupId} Status: {Status}", id, group.Status);
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.SetGroupStatus,
+            entityName: "Group",
+            entityId: group.Id,
+            oldValues: new { Status = oldStatus },
+            newValues: new { group.Status });
+
+        logger.LogInformation("Group status changed: {GroupId} Status: {Status}", id, group.Status);
 
         return Result<bool>.Ok(true);
     }

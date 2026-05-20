@@ -3,6 +3,7 @@ using EduCrm.Application.DTOs.GroupStudent.Request;
 using EduCrm.Application.DTOs.GroupStudent.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Constants;
 using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
@@ -12,7 +13,8 @@ namespace EduCrm.Application.Services;
 public class GroupStudentService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
-    ILogger<GroupStudentService> logger) : IGroupStudentService
+    ILogger<GroupStudentService> logger,
+    IAuditLogService auditLogService) : IGroupStudentService
 {
     private const string GroupStudentCachePrefix = "groupstudents:";
 
@@ -35,7 +37,6 @@ public class GroupStudentService(
 
     public async Task<Result<GroupStudentResponse>> EnrollAsync(EnrollStudentRequest request)
     {
-        // 1. студент существует?
         var student = await unitOfWork.Students.GetByIdAsync(request.StudentId);
         if (student is null)
         {
@@ -43,7 +44,6 @@ public class GroupStudentService(
             return Result<GroupStudentResponse>.Fail("Student not found");
         }
 
-        // 2. группа существует?
         var group = await unitOfWork.Groups.GetByIdAsync(request.GroupId);
         if (group is null)
         {
@@ -51,19 +51,16 @@ public class GroupStudentService(
             return Result<GroupStudentResponse>.Fail("Group not found");
         }
 
-        // 3. уже активно зачислен? (защита от дубля)
         var already = await unitOfWork.GroupStudents
             .IsActiveEnrollmentAsync(request.GroupId, request.StudentId);
         if (already)
             return Result<GroupStudentResponse>.Fail(
                 "Student is already enrolled in this group", ErrorType.Conflict);
 
-        // 4. лимит мест в группе не превышен?
         var activeCount = await unitOfWork.GroupStudents
             .CountActiveInGroupAsync(request.GroupId);
         if (activeCount >= group.MaxStudents)
-            return Result<GroupStudentResponse>.Fail(
-                "Group is full", ErrorType.BadRequest);
+            return Result<GroupStudentResponse>.Fail("Group is full", ErrorType.BadRequest);
 
         var enrollment = new GroupStudent
         {
@@ -78,6 +75,19 @@ public class GroupStudentService(
 
         await cache.RemoveByPrefixAsync(GroupStudentCachePrefix);
 
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.EnrollStudent,
+            entityName: "GroupStudent",
+            entityId: enrollment.Id,
+            newValues: new
+            {
+                enrollment.GroupId,
+                enrollment.StudentId,
+                enrollment.IsActive,
+                enrollment.JoinedAt
+            });
+
         logger.LogInformation(
             "Student {StudentId} enrolled in group {GroupId}",
             request.StudentId, request.GroupId);
@@ -91,15 +101,20 @@ public class GroupStudentService(
         var enrollment = await unitOfWork.GroupStudents.GetByIdAsync(request.GroupStudentId);
         if (enrollment is null)
         {
-            logger.LogWarning(
-                "Remove failed - enrollment not found: {Id}", request.GroupStudentId);
+            logger.LogWarning("Remove failed - enrollment not found: {Id}", request.GroupStudentId);
             return Result<bool>.Fail("Enrollment not found");
         }
 
         if (!enrollment.IsActive)
             return Result<bool>.Fail("Student already removed from group", ErrorType.BadRequest);
 
-        // мягкое отчисление: не удаляем строку, помечаем
+        var oldValues = new
+        {
+            enrollment.IsActive,
+            enrollment.LeftAt,
+            enrollment.RemoveReason
+        };
+
         enrollment.IsActive = false;
         enrollment.LeftAt = DateTime.UtcNow;
         enrollment.RemoveReason = request.RemoveReason;
@@ -108,6 +123,19 @@ public class GroupStudentService(
         await unitOfWork.SaveChangesAsync();
 
         await cache.RemoveByPrefixAsync(GroupStudentCachePrefix);
+
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.RemoveStudentFromGroup,
+            entityName: "GroupStudent",
+            entityId: enrollment.Id,
+            oldValues: oldValues,
+            newValues: new
+            {
+                enrollment.IsActive,
+                enrollment.LeftAt,
+                enrollment.RemoveReason
+            });
 
         logger.LogInformation(
             "Student {StudentId} removed from group {GroupId}. Reason: {Reason}",
@@ -118,7 +146,6 @@ public class GroupStudentService(
 
     public async Task<Result<GroupStudentResponse>> TransferAsync(TransferStudentRequest request)
     {
-        // 1. текущая запись существует и активна?
         var current = await unitOfWork.GroupStudents.GetByIdAsync(request.GroupStudentId);
         if (current is null)
             return Result<GroupStudentResponse>.Fail("Enrollment not found");
@@ -127,40 +154,36 @@ public class GroupStudentService(
             return Result<GroupStudentResponse>.Fail(
                 "Cannot transfer an inactive enrollment", ErrorType.BadRequest);
 
-        // 2. целевая группа существует?
         var targetGroup = await unitOfWork.Groups.GetByIdAsync(request.TargetGroupId);
         if (targetGroup is null)
             return Result<GroupStudentResponse>.Fail("Target group not found");
 
-        // 3. перевод в ту же группу запрещён
         if (current.GroupId == request.TargetGroupId)
             return Result<GroupStudentResponse>.Fail(
                 "Student is already in this group", ErrorType.BadRequest);
 
-        // 4. уже активно в целевой группе?
         var alreadyInTarget = await unitOfWork.GroupStudents
             .IsActiveEnrollmentAsync(request.TargetGroupId, current.StudentId);
         if (alreadyInTarget)
             return Result<GroupStudentResponse>.Fail(
                 "Student is already enrolled in target group", ErrorType.Conflict);
 
-        // 5. место в целевой группе есть?
         var activeCount = await unitOfWork.GroupStudents
             .CountActiveInGroupAsync(request.TargetGroupId);
         if (activeCount >= targetGroup.MaxStudents)
             return Result<GroupStudentResponse>.Fail("Target group is full", ErrorType.BadRequest);
 
-        // создаём НОВУЮ запись в целевой группе
+        var oldGroupId = current.GroupId;
+
         var newEnrollment = new GroupStudent
         {
             GroupId = request.TargetGroupId,
             StudentId = current.StudentId,
             JoinedAt = DateTime.UtcNow,
             IsActive = true,
-            TransferredFrom = current // связь по навигации (FK проставит EF)
+            TransferredFrom = current
         };
 
-        // старую запись закрываем и связываем с новой
         current.IsActive = false;
         current.LeftAt = DateTime.UtcNow;
         current.RemoveReason = request.Reason ?? $"Transferred to group {request.TargetGroupId}";
@@ -168,13 +191,29 @@ public class GroupStudentService(
 
         await unitOfWork.GroupStudents.CreateAsync(newEnrollment);
         await unitOfWork.GroupStudents.UpdateAsync(current);
-        await unitOfWork.SaveChangesAsync(); // обе записи РАЗОМ, в одной транзакции
+        await unitOfWork.SaveChangesAsync();
 
         await cache.RemoveByPrefixAsync(GroupStudentCachePrefix);
 
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.TransferStudent,
+            entityName: "GroupStudent",
+            entityId: newEnrollment.Id,
+            oldValues: new
+            {
+                FromGroupId = oldGroupId,
+                current.StudentId
+            },
+            newValues: new
+            {
+                ToGroupId = request.TargetGroupId,
+                current.StudentId
+            });
+
         logger.LogInformation(
             "Student {StudentId} transferred from group {From} to group {To}",
-            current.StudentId, current.GroupId, request.TargetGroupId);
+            current.StudentId, oldGroupId, request.TargetGroupId);
 
         var created = await unitOfWork.GroupStudents.GetByIdAsync(newEnrollment.Id);
         return Result<GroupStudentResponse>.Ok(MapToResponse(created!));

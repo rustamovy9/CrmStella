@@ -3,6 +3,7 @@ using EduCrm.Application.DTOs.ExamResult.Request;
 using EduCrm.Application.DTOs.ExamResult.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Constants;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -11,7 +12,8 @@ namespace EduCrm.Application.Services;
 public class ExamResultService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
-    ILogger<ExamResultService> logger) : IExamResultService
+    ILogger<ExamResultService> logger,
+    IAuditLogService auditLogService) : IExamResultService
 {
     private const string ExamResultCachePrefix = "examresults:";
 
@@ -24,7 +26,6 @@ public class ExamResultService(
             return Result<List<ExamResultResponse>>.Ok(cached);
 
         var results = await unitOfWork.ExamResults.GetByExamAsync(examId);
-
         var mapped = results.Select(MapToResponse).ToList();
 
         await cache.SetAsync(cacheKey, mapped, TimeSpan.FromMinutes(15));
@@ -54,34 +55,30 @@ public class ExamResultService(
     }
 
     public async Task<Result<ExamResultResponse>> CreateAsync(
-        CreateExamResultRequest request, int mentorUserId)
+        CreateExamResultRequest request,
+        int mentorUserId)
     {
-        // 1. экзамен существует?
         var exam = await unitOfWork.Exams.GetByIdAsync(request.ExamId);
         if (exam is null)
-        {
-            logger.LogWarning("Create failed - exam not found: {ExamId}", request.ExamId);
             return Result<ExamResultResponse>.Fail("Exam not found", ErrorType.NotFound);
-        }
 
-        // 2. студент существует?
         var student = await unitOfWork.Students.GetByIdAsync(request.StudentId);
         if (student is null)
             return Result<ExamResultResponse>.Fail("Student not found", ErrorType.NotFound);
 
-        // 3. балл не превышает максимум экзамена?
         if (request.Score > exam.MaxScore)
             return Result<ExamResultResponse>.Fail(
-                $"Score cannot exceed exam max score ({exam.MaxScore})", ErrorType.BadRequest);
+                $"Score cannot exceed exam max score ({exam.MaxScore})",
+                ErrorType.BadRequest);
 
-        // 4. уже выставлена оценка этому студенту за этот экзамен?
         var existing = await unitOfWork.ExamResults
             .GetByExamAndStudentAsync(request.ExamId, request.StudentId);
+
         if (existing is not null)
             return Result<ExamResultResponse>.Fail(
-                "This student already has a result for this exam", ErrorType.Conflict);
+                "This student already has a result for this exam",
+                ErrorType.Conflict);
 
-        // 5. кто выставляет — находим ментора по userId из токена
         var mentor = await unitOfWork.Mentors.GetByUserIdAsync(mentorUserId);
 
         var examResult = new Domain.Entities.ExamResult
@@ -89,7 +86,6 @@ public class ExamResultService(
             ExamId = request.ExamId,
             StudentId = request.StudentId,
             Score = request.Score,
-            // СТАТУС ВЫЧИСЛЯЕТСЯ, не вводится: сдал, если балл >= проходного
             Status = request.Score >= exam.PassScore
                 ? ExamResultStatus.Passed
                 : ExamResultStatus.Failed,
@@ -103,16 +99,29 @@ public class ExamResultService(
 
         await cache.RemoveByPrefixAsync(ExamResultCachePrefix);
 
-        logger.LogInformation(
-            "ExamResult created: student {StudentId} exam {ExamId} score {Score} -> {Status}",
-            request.StudentId, request.ExamId, request.Score, examResult.Status);
+        await auditLogService.LogAsync(
+            userId: mentorUserId,
+            action: AuditActions.CreateExamResult,
+            entityName: "ExamResult",
+            entityId: examResult.Id,
+            newValues: new
+            {
+                examResult.ExamId,
+                examResult.StudentId,
+                examResult.Score,
+                examResult.Status,
+                examResult.Comment,
+                examResult.ScoredByMentorId
+            });
 
         var created = await unitOfWork.ExamResults.GetByIdAsync(examResult.Id);
         return Result<ExamResultResponse>.Ok(MapToResponse(created!));
     }
 
     public async Task<Result<ExamResultResponse>> UpdateAsync(
-        int id, UpdateExamResultRequest request, int mentorUserId)
+        int id,
+        UpdateExamResultRequest request,
+        int mentorUserId)
     {
         var examResult = await unitOfWork.ExamResults.GetByIdAsync(id);
         if (examResult is null)
@@ -121,16 +130,21 @@ public class ExamResultService(
             return Result<ExamResultResponse>.Fail("Exam result not found", ErrorType.NotFound);
         }
 
+        var oldValues = new
+        {
+            examResult.Score,
+            examResult.Status,
+            examResult.Comment
+        };
+
         if (request.Score is not null)
         {
-            // балл не превышает максимум экзамена?
             if (request.Score.Value > examResult.Exam.MaxScore)
                 return Result<ExamResultResponse>.Fail(
                     $"Score cannot exceed exam max score ({examResult.Exam.MaxScore})",
                     ErrorType.BadRequest);
 
             examResult.Score = request.Score.Value;
-            // ПЕРЕСЧИТЫВАЕМ статус при изменении балла
             examResult.Status = request.Score.Value >= examResult.Exam.PassScore
                 ? ExamResultStatus.Passed
                 : ExamResultStatus.Failed;
@@ -139,7 +153,6 @@ public class ExamResultService(
         if (request.Comment is not null)
             examResult.Comment = request.Comment.Trim();
 
-        // кто изменил оценку
         var mentor = await unitOfWork.Mentors.GetByUserIdAsync(mentorUserId);
         if (mentor is not null)
             examResult.ScoredByMentorId = mentor.Id;
@@ -151,9 +164,18 @@ public class ExamResultService(
 
         await cache.RemoveByPrefixAsync(ExamResultCachePrefix);
 
-        logger.LogInformation(
-            "ExamResult updated: {ResultId} score {Score} -> {Status}",
-            id, examResult.Score, examResult.Status);
+        await auditLogService.LogAsync(
+            userId: mentorUserId,
+            action: AuditActions.UpdateExamResult,
+            entityName: "ExamResult",
+            entityId: examResult.Id,
+            oldValues: oldValues,
+            newValues: new
+            {
+                examResult.Score,
+                examResult.Status,
+                examResult.Comment
+            });
 
         return Result<ExamResultResponse>.Ok(MapToResponse(examResult));
     }

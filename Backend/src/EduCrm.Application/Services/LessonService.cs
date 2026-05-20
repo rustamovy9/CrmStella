@@ -5,11 +5,16 @@ using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
+using EduCrm.Domain.Constants;
 using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
 
-public class LessonService(IUnitOfWork unitOfWork, ICacheService cache, ILogger<LessonService> logger)
+public class LessonService(
+    IUnitOfWork unitOfWork,
+    ICacheService cache,
+    IAuditLogService auditLogService,
+    ILogger<LessonService> logger)
     : ILessonService
 {
     private const string LessonCachePrefix = "lessons:";
@@ -19,26 +24,22 @@ public class LessonService(IUnitOfWork unitOfWork, ICacheService cache, ILogger<
     {
         var cached = await cache.GetAsync<List<LessonResponse>>(LessonListCacheKey);
         if (cached is not null)
-        {
-            logger.LogInformation("Lessons list served from cache");
             return Result<List<LessonResponse>>.Ok(cached);
-        }
 
         var lessons = await unitOfWork.Lessons.GetAllAsync(cancellationToken);
-
         var result = lessons.Select(MapToResponse).ToList();
 
         await cache.SetAsync(LessonListCacheKey, result, TimeSpan.FromMinutes(30));
-
         return Result<List<LessonResponse>>.Ok(result);
     }
 
     public async Task<Result<LessonResponse>> GetByIdAsync(int id, CancellationToken cancellationToken = default)
     {
         var cacheKey = $"{LessonCachePrefix}{id}";
-
         var cached = await cache.GetAsync<LessonResponse>(cacheKey);
-        if (cached is not null) return Result<LessonResponse>.Ok(cached);
+
+        if (cached is not null)
+            return Result<LessonResponse>.Ok(cached);
 
         var lesson = await unitOfWork.Lessons.GetByIdAsync(id, cancellationToken);
         if (lesson is null)
@@ -57,19 +58,16 @@ public class LessonService(IUnitOfWork unitOfWork, ICacheService cache, ILogger<
         CancellationToken cancellationToken = default)
     {
         var cacheKey = $"{LessonCachePrefix}group:{groupId}";
-
         var cached = await cache.GetAsync<List<LessonResponse>>(cacheKey);
+
         if (cached is not null)
-        {
-            logger.LogInformation("Lessons for group {GroupId} served from cache", groupId);
             return Result<List<LessonResponse>>.Ok(cached);
-        }
 
         var group = await unitOfWork.Groups.GetByIdAsync(groupId, cancellationToken);
-        if (group is null) return Result<List<LessonResponse>>.Fail("Group not found", ErrorType.BadRequest);
+        if (group is null)
+            return Result<List<LessonResponse>>.Fail("Group not found", ErrorType.NotFound);
 
         var lessons = await unitOfWork.Lessons.GetByGroupIdAsync(groupId, cancellationToken);
-
         var result = lessons.Select(MapToResponse).ToList();
 
         await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(30));
@@ -77,15 +75,13 @@ public class LessonService(IUnitOfWork unitOfWork, ICacheService cache, ILogger<
         return Result<List<LessonResponse>>.Ok(result);
     }
 
-    public async Task<Result<LessonResponse>> CreateAsync(CreateLessonRequest request,
+    public async Task<Result<LessonResponse>> CreateAsync(
+        CreateLessonRequest request,
         CancellationToken cancellationToken = default)
     {
         var group = await unitOfWork.Groups.GetByIdAsync(request.GroupId, cancellationToken);
         if (group is null)
-        {
-            logger.LogWarning("Create failed - group not found: {GroupId}", request.GroupId);
-            return Result<LessonResponse>.Fail("Group not found", ErrorType.BadRequest);
-        }
+            return Result<LessonResponse>.Fail("Group not found", ErrorType.NotFound);
 
         if (request.EndTime <= request.StartTime)
             return Result<LessonResponse>.Fail("EndTime must be after StartTime", ErrorType.BadRequest);
@@ -93,14 +89,9 @@ public class LessonService(IUnitOfWork unitOfWork, ICacheService cache, ILogger<
         if (request.LessonDate < DateTime.UtcNow.Date)
             return Result<LessonResponse>.Fail("LessonDate cannot be in the past", ErrorType.BadRequest);
 
-        var existingLessons = await unitOfWork.Lessons.GetByGroupIdAsync(request.GroupId, cancellationToken);
-        if (existingLessons.Any(l => l.WeekNumber == request.WeekNumber && l.OrderIndex == request.OrderIndex))
-        {
-            logger.LogWarning("Create failed - duplicate week number and order index in group {GroupId}",
-                request.GroupId);
-            return Result<LessonResponse>.Fail("Lesson with this WeekNumber and OrderIndex already exists in the group",
-                ErrorType.Conflict);
-        }
+        var existing = await unitOfWork.Lessons.GetByGroupIdAsync(request.GroupId, cancellationToken);
+        if (existing.Any(x => x.WeekNumber == request.WeekNumber && x.OrderIndex == request.OrderIndex))
+            return Result<LessonResponse>.Fail("Lesson already exists", ErrorType.Conflict);
 
         var lesson = new Lesson
         {
@@ -121,46 +112,31 @@ public class LessonService(IUnitOfWork unitOfWork, ICacheService cache, ILogger<
 
         await cache.RemoveByPrefixAsync(LessonCachePrefix);
 
-        logger.LogInformation("Lesson created: {LessonId} {Title} for group {GroupId}", lesson.Id, lesson.Title,
-            lesson.GroupId);
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.CreateLesson,
+            entityName: "Lesson",
+            entityId: lesson.Id,
+            newValues: new
+            {
+                lesson.GroupId,
+                lesson.Title,
+                lesson.LessonDate
+            });
 
-        var response = MapToResponse(lesson);
-        return Result<LessonResponse>.Ok(response);
+        return Result<LessonResponse>.Ok(MapToResponse(lesson));
     }
 
-    public async Task<Result<LessonResponse>> UpdateAsync(UpdateLessonRequest request,
+    public async Task<Result<LessonResponse>> UpdateAsync(
+        UpdateLessonRequest request,
         CancellationToken cancellationToken = default)
     {
         var lesson = await unitOfWork.Lessons.GetByIdAsync(request.Id, cancellationToken);
         if (lesson is null)
-        {
-            logger.LogWarning("Update failed - lesson not found: {LessonId}", request.Id);
-            return Result<LessonResponse>.Fail("Lesson not found");
-        }
+            return Result<LessonResponse>.Fail("Lesson not found", ErrorType.NotFound);
 
         if (request.EndTime <= request.StartTime)
             return Result<LessonResponse>.Fail("EndTime must be after StartTime", ErrorType.BadRequest);
-
-        if (request.GroupId != lesson.GroupId)
-        {
-            var newGroup = await unitOfWork.Groups.GetByIdAsync(request.GroupId, cancellationToken);
-            if (newGroup is null) return Result<LessonResponse>.Fail("Group not found", ErrorType.BadRequest);
-
-            var existingInNewGroup = await unitOfWork.Lessons.GetByGroupIdAsync(request.GroupId, cancellationToken);
-            if (existingInNewGroup.Any(l =>
-                    l.WeekNumber == request.WeekNumber && l.OrderIndex == request.OrderIndex && l.Id != request.Id))
-                return Result<LessonResponse>.Fail(
-                    "Lesson with this WeekNumber and OrderIndex already exists in the target group",
-                    ErrorType.Conflict);
-        }
-        else
-        {
-            var existingInSameGroup = await unitOfWork.Lessons.GetByGroupIdAsync(lesson.GroupId, cancellationToken);
-            if (existingInSameGroup.Any(l =>
-                    l.WeekNumber == request.WeekNumber && l.OrderIndex == request.OrderIndex && l.Id != request.Id))
-                return Result<LessonResponse>.Fail(
-                    "Lesson with this WeekNumber and OrderIndex already exists in the group", ErrorType.Conflict);
-        }
 
         lesson.GroupId = request.GroupId;
         lesson.WeekNumber = request.WeekNumber;
@@ -178,27 +154,36 @@ public class LessonService(IUnitOfWork unitOfWork, ICacheService cache, ILogger<
 
         await cache.RemoveByPrefixAsync(LessonCachePrefix);
 
-        logger.LogInformation("Lesson updated: {LessonId}", lesson.Id);
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.UpdateLesson,
+            entityName: "Lesson",
+            entityId: lesson.Id,
+            newValues: new
+            {
+                lesson.Title,
+                lesson.IsCompleted
+            });
 
-        var response = MapToResponse(lesson);
-        return Result<LessonResponse>.Ok(response);
+        return Result<LessonResponse>.Ok(MapToResponse(lesson));
     }
 
     public async Task<Result<bool>> DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
         var lesson = await unitOfWork.Lessons.GetByIdAsync(id, cancellationToken);
         if (lesson is null)
-        {
-            logger.LogWarning("Delete failed - lesson not found: {LessonId}", id);
-            return Result<bool>.Fail("Lesson not found");
-        }
+            return Result<bool>.Fail("Lesson not found", ErrorType.NotFound);
 
         await unitOfWork.Lessons.DeleteAsync(id, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         await cache.RemoveByPrefixAsync(LessonCachePrefix);
 
-        logger.LogInformation("Lesson deleted: {LessonId}", id);
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.DeleteLesson,
+            entityName: "Lesson",
+            entityId: id);
 
         return Result<bool>.Ok(true);
     }

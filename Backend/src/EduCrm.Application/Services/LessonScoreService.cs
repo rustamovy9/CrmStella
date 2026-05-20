@@ -5,6 +5,7 @@ using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
+using EduCrm.Domain.Constants;
 using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
@@ -12,6 +13,7 @@ namespace EduCrm.Application.Services;
 public class LessonScoreService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
+    IAuditLogService auditLogService,
     ILogger<LessonScoreService> logger) : ILessonScoreService
 {
     private const string ScoreCachePrefix = "scores:";
@@ -21,10 +23,7 @@ public class LessonScoreService(
     {
         var cached = await cache.GetAsync<List<LessonScoreResponse>>(ScoreListCacheKey);
         if (cached is not null)
-        {
-            logger.LogInformation("Scores list served from cache");
             return Result<List<LessonScoreResponse>>.Ok(cached);
-        }
 
         var scores = await unitOfWork.LessonScores.GetAllAsync(cancellationToken);
         var result = scores.Select(MapToResponse).ToList();
@@ -37,20 +36,17 @@ public class LessonScoreService(
     {
         var cacheKey = $"{ScoreCachePrefix}{id}";
         var cached = await cache.GetAsync<LessonScoreResponse>(cacheKey);
+
         if (cached is not null)
-        {
             return Result<LessonScoreResponse>.Ok(cached);
-        }
 
         var score = await unitOfWork.LessonScores.GetByIdAsync(id, cancellationToken);
         if (score is null)
-        {
-            logger.LogWarning("Score not found: {ScoreId}", id);
             return Result<LessonScoreResponse>.Fail("Score not found");
-        }
 
         var response = MapToResponse(score);
         await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(30));
+
         return Result<LessonScoreResponse>.Ok(response);
     }
 
@@ -58,22 +54,15 @@ public class LessonScoreService(
     {
         var cacheKey = $"{ScoreCachePrefix}lesson:{lessonId}";
         var cached = await cache.GetAsync<List<LessonScoreResponse>>(cacheKey);
-        if (cached is not null)
-        {
-            logger.LogInformation("Scores for lesson {LessonId} served from cache", lessonId);
-            return Result<List<LessonScoreResponse>>.Ok(cached);
-        }
 
-        var lesson = await unitOfWork.Lessons.GetByIdAsync(lessonId, cancellationToken);
-        if (lesson is null)
-        {
-            return Result<List<LessonScoreResponse>>.Fail("Lesson not found", ErrorType.BadRequest);
-        }
+        if (cached is not null)
+            return Result<List<LessonScoreResponse>>.Ok(cached);
 
         var scores = await unitOfWork.LessonScores.GetByLessonIdAsync(lessonId, cancellationToken);
         var result = scores.Select(MapToResponse).ToList();
 
         await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(30));
+
         return Result<List<LessonScoreResponse>>.Ok(result);
     }
 
@@ -81,48 +70,40 @@ public class LessonScoreService(
     {
         var cacheKey = $"{ScoreCachePrefix}student:{studentId}";
         var cached = await cache.GetAsync<List<LessonScoreResponse>>(cacheKey);
-        if (cached is not null)
-        {
-            logger.LogInformation("Scores for student {StudentId} served from cache", studentId);
-            return Result<List<LessonScoreResponse>>.Ok(cached);
-        }
 
-        var student = await unitOfWork.Students.GetByIdAsync(studentId, cancellationToken);
-        if (student is null)
-        {
-            return Result<List<LessonScoreResponse>>.Fail("Student not found", ErrorType.BadRequest);
-        }
+        if (cached is not null)
+            return Result<List<LessonScoreResponse>>.Ok(cached);
 
         var scores = await unitOfWork.LessonScores.GetByStudentIdAsync(studentId, cancellationToken);
         var result = scores.Select(MapToResponse).ToList();
 
         await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(30));
+
         return Result<List<LessonScoreResponse>>.Ok(result);
     }
 
     public async Task<Result<LessonScoreResponse>> CreateAsync(
         CreateLessonScoreRequest request,
         int userId,
-        bool isAdmin, // Принимаем флаг
+        bool isAdmin,
         CancellationToken cancellationToken = default)
     {
         var lesson = await unitOfWork.Lessons.GetByIdAsync(request.LessonId, cancellationToken);
         if (lesson is null)
-            return Result<LessonScoreResponse>.Fail("Lesson not found", ErrorType.NotFound);
+            return Result<LessonScoreResponse>.Fail("Lesson not found");
 
         var student = await unitOfWork.Students.GetByIdAsync(request.StudentId, cancellationToken);
         if (student is null)
-            return Result<LessonScoreResponse>.Fail("Student not found", ErrorType.NotFound);
+            return Result<LessonScoreResponse>.Fail("Student not found");
 
         int? mentorId = null;
 
-        // Если это НЕ админ, то проверяем профиль ментора
         if (!isAdmin)
         {
             var mentor = await unitOfWork.Mentors.GetByUserIdAsync(userId, cancellationToken);
             if (mentor is null)
-                return Result<LessonScoreResponse>.Fail("Mentor profile not found", ErrorType.Unauthorized);
-                
+                return Result<LessonScoreResponse>.Fail("Mentor profile not found");
+
             mentorId = mentor.Id;
         }
 
@@ -130,9 +111,7 @@ public class LessonScoreService(
             .ExistsByLessonAndStudentAsync(request.LessonId, request.StudentId, cancellationToken);
 
         if (exists)
-            return Result<LessonScoreResponse>.Fail(
-                "Score already exists for this lesson and student",
-                ErrorType.Conflict);
+            return Result<LessonScoreResponse>.Fail("Score already exists");
 
         var lessonScore = new LessonScore
         {
@@ -141,7 +120,7 @@ public class LessonScoreService(
             HomeworkSubmissionId = request.HomeworkSubmissionId,
             Score = request.Score,
             MentorFeedback = request.MentorFeedback,
-            ScoredByMentorId = mentorId, // Тут будет null, если ставит Админ
+            ScoredByMentorId = mentorId,
             ScoredAt = DateTime.UtcNow
         };
 
@@ -150,23 +129,30 @@ public class LessonScoreService(
 
         await cache.RemoveByPrefixAsync(ScoreCachePrefix);
 
-        logger.LogInformation(
-            "Score created: {ScoreId} for lesson {LessonId} student {StudentId}",
+        await auditLogService.LogAsync(
+            userId,
+            AuditActions.CreateLessonScore,
+            "LessonScore",
             lessonScore.Id,
-            lessonScore.LessonId,
-            lessonScore.StudentId);
+            new { lessonScore.LessonId, lessonScore.StudentId, lessonScore.Score }
+        );
 
         return Result<LessonScoreResponse>.Ok(MapToResponse(lessonScore));
     }
 
-    public async Task<Result<LessonScoreResponse>> UpdateAsync(UpdateLessonScoreRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result<LessonScoreResponse>> UpdateAsync(
+        UpdateLessonScoreRequest request,
+        CancellationToken cancellationToken = default)
     {
         var score = await unitOfWork.LessonScores.GetByIdAsync(request.Id, cancellationToken);
         if (score is null)
-        {
-            logger.LogWarning("Update failed - score not found: {ScoreId}", request.Id);
             return Result<LessonScoreResponse>.Fail("Score not found");
-        }
+
+        var oldValues = new
+        {
+            score.Score,
+            score.MentorFeedback
+        };
 
         if (request.Score.HasValue)
             score.Score = request.Score.Value;
@@ -181,33 +167,46 @@ public class LessonScoreService(
 
         await cache.RemoveByPrefixAsync(ScoreCachePrefix);
 
-        logger.LogInformation("Score updated: {ScoreId}", score.Id);
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.UpdateLessonScore,
+            entityName: "LessonScore",
+            entityId: score.Id,
+            oldValues: oldValues,
+            newValues: new
+            {
+                score.Score,
+                score.MentorFeedback
+            });
 
-        var response = MapToResponse(score);
-        return Result<LessonScoreResponse>.Ok(response);
+        return Result<LessonScoreResponse>.Ok(MapToResponse(score));
     }
 
     public async Task<Result<bool>> DeleteAsync(int id, CancellationToken cancellationToken = default)
     {
         var score = await unitOfWork.LessonScores.GetByIdAsync(id, cancellationToken);
         if (score is null)
-        {
-            logger.LogWarning("Delete failed - score not found: {ScoreId}", id);
             return Result<bool>.Fail("Score not found");
-        }
 
         await unitOfWork.LessonScores.DeleteAsync(id, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         await cache.RemoveByPrefixAsync(ScoreCachePrefix);
 
-        logger.LogInformation("Score deleted: {ScoreId}", id);
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.DeleteLessonScore,
+            entityName: "LessonScore",
+            entityId: id,
+            oldValues: new { score.LessonId, score.StudentId, score.Score }
+        );
+
         return Result<bool>.Ok(true);
     }
 
     private static LessonScoreResponse MapToResponse(LessonScore ls)
     {
-        return new LessonScoreResponse()
+        return new LessonScoreResponse
         {
             Id = ls.Id,
             LessonId = ls.LessonId,

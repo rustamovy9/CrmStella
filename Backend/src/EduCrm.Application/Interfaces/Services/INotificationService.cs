@@ -2,7 +2,7 @@
 using EduCrm.Application.DTOs.Notification.Request;
 using EduCrm.Application.DTOs.Notification.Response;
 
-namespace EduCrm.Application.Services;
+namespace EduCrm.Application.Interfaces.Services;
 
 public interface INotificationService
 {

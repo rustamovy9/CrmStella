@@ -4,6 +4,7 @@ using EduCrm.Application.DTOs.Users.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Entities;
+using EduCrm.Domain.Constants;
 using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
@@ -11,6 +12,7 @@ namespace EduCrm.Application.Services;
 public class UserService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
+    IAuditLogService auditLogService,
     ILogger<UserService> logger) : IUserService
 {
     private const string AllUsersCacheKey = "users:all";
@@ -30,8 +32,6 @@ public class UserService(
 
         await cache.SetAsync(AllUsersCacheKey, response, TimeSpan.FromMinutes(5));
 
-        logger.LogInformation("GetAllUsers - returned {Count} users from database", response.Count);
-
         return Result<List<UserResponse>>.Ok(response);
     }
 
@@ -41,19 +41,12 @@ public class UserService(
 
         var cached = await cache.GetAsync<List<UserResponse>>(cacheKey);
         if (cached is not null)
-        {
-            logger.LogInformation("GetUsersByRole {RoleId} - returned from cache", roleId);
             return Result<List<UserResponse>>.Ok(cached);
-        }
 
         var users = await unitOfWork.Users.GetByRoleAsync(roleId);
         var response = users.Select(MapToResponse).ToList();
 
         await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(5));
-
-        logger.LogInformation(
-            "GetUsersByRole {RoleId} - returned {Count} users from database",
-            roleId, response.Count);
 
         return Result<List<UserResponse>>.Ok(response);
     }
@@ -64,22 +57,15 @@ public class UserService(
 
         var cached = await cache.GetAsync<UserDetailResponse>(cacheKey);
         if (cached is not null)
-        {
-            logger.LogInformation("GetUserById {UserId} - returned from cache", id);
             return Result<UserDetailResponse>.Ok(cached);
-        }
 
         var user = await unitOfWork.Users.GetByIdAsync(id);
         if (user is null)
-        {
-            logger.LogWarning("GetUserById {UserId} - user not found", id);
             return Result<UserDetailResponse>.Fail("User not found");
-        }
 
         var response = MapToDetailResponse(user);
-        await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(5));
 
-        logger.LogInformation("GetUserById {UserId} - returned from database", id);
+        await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(5));
 
         return Result<UserDetailResponse>.Ok(response);
     }
@@ -88,10 +74,14 @@ public class UserService(
     {
         var user = await unitOfWork.Users.GetByIdAsync(id);
         if (user is null)
-        {
-            logger.LogWarning("UpdateUser {UserId} - user not found", id);
             return Result<UserDetailResponse>.Fail("User not found");
-        }
+
+        var oldValues = new
+        {
+            user.FirstName,
+            user.LastName,
+            user.PhoneNumber
+        };
 
         user.FirstName = request.FirstName;
         user.LastName = request.LastName;
@@ -100,9 +90,16 @@ public class UserService(
         await unitOfWork.Users.UpdateAsync(user);
         await unitOfWork.SaveChangesAsync();
 
-        await cache.RemoveByPrefixAsync(UserCachePrefix);
+        await auditLogService.LogAsync(
+            null,
+            AuditActions.UpdateUser,
+            nameof(User),
+            user.Id,
+            oldValues,
+            request
+        );
 
-        logger.LogInformation("UpdateUser {UserId} - updated successfully", id);
+        await cache.RemoveByPrefixAsync(UserCachePrefix);
 
         return Result<UserDetailResponse>.Ok(MapToDetailResponse(user));
     }
@@ -111,20 +108,25 @@ public class UserService(
     {
         var user = await unitOfWork.Users.GetByIdAsync(id);
         if (user is null)
-        {
-            logger.LogWarning("SetActiveUser {UserId} - user not found", id);
             return Result<bool>.Fail("User not found");
-        }
+
+        var oldValues = new { user.IsActive };
 
         user.IsActive = isActive;
+
         await unitOfWork.Users.UpdateAsync(user);
         await unitOfWork.SaveChangesAsync();
 
-        await cache.RemoveByPrefixAsync(UserCachePrefix);
+        await auditLogService.LogAsync(
+            null,
+            isActive ? AuditActions.ActivateUser : AuditActions.DeactivateUser,
+            nameof(User),
+            user.Id,
+            oldValues,
+            new { IsActive = isActive }
+        );
 
-        logger.LogInformation(
-            "SetActiveUser {UserId} - IsActive set to {IsActive}",
-            id, isActive);
+        await cache.RemoveByPrefixAsync(UserCachePrefix);
 
         return Result<bool>.Ok(true);
     }
@@ -133,17 +135,20 @@ public class UserService(
     {
         var user = await unitOfWork.Users.GetByIdAsync(id);
         if (user is null)
-        {
-            logger.LogWarning("DeleteUser {UserId} - user not found", id);
             return Result<bool>.Fail("User not found");
-        }
 
         await unitOfWork.Users.DeleteAsync(id);
         await unitOfWork.SaveChangesAsync();
 
-        await cache.RemoveByPrefixAsync(UserCachePrefix);
+        await auditLogService.LogAsync(
+            null,
+            AuditActions.DeleteUser,
+            nameof(User),
+            id,
+            oldValues: user
+        );
 
-        logger.LogInformation("DeleteUser {UserId} - deleted successfully", id);
+        await cache.RemoveByPrefixAsync(UserCachePrefix);
 
         return Result<bool>.Ok(true);
     }
