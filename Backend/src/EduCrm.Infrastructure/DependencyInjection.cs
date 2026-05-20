@@ -63,6 +63,8 @@ public static class DependencyInjection
         // Homework module
         services.AddScoped<IHomeworkService, HomeworkService>();
         services.AddScoped<IHomeworkSubmissionService, HomeworkSubmissionService>();
+        services.AddScoped<IUserService, UserService>();
+        services.AddScoped<INotificationService , NotificationService>();
 
         // Settings
         services.Configure<EmailSettings>(
