@@ -100,27 +100,39 @@ public class LessonScoreService(
         return Result<List<LessonScoreResponse>>.Ok(result);
     }
 
-    public async Task<Result<LessonScoreResponse>> CreateAsync(CreateLessonScoreRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result<LessonScoreResponse>> CreateAsync(
+        CreateLessonScoreRequest request,
+        int userId,
+        bool isAdmin, // Принимаем флаг
+        CancellationToken cancellationToken = default)
     {
         var lesson = await unitOfWork.Lessons.GetByIdAsync(request.LessonId, cancellationToken);
         if (lesson is null)
-        {
-            logger.LogWarning("Create failed - lesson not found: {LessonId}", request.LessonId);
-            return Result<LessonScoreResponse>.Fail("Lesson not found", ErrorType.BadRequest);
-        }
+            return Result<LessonScoreResponse>.Fail("Lesson not found", ErrorType.NotFound);
 
         var student = await unitOfWork.Students.GetByIdAsync(request.StudentId, cancellationToken);
         if (student is null)
+            return Result<LessonScoreResponse>.Fail("Student not found", ErrorType.NotFound);
+
+        int? mentorId = null;
+
+        // Если это НЕ админ, то проверяем профиль ментора
+        if (!isAdmin)
         {
-            logger.LogWarning("Create failed - student not found: {StudentId}", request.StudentId);
-            return Result<LessonScoreResponse>.Fail("Student not found", ErrorType.BadRequest);
+            var mentor = await unitOfWork.Mentors.GetByUserIdAsync(userId, cancellationToken);
+            if (mentor is null)
+                return Result<LessonScoreResponse>.Fail("Mentor profile not found", ErrorType.Unauthorized);
+                
+            mentorId = mentor.Id;
         }
 
-        var exists = await unitOfWork.LessonScores.ExistsByLessonAndStudentAsync(request.LessonId, request.StudentId, cancellationToken);
+        var exists = await unitOfWork.LessonScores
+            .ExistsByLessonAndStudentAsync(request.LessonId, request.StudentId, cancellationToken);
+
         if (exists)
-        {
-            return Result<LessonScoreResponse>.Fail("Score already exists for this lesson and student", ErrorType.Conflict);
-        }
+            return Result<LessonScoreResponse>.Fail(
+                "Score already exists for this lesson and student",
+                ErrorType.Conflict);
 
         var lessonScore = new LessonScore
         {
@@ -129,7 +141,7 @@ public class LessonScoreService(
             HomeworkSubmissionId = request.HomeworkSubmissionId,
             Score = request.Score,
             MentorFeedback = request.MentorFeedback,
-            ScoredByMentorId = request.ScoredByMentorId,
+            ScoredByMentorId = mentorId, // Тут будет null, если ставит Админ
             ScoredAt = DateTime.UtcNow
         };
 
@@ -138,11 +150,13 @@ public class LessonScoreService(
 
         await cache.RemoveByPrefixAsync(ScoreCachePrefix);
 
-        logger.LogInformation("Score created: {ScoreId} for lesson {LessonId} student {StudentId}", 
-            lessonScore.Id, lessonScore.LessonId, lessonScore.StudentId);
+        logger.LogInformation(
+            "Score created: {ScoreId} for lesson {LessonId} student {StudentId}",
+            lessonScore.Id,
+            lessonScore.LessonId,
+            lessonScore.StudentId);
 
-        var response = MapToResponse(lessonScore);
-        return Result<LessonScoreResponse>.Ok(response);
+        return Result<LessonScoreResponse>.Ok(MapToResponse(lessonScore));
     }
 
     public async Task<Result<LessonScoreResponse>> UpdateAsync(UpdateLessonScoreRequest request, CancellationToken cancellationToken = default)
