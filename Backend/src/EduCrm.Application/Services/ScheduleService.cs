@@ -3,6 +3,7 @@ using EduCrm.Application.DTOs.Schedule.Request;
 using EduCrm.Application.DTOs.Schedule.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Constants;
 using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
@@ -12,6 +13,7 @@ namespace EduCrm.Application.Services;
 public class ScheduleService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
+    IAuditLogService auditLogService,
     ILogger<ScheduleService> logger) : IScheduleService
 {
     private const string AllSchedulesCacheKey = "schedules:all";
@@ -31,8 +33,6 @@ public class ScheduleService(
         var response = schedules.Select(MapToResponse).ToList();
 
         await cache.SetAsync(AllSchedulesCacheKey, response, TimeSpan.FromMinutes(10));
-
-        logger.LogInformation("GetAllSchedules - returned {Count} from database", response.Count);
 
         return Result<List<ScheduleResponse>>.Ok(response);
     }
@@ -82,31 +82,24 @@ public class ScheduleService(
         CreateScheduleRequest request,
         CancellationToken cancellationToken = default)
     {
-        // проверяем группу
         var group = await unitOfWork.Groups.GetByIdAsync(request.GroupId, cancellationToken);
         if (group is null)
-        {
-            logger.LogWarning("CreateSchedule failed - group not found: {GroupId}", request.GroupId);
             return Result<ScheduleResponse>.Fail("Group not found");
-        }
 
-        // проверяем что нет расписания для этого дня
         var exists = await unitOfWork.Schedules.ExistsAsync(
-            request.GroupId, request.DayOfWeek, cancellationToken);
+            request.GroupId,
+            request.DayOfWeek,
+            cancellationToken);
 
         if (exists)
-        {
-            logger.LogWarning(
-                "CreateSchedule failed - already exists: Group {GroupId} Day {Day}",
-                request.GroupId, request.DayOfWeek);
             return Result<ScheduleResponse>.Fail(
-                "Schedule already exists for this day", ErrorType.Conflict);
-        }
+                "Schedule already exists for this day",
+                ErrorType.Conflict);
 
-        // валидация времени
         if (request.StartTime >= request.EndTime)
             return Result<ScheduleResponse>.Fail(
-                "StartTime must be before EndTime", ErrorType.BadRequest);
+                "StartTime must be before EndTime",
+                ErrorType.BadRequest);
 
         var schedule = new Schedule
         {
@@ -124,11 +117,15 @@ public class ScheduleService(
         await unitOfWork.Schedules.CreateAsync(schedule, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await cache.RemoveByPrefixAsync(ScheduleCachePrefix);
+        await auditLogService.LogAsync(
+            null,
+            AuditActions.CreateSchedule,
+            nameof(Schedule),
+            schedule.Id,
+            newValues: request
+        );
 
-        logger.LogInformation(
-            "Schedule created: {ScheduleId} Group: {GroupId} Day: {Day}",
-            schedule.Id, schedule.GroupId, schedule.DayOfWeek);
+        await cache.RemoveByPrefixAsync(ScheduleCachePrefix);
 
         var created = await unitOfWork.Schedules.GetByIdAsync(schedule.Id, cancellationToken);
         return Result<ScheduleResponse>.Ok(MapToResponse(created!));
@@ -141,14 +138,21 @@ public class ScheduleService(
     {
         var schedule = await unitOfWork.Schedules.GetByIdAsync(id, cancellationToken);
         if (schedule is null)
-        {
-            logger.LogWarning("UpdateSchedule failed - not found: {ScheduleId}", id);
             return Result<ScheduleResponse>.Fail("Schedule not found");
-        }
 
         if (request.StartTime >= request.EndTime)
             return Result<ScheduleResponse>.Fail(
-                "StartTime must be before EndTime", ErrorType.BadRequest);
+                "StartTime must be before EndTime",
+                ErrorType.BadRequest);
+
+        var oldValues = new
+        {
+            schedule.DayOfWeek,
+            schedule.StartTime,
+            schedule.EndTime,
+            schedule.Room,
+            schedule.RecurringTo
+        };
 
         schedule.DayOfWeek = request.DayOfWeek;
         schedule.StartTime = request.StartTime;
@@ -159,9 +163,16 @@ public class ScheduleService(
         await unitOfWork.Schedules.UpdateAsync(schedule, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await cache.RemoveByPrefixAsync(ScheduleCachePrefix);
+        await auditLogService.LogAsync(
+            null,
+            AuditActions.UpdateSchedule,
+            nameof(Schedule),
+            schedule.Id,
+            oldValues,
+            request
+        );
 
-        logger.LogInformation("Schedule updated: {ScheduleId}", id);
+        await cache.RemoveByPrefixAsync(ScheduleCachePrefix);
 
         return Result<ScheduleResponse>.Ok(MapToResponse(schedule));
     }
@@ -172,17 +183,22 @@ public class ScheduleService(
     {
         var schedule = await unitOfWork.Schedules.GetByIdAsync(id, cancellationToken);
         if (schedule is null)
-        {
-            logger.LogWarning("DeleteSchedule failed - not found: {ScheduleId}", id);
             return Result<bool>.Fail("Schedule not found");
-        }
+
+        var oldValues = schedule;
 
         await unitOfWork.Schedules.DeleteAsync(id, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        await cache.RemoveByPrefixAsync(ScheduleCachePrefix);
+        await auditLogService.LogAsync(
+            null,
+            AuditActions.DeleteSchedule,
+            nameof(Schedule),
+            id,
+            oldValues: oldValues
+        );
 
-        logger.LogInformation("Schedule deleted: {ScheduleId}", id);
+        await cache.RemoveByPrefixAsync(ScheduleCachePrefix);
 
         return Result<bool>.Ok(true);
     }

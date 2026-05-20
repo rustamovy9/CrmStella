@@ -4,6 +4,7 @@ using EduCrm.Application.DTOs.Students.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Entities;
+using EduCrm.Domain.Constants;
 using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
@@ -11,6 +12,7 @@ namespace EduCrm.Application.Services;
 public class StudentService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
+    IAuditLogService auditLogService,
     ILogger<StudentService> logger) : IStudentService
 {
     private const string StudentCachePrefix = "students:";
@@ -58,6 +60,7 @@ public class StudentService(
         }
 
         var response = MapToResponse(student);
+
         await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(30));
 
         return Result<StudentResponse>.Ok(response);
@@ -72,6 +75,13 @@ public class StudentService(
             return Result<StudentResponse>.Fail("Student not found");
         }
 
+        var oldValues = new
+        {
+            student.Balance,
+            student.EnrolledAt,
+            student.IsActive
+        };
+
         if (request.Balance is not null)
             student.Balance = request.Balance.Value;
 
@@ -80,6 +90,15 @@ public class StudentService(
 
         await unitOfWork.Students.UpdateAsync(student);
         await unitOfWork.SaveChangesAsync();
+
+        await auditLogService.LogAsync(
+            null,
+            AuditActions.UpdateStudent,
+            nameof(Student),
+            student.Id,
+            oldValues,
+            request
+        );
 
         await cache.RemoveByPrefixAsync(StudentCachePrefix);
 
@@ -97,15 +116,27 @@ public class StudentService(
             return Result<bool>.Fail("Student not found");
         }
 
+        var oldValues = new { student.IsActive };
+
         student.IsActive = request.IsActive;
 
         await unitOfWork.Students.UpdateAsync(student);
         await unitOfWork.SaveChangesAsync();
 
+        await auditLogService.LogAsync(
+            null,
+            request.IsActive ? AuditActions.ActivateUser : AuditActions.DeactivateUser,
+            nameof(Student),
+            student.Id,
+            oldValues,
+            new { request.IsActive }
+        );
+
         await cache.RemoveByPrefixAsync(StudentCachePrefix);
 
         logger.LogInformation(
-            "Student status changed: {StudentId} IsActive: {IsActive}", id, request.IsActive);
+            "Student status changed: {StudentId} IsActive: {IsActive}",
+            id, request.IsActive);
 
         return Result<bool>.Ok(true);
     }

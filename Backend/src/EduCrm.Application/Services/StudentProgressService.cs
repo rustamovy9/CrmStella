@@ -31,11 +31,14 @@ public class StudentProgressService(
             logger.LogWarning(
                 "Progress not found for student {StudentId} group {GroupId}",
                 studentId, groupId);
+
             return Result<StudentProgressResponse>.Fail(
-                "Progress not found. Recalculate first.", ErrorType.NotFound);
+                "Progress not found. Recalculate first.",
+                ErrorType.NotFound);
         }
 
         var response = MapToResponse(progress);
+
         await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(15));
 
         return Result<StudentProgressResponse>.Ok(response);
@@ -61,71 +64,64 @@ public class StudentProgressService(
     public async Task<Result<StudentProgressResponse>> RecalculateAsync(
         int studentId, int groupId)
     {
-        // 1. студент существует?
         var student = await unitOfWork.Students.GetByIdAsync(studentId);
         if (student is null)
             return Result<StudentProgressResponse>.Fail("Student not found", ErrorType.NotFound);
 
-        // 2. группа существует?
         var group = await unitOfWork.Groups.GetByIdAsync(groupId);
         if (group is null)
             return Result<StudentProgressResponse>.Fail("Group not found", ErrorType.NotFound);
 
-        // 3. берём существующую запись прогресса или создаём новую
         var progress = await unitOfWork.StudentProgress
             .GetByStudentAndGroupAsync(studentId, groupId);
 
         var isNew = progress is null;
+
         progress ??= new Domain.Entities.StudentProgress
         {
             StudentId = studentId,
             GroupId = groupId
         };
 
-        // 4. СЧИТАЕМ агрегаты из исходных данных
-        // (здесь нужны репозитории Attendance / LessonScore / ExamResult — Жвохир)
-
-        // посещаемость
         var totalLessons = group.Lessons?.Count ?? 0;
+
         var attendedLessons = student.Attendances?
             .Count(a => a.Lesson.GroupId == groupId
                         && a.Status == AttendanceStatus.Present) ?? 0;
 
         progress.TotalLessons = totalLessons;
         progress.AttendedLessons = attendedLessons;
+
         progress.AttendanceRate = totalLessons == 0
             ? 0
             : Math.Round((decimal)attendedLessons / totalLessons * 100, 2);
 
-        // средний балл за уроки
         var lessonScores = student.LessonScores?
             .Where(ls => ls.Lesson.GroupId == groupId)
             .Select(ls => ls.Score)
             .ToList() ?? new List<decimal>();
+
         progress.AverageLessonScore = lessonScores.Count == 0
             ? 0
             : Math.Round(lessonScores.Average(), 2);
 
-        // экзамены
         var examResults = student.ExamResults?
             .Where(er => er.Exam.GroupId == groupId)
             .ToList() ?? new();
+
         progress.ExamsPassed = examResults.Count(er => er.Status == ExamResultStatus.Passed);
         progress.ExamsFailed = examResults.Count(er => er.Status == ExamResultStatus.Failed);
 
-        // итоговый процент — простая формула (посещаемость + оценки), настройте под себя
         progress.OverallProgressPercent = Math.Round(
             (progress.AttendanceRate * 0.4m) +
             (progress.AverageLessonScore * 0.6m), 2);
 
-        // рекомендация на сертификат — пример порога
         progress.IsRecommendedForCertificate =
-            progress.OverallProgressPercent >= 70
-            && progress.ExamsFailed == 0;
+            progress.OverallProgressPercent >= 70 &&
+            progress.ExamsFailed == 0;
 
         progress.UpdatedAt = DateTime.UtcNow;
 
-        // 5. сохраняем
         if (isNew)
             await unitOfWork.StudentProgress.CreateAsync(progress);
         else
@@ -135,12 +131,9 @@ public class StudentProgressService(
 
         await cache.RemoveByPrefixAsync(ProgressCachePrefix);
 
-        logger.LogInformation(
-            "Progress recalculated: student {StudentId} group {GroupId} = {Percent}%",
-            studentId, groupId, progress.OverallProgressPercent);
-
         var saved = await unitOfWork.StudentProgress
             .GetByStudentAndGroupAsync(studentId, groupId);
+
         return Result<StudentProgressResponse>.Ok(MapToResponse(saved!));
     }
 

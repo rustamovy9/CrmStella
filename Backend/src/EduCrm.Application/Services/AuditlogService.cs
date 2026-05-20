@@ -15,7 +15,6 @@ public class AuditLogService(
 {
     public async Task<Result<List<AuditLogResponse>>> QueryAsync(AuditLogQuery query)
     {
-        // защита от абузивных размеров страницы
         var pageSize = query.PageSize is < 1 or > 200 ? 50 : query.PageSize;
         var page = query.Page < 1 ? 1 : query.Page;
 
@@ -43,8 +42,6 @@ public class AuditLogService(
         }).ToList();
 
         return Result<List<AuditLogResponse>>.Ok(result);
-        // НЕ кэшируем: аудит должен показывать всегда свежие данные,
-        // устаревший журнал расследования бесполезен
     }
 
     public async Task LogAsync(
@@ -77,11 +74,6 @@ public class AuditLogService(
         }
         catch (Exception ex)
         {
-            // КРИТИЧЕСКИ ВАЖНО по-сеньорски:
-            // сбой аудита НЕ должен ронять бизнес-операцию.
-            // Не смогли записать в журнал — логируем в ILogger и идём дальше,
-            // а не валим, например, создание платежа из-за того,
-            // что аудит не записался.
             logger.LogError(ex,
                 "Failed to write audit log: {Action} {Entity} {EntityId}",
                 action, entityName, entityId);
