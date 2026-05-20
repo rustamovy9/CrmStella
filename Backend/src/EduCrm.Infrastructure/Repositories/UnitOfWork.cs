@@ -25,6 +25,7 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
     private IExamRepository? _exams;
     private IExamResultRepository? _examResults;
     private IAuditLogRepository? _auditLogs;
+    private IWeekResultRepository? _weekResults;
     
     public IUserRepository Users =>
         _users ??= new UserRepository(context);
@@ -84,6 +85,8 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
 
     public IAuditLogRepository AuditLogs =>
     _auditLogs ??= new AuditLogRepository(context);
+    public IWeekResultRepository WeekResults =>
+    _weekResults ??= new WeekResultRepository(context);
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
         => await context.SaveChangesAsync(cancellationToken);
