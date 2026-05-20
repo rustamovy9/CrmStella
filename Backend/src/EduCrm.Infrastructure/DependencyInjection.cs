@@ -66,6 +66,9 @@ public static class DependencyInjection
         services.AddScoped<IHomeworkService, HomeworkService>();
         services.AddScoped<IHomeworkSubmissionService, HomeworkSubmissionService>();
         services.AddScoped<IWeekResultService, WeekResultService>();
+        services.AddScoped<IUserService, UserService>();
+        services.AddScoped<INotificationService , NotificationService>();
+
         // Settings
         services.Configure<EmailSettings>(
             configuration.GetSection("EmailSettings"));

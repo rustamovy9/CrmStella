@@ -6,10 +6,8 @@ namespace EduCrm.Application.Interfaces.Services;
 
 public interface IAuditLogService
 {
-    // ЧТЕНИЕ — для админа
     Task<Result<List<AuditLogResponse>>> QueryAsync(AuditLogQuery query);
 
-    // ЗАПИСЬ — вызывается ДРУГИМИ сервисами, не из контроллера
     Task LogAsync(
         int? userId,
         string action,
