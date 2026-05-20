@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using EduCrm.Application.DTOs.LessonScore.Request;
 using EduCrm.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -62,7 +63,11 @@ public class LessonScoreController(ILessonScoreService lessonScoreService) : Bas
     [Authorize(Roles = "Admin,Mentor")]
     public async Task<IActionResult> Create([FromBody] CreateLessonScoreRequest request)
     {
-        var result = await lessonScoreService.CreateAsync(request);
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        
+        bool isAdmin = User.IsInRole("Admin");
+
+        var result = await lessonScoreService.CreateAsync(request, userId, isAdmin);
 
         if (!result.IsSuccess)
             return HandleError(result);

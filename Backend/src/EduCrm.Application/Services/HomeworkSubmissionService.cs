@@ -3,6 +3,7 @@ using EduCrm.Application.DTOs.HomeworkSubmission.Request;
 using EduCrm.Application.DTOs.HomeworkSubmission.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -112,32 +113,67 @@ public class HomeworkSubmissionService(
     }
     
     public async Task<Result<HomeworkSubmissionResponse>> GradeAsync(
-        GradeHomeworkRequest request)
+        GradeHomeworkRequest request,
+        int userId,
+        bool isAdmin,
+        CancellationToken cancellationToken = default)
     {
-        var submission = await unitOfWork.HomeworkSubmissions.GetByIdAsync(request.Id);
+        // 1. Проверяем существование посылки (сабмита)
+        var submission = await unitOfWork.HomeworkSubmissions.GetByIdAsync(request.Id, cancellationToken);
         if (submission is null)
-            return Result<HomeworkSubmissionResponse>.Fail("Not found", ErrorType.NotFound);
+        {
+            logger.LogWarning("Submission not found: {SubmissionId}", request.Id);
+            return Result<HomeworkSubmissionResponse>.Fail("Submission not found");
+        }
 
-        var homework = await unitOfWork.Homeworks.GetByIdAsync(submission.HomeworkId);
+        // 2. Проверяем существование домашней работы
+        var homework = await unitOfWork.Homeworks.GetByIdAsync(submission.HomeworkId, cancellationToken);
         if (homework is null)
-            return Result<HomeworkSubmissionResponse>.Fail("Homework not found", ErrorType.NotFound);
+        {
+            logger.LogWarning("Homework not found: {HomeworkId}", submission.HomeworkId);
+            return Result<HomeworkSubmissionResponse>.Fail("Homework not found");
+        }
 
-        var score = new Domain.Entities.LessonScore
+        int? mentorId = null;
+
+        // 3. Логика проверки роли: если НЕ админ, то ищем ментора
+        if (!isAdmin)
+        {
+            var mentor = await unitOfWork.Mentors.GetByUserIdAsync(userId, cancellationToken);
+            if (mentor is null)
+            {
+                logger.LogWarning("Mentor not found for user: {UserId}", userId);
+                return Result<HomeworkSubmissionResponse>.Fail("Mentor not found", ErrorType.Unauthorized);
+            }
+            mentorId = mentor.Id;
+        }
+
+        // 4. Создаем оценку
+        var score = new LessonScore
         {
             StudentId = submission.StudentId,
             LessonId = homework.LessonId,
             HomeworkSubmissionId = submission.Id,
             Score = request.Score,
             MentorFeedback = request.Feedback,
+            ScoredByMentorId = mentorId, // null, если проверил Админ
             ScoredAt = DateTime.UtcNow
         };
 
-        await unitOfWork.LessonScores.CreateAsync(score);
-        await unitOfWork.SaveChangesAsync();
+        await unitOfWork.LessonScores.CreateAsync(score, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
 
+        // 5. Привязываем оценку к работе и обновляем
+        submission.LessonScore = score;
+        await unitOfWork.HomeworkSubmissions.UpdateAsync(submission, cancellationToken);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        // 6. Сбрасываем кэш
         await cache.RemoveByPrefixAsync(SubmissionCachePrefix);
 
-        return Result<HomeworkSubmissionResponse>.Ok(MapToResponse(submission));
+        // 7. Получаем свежие данные и возвращаем ответ
+        var updated = await unitOfWork.HomeworkSubmissions.GetByIdAsync(submission.Id, cancellationToken);
+        return Result<HomeworkSubmissionResponse>.Ok(MapToResponse(updated!));
     }
     
     private static HomeworkSubmissionResponse MapToResponse(Domain.Entities.HomeworkSubmission s) => new()
