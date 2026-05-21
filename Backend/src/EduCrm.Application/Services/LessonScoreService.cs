@@ -3,9 +3,8 @@ using EduCrm.Application.DTOs.LessonScore.Request;
 using EduCrm.Application.DTOs.LessonScore.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
-using EduCrm.Domain.Entities;
-using EduCrm.Domain.Enums;
 using EduCrm.Domain.Constants;
+using EduCrm.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
@@ -50,7 +49,8 @@ public class LessonScoreService(
         return Result<LessonScoreResponse>.Ok(response);
     }
 
-    public async Task<Result<List<LessonScoreResponse>>> GetByLessonIdAsync(int lessonId, CancellationToken cancellationToken = default)
+    public async Task<Result<List<LessonScoreResponse>>> GetByLessonIdAsync(int lessonId,
+        CancellationToken cancellationToken = default)
     {
         var cacheKey = $"{ScoreCachePrefix}lesson:{lessonId}";
         var cached = await cache.GetAsync<List<LessonScoreResponse>>(cacheKey);
@@ -66,7 +66,8 @@ public class LessonScoreService(
         return Result<List<LessonScoreResponse>>.Ok(result);
     }
 
-    public async Task<Result<List<LessonScoreResponse>>> GetByStudentIdAsync(int studentId, CancellationToken cancellationToken = default)
+    public async Task<Result<List<LessonScoreResponse>>> GetByStudentIdAsync(int studentId,
+        CancellationToken cancellationToken = default)
     {
         var cacheKey = $"{ScoreCachePrefix}student:{studentId}";
         var cached = await cache.GetAsync<List<LessonScoreResponse>>(cacheKey);
@@ -168,12 +169,12 @@ public class LessonScoreService(
         await cache.RemoveByPrefixAsync(ScoreCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.UpdateLessonScore,
-            entityName: "LessonScore",
-            entityId: score.Id,
-            oldValues: oldValues,
-            newValues: new
+            null,
+            AuditActions.UpdateLessonScore,
+            "LessonScore",
+            score.Id,
+            oldValues,
+            new
             {
                 score.Score,
                 score.MentorFeedback
@@ -194,11 +195,11 @@ public class LessonScoreService(
         await cache.RemoveByPrefixAsync(ScoreCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.DeleteLessonScore,
-            entityName: "LessonScore",
-            entityId: id,
-            oldValues: new { score.LessonId, score.StudentId, score.Score }
+            null,
+            AuditActions.DeleteLessonScore,
+            "LessonScore",
+            id,
+            new { score.LessonId, score.StudentId, score.Score }
         );
 
         return Result<bool>.Ok(true);

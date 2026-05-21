@@ -5,29 +5,28 @@ namespace EduCrm.Infrastructure.Repositories;
 
 public class UnitOfWork(AppDbContext context) : IUnitOfWork
 {
-    private IUserRepository? _users;
-    private IVerificationCodeRepository? _verificationCodes;
-    private IMentorRepository? _mentors;
-    private IStudentRepository? _students;
+    private IAttendanceRepository? _attendances;
+    private IAuditLogRepository? _auditLogs;
     private ICourseRepository? _courses;
+    private IExamResultRepository? _examResults;
+    private IExamRepository? _exams;
+    private IFileStorageRepository? _files;
     private IGroupRepository? _groups;
     private IGroupStudentRepository? _groupStudents;
-    private IFileStorageRepository? _files;
-    private IPaymentRepository? _payments;
-    private IProfileRepository? _profiles;
-    private ILessonRepository? _lessons;
-    private IScheduleRepository? _schedules;
-    private IAttendanceRepository? _attendances;
     private IHomeworkRepository? _homeworks;
     private IHomeworkSubmissionRepository? _homeworkSubmissions;
+    private ILessonRepository? _lessons;
     private ILessonScoreRepository? _lessonScores;
-    private IStudentProgressRepository? _studentProgress;
-    private IExamRepository? _exams;
+    private IMentorRepository? _mentors;
     private INotificationRepository? _notifications;
-    private IExamResultRepository? _examResults;
-    private IAuditLogRepository? _auditLogs;
+    private IPaymentRepository? _payments;
+    private IProfileRepository? _profiles;
+    private IScheduleRepository? _schedules;
+    private IStudentProgressRepository? _studentProgress;
+    private IStudentRepository? _students;
+    private IUserRepository? _users;
+    private IVerificationCodeRepository? _verificationCodes;
     private IWeekResultRepository? _weekResults;
-    
 
     public IUserRepository Users =>
         _users ??= new UserRepository(context);
@@ -90,11 +89,13 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
         _examResults ??= new ExamResultRepository(context);
 
     public IAuditLogRepository AuditLogs =>
-    _auditLogs ??= new AuditLogRepository(context);
-    public IWeekResultRepository WeekResults =>
-    _weekResults ??= new WeekResultRepository(context);
         _auditLogs ??= new AuditLogRepository(context);
 
+    public IWeekResultRepository WeekResults =>
+        _weekResults ??= new WeekResultRepository(context);
+
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
-        => await context.SaveChangesAsync(cancellationToken);
+    {
+        return await context.SaveChangesAsync(cancellationToken);
+    }
 }

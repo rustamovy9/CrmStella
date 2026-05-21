@@ -2,6 +2,7 @@ using EduCrm.Application.Common;
 using EduCrm.Application.DTOs.StudentProgress.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -33,8 +34,7 @@ public class StudentProgressService(
                 studentId, groupId);
 
             return Result<StudentProgressResponse>.Fail(
-                "Progress not found. Recalculate first.",
-                ErrorType.NotFound);
+                "Progress not found. Recalculate first.");
         }
 
         var response = MapToResponse(progress);
@@ -66,18 +66,18 @@ public class StudentProgressService(
     {
         var student = await unitOfWork.Students.GetByIdAsync(studentId);
         if (student is null)
-            return Result<StudentProgressResponse>.Fail("Student not found", ErrorType.NotFound);
+            return Result<StudentProgressResponse>.Fail("Student not found");
 
         var group = await unitOfWork.Groups.GetByIdAsync(groupId);
         if (group is null)
-            return Result<StudentProgressResponse>.Fail("Group not found", ErrorType.NotFound);
+            return Result<StudentProgressResponse>.Fail("Group not found");
 
         var progress = await unitOfWork.StudentProgress
             .GetByStudentAndGroupAsync(studentId, groupId);
 
         var isNew = progress is null;
 
-        progress ??= new Domain.Entities.StudentProgress
+        progress ??= new StudentProgress
         {
             StudentId = studentId,
             GroupId = groupId
@@ -107,14 +107,14 @@ public class StudentProgressService(
 
         var examResults = student.ExamResults?
             .Where(er => er.Exam.GroupId == groupId)
-            .ToList() ?? new();
+            .ToList() ?? new List<ExamResult>();
 
         progress.ExamsPassed = examResults.Count(er => er.Status == ExamResultStatus.Passed);
         progress.ExamsFailed = examResults.Count(er => er.Status == ExamResultStatus.Failed);
 
         progress.OverallProgressPercent = Math.Round(
-            (progress.AttendanceRate * 0.4m) +
-            (progress.AverageLessonScore * 0.6m), 2);
+            progress.AttendanceRate * 0.4m +
+            progress.AverageLessonScore * 0.6m, 2);
 
         progress.IsRecommendedForCertificate =
             progress.OverallProgressPercent >= 70 &&
@@ -137,23 +137,26 @@ public class StudentProgressService(
         return Result<StudentProgressResponse>.Ok(MapToResponse(saved!));
     }
 
-    private static StudentProgressResponse MapToResponse(Domain.Entities.StudentProgress p) => new()
+    private static StudentProgressResponse MapToResponse(StudentProgress p)
     {
-        Id = p.Id,
-        StudentId = p.StudentId,
-        StudentName = p.Student?.User.FullName ?? string.Empty,
-        GroupId = p.GroupId,
-        GroupName = p.Group?.Name ?? string.Empty,
-        TotalLessons = p.TotalLessons,
-        AttendedLessons = p.AttendedLessons,
-        AttendanceRate = p.AttendanceRate,
-        AverageLessonScore = p.AverageLessonScore,
-        AverageHomeworkScore = p.AverageHomeworkScore,
-        TotalBonusScore = p.TotalBonusScore,
-        ExamsPassed = p.ExamsPassed,
-        ExamsFailed = p.ExamsFailed,
-        OverallProgressPercent = p.OverallProgressPercent,
-        IsRecommendedForCertificate = p.IsRecommendedForCertificate,
-        UpdatedAt = p.UpdatedAt
-    };
+        return new StudentProgressResponse
+        {
+            Id = p.Id,
+            StudentId = p.StudentId,
+            StudentName = p.Student?.User.FullName ?? string.Empty,
+            GroupId = p.GroupId,
+            GroupName = p.Group?.Name ?? string.Empty,
+            TotalLessons = p.TotalLessons,
+            AttendedLessons = p.AttendedLessons,
+            AttendanceRate = p.AttendanceRate,
+            AverageLessonScore = p.AverageLessonScore,
+            AverageHomeworkScore = p.AverageHomeworkScore,
+            TotalBonusScore = p.TotalBonusScore,
+            ExamsPassed = p.ExamsPassed,
+            ExamsFailed = p.ExamsFailed,
+            OverallProgressPercent = p.OverallProgressPercent,
+            IsRecommendedForCertificate = p.IsRecommendedForCertificate,
+            UpdatedAt = p.UpdatedAt
+        };
+    }
 }

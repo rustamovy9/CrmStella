@@ -93,7 +93,6 @@ public class CourseService(
         await unitOfWork.SaveChangesAsync();
 
         if (request.Icon is not null)
-        {
             try
             {
                 var file = await fileStorage.UploadAsync(
@@ -111,13 +110,12 @@ public class CourseService(
             {
                 logger.LogWarning(ex, "Icon upload failed for course {CourseId}", course.Id);
             }
-        }
 
         await auditLogService.LogAsync(
-            userId: userId,
-            action: AuditActions.CreateCourse,
-            entityName: "Course",
-            entityId: course.Id,
+            userId,
+            AuditActions.CreateCourse,
+            "Course",
+            course.Id,
             newValues: new
             {
                 course.Name,
@@ -152,10 +150,10 @@ public class CourseService(
         await unitOfWork.SaveChangesAsync();
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.UpdateCourse,
-            entityName: "Course",
-            entityId: course.Id,
+            null,
+            AuditActions.UpdateCourse,
+            "Course",
+            course.Id,
             newValues: new
             {
                 course.Name,
@@ -180,10 +178,10 @@ public class CourseService(
         await unitOfWork.SaveChangesAsync();
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.SetCourseStatus,
-            entityName: "Course",
-            entityId: course.Id,
+            null,
+            AuditActions.SetCourseStatus,
+            "Course",
+            course.Id,
             newValues: new { course.IsActive });
 
         await cache.RemoveByPrefixAsync(CourseCachePrefix);
@@ -224,10 +222,10 @@ public class CourseService(
             await unitOfWork.SaveChangesAsync();
 
             await auditLogService.LogAsync(
-                userId: userId,
-                action: AuditActions.UploadFile,
-                entityName: "Course",
-                entityId: courseId,
+                userId,
+                AuditActions.UploadFile,
+                "Course",
+                courseId,
                 newValues: new { course.IconUrl });
 
             await cache.RemoveByPrefixAsync(CourseCachePrefix);

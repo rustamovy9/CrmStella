@@ -4,7 +4,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace EduCrm.Infrastructure.Persistence.Migrations
+namespace EduCrm.Infrastructure.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate : Migration
@@ -12,6 +12,26 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            migrationBuilder.CreateTable(
+                name: "Courses",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    Price = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
+                    IconUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    DurationWeeks = table.Column<int>(type: "integer", nullable: false),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Courses", x => x.Id);
+                });
+
             migrationBuilder.CreateTable(
                 name: "Roles",
                 columns: table => new
@@ -92,10 +112,10 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     UserId = table.Column<int>(type: "integer", nullable: false),
-                    Specialization = table.Column<string>(type: "text", nullable: true),
+                    Specialization = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     ExperienceYears = table.Column<int>(type: "integer", nullable: true),
-                    HireDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    IsActive = table.Column<bool>(type: "boolean", nullable: false)
+                    HireDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP"),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true)
                 },
                 constraints: table =>
                 {
@@ -141,7 +161,7 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     UserId = table.Column<int>(type: "integer", nullable: false),
                     AvatarUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    DateOfBirth = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    DateOfBirth = table.Column<DateOnly>(type: "date", nullable: true),
                     Address = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
                     TelegramUsername = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     LinkedInUrl = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
@@ -168,9 +188,9 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     UserId = table.Column<int>(type: "integer", nullable: false),
-                    Balance = table.Column<decimal>(type: "numeric", nullable: false),
-                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    EnrolledAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    Balance = table.Column<decimal>(type: "numeric(18,2)", nullable: false),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
+                    EnrolledAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "CURRENT_TIMESTAMP")
                 },
                 constraints: table =>
                 {
@@ -211,33 +231,6 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "Courses",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
-                    Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
-                    Price = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
-                    IconUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
-                    DurationWeeks = table.Column<int>(type: "integer", nullable: false),
-                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
-                    MentorId = table.Column<int>(type: "integer", nullable: true),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_Courses", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_Courses_Mentors_MentorId",
-                        column: x => x.MentorId,
-                        principalTable: "Mentors",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.SetNull);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Groups",
                 columns: table => new
                 {
@@ -250,7 +243,7 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                     EndDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     MaxStudents = table.Column<int>(type: "integer", nullable: false),
                     Status = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
-                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()"),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
@@ -279,6 +272,7 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                     GroupId = table.Column<int>(type: "integer", nullable: false),
                     Title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
+                    IsActive = table.Column<bool>(type: "boolean", nullable: false),
                     ExamDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     StartTime = table.Column<TimeSpan>(type: "interval", nullable: true),
                     EndTime = table.Column<TimeSpan>(type: "interval", nullable: true),
@@ -446,36 +440,42 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "StudentProgresses",
+                name: "StudentProgress",
                 columns: table => new
                 {
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     StudentId = table.Column<int>(type: "integer", nullable: false),
                     GroupId = table.Column<int>(type: "integer", nullable: false),
-                    TotalLessons = table.Column<int>(type: "integer", nullable: false),
-                    AttendedLessons = table.Column<int>(type: "integer", nullable: false),
-                    AttendanceRate = table.Column<decimal>(type: "numeric", nullable: false),
-                    AverageLessonScore = table.Column<decimal>(type: "numeric", nullable: false),
-                    AverageHomeworkScore = table.Column<decimal>(type: "numeric", nullable: false),
-                    TotalBonusScore = table.Column<decimal>(type: "numeric", nullable: false),
-                    ExamsPassed = table.Column<int>(type: "integer", nullable: false),
-                    ExamsFailed = table.Column<int>(type: "integer", nullable: false),
-                    OverallProgressPercent = table.Column<decimal>(type: "numeric", nullable: false),
-                    IsRecommendedForCertificate = table.Column<bool>(type: "boolean", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                    TotalLessons = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
+                    AttendedLessons = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
+                    AttendanceRate = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false, defaultValue: 0m),
+                    AverageLessonScore = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false, defaultValue: 0m),
+                    AverageHomeworkScore = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false, defaultValue: 0m),
+                    TotalBonusScore = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false, defaultValue: 0m),
+                    ExamsPassed = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
+                    ExamsFailed = table.Column<int>(type: "integer", nullable: false, defaultValue: 0),
+                    OverallProgressPercent = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false, defaultValue: 0m),
+                    IsRecommendedForCertificate = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    GroupId1 = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_StudentProgresses", x => x.Id);
+                    table.PrimaryKey("PK_StudentProgress", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_StudentProgresses_Groups_GroupId",
+                        name: "FK_StudentProgress_Groups_GroupId",
                         column: x => x.GroupId,
                         principalTable: "Groups",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_StudentProgresses_Students_StudentId",
+                        name: "FK_StudentProgress_Groups_GroupId1",
+                        column: x => x.GroupId1,
+                        principalTable: "Groups",
+                        principalColumn: "Id");
+                    table.ForeignKey(
+                        name: "FK_StudentProgress_Students_StudentId",
                         column: x => x.StudentId,
                         principalTable: "Students",
                         principalColumn: "Id",
@@ -491,15 +491,16 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                     StudentId = table.Column<int>(type: "integer", nullable: false),
                     GroupId = table.Column<int>(type: "integer", nullable: false),
                     WeekNumber = table.Column<int>(type: "integer", nullable: false),
-                    LessonAverageScore = table.Column<decimal>(type: "numeric", nullable: false),
-                    HomeworkAverageScore = table.Column<decimal>(type: "numeric", nullable: false),
-                    AttendanceScore = table.Column<decimal>(type: "numeric", nullable: false),
-                    BonusScore = table.Column<decimal>(type: "numeric", nullable: false),
-                    ExamScore = table.Column<decimal>(type: "numeric", nullable: false),
-                    TotalScore = table.Column<decimal>(type: "numeric", nullable: false),
-                    MentorComment = table.Column<string>(type: "text", nullable: true),
+                    LessonAverageScore = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
+                    HomeworkAverageScore = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
+                    AttendanceScore = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
+                    BonusScore = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
+                    ExamScore = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
+                    TotalScore = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
+                    MentorComment = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
+                    UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    GroupId1 = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -510,6 +511,11 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                         principalTable: "Groups",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_WeekResults_Groups_GroupId1",
+                        column: x => x.GroupId1,
+                        principalTable: "Groups",
+                        principalColumn: "Id");
                     table.ForeignKey(
                         name: "FK_WeekResults_Students_StudentId",
                         column: x => x.StudentId,
@@ -693,7 +699,7 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                     LessonId = table.Column<int>(type: "integer", nullable: false),
                     StudentId = table.Column<int>(type: "integer", nullable: false),
                     HomeworkSubmissionId = table.Column<int>(type: "integer", nullable: true),
-                    Score = table.Column<decimal>(type: "numeric(3,1)", precision: 3, scale: 1, nullable: false),
+                    Score = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
                     MentorFeedback = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     ScoredByMentorId = table.Column<int>(type: "integer", nullable: true),
                     ScoredAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -762,11 +768,6 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                 name: "IX_AuditLogs_UserId",
                 table: "AuditLogs",
                 column: "UserId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Courses_MentorId",
-                table: "Courses",
-                column: "MentorId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_ExamResults_ExamId_StudentId",
@@ -955,14 +956,20 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                 column: "GroupId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_StudentProgresses_GroupId",
-                table: "StudentProgresses",
+                name: "IX_StudentProgress_GroupId",
+                table: "StudentProgress",
                 column: "GroupId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_StudentProgresses_StudentId",
-                table: "StudentProgresses",
-                column: "StudentId");
+                name: "IX_StudentProgress_GroupId1",
+                table: "StudentProgress",
+                column: "GroupId1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_StudentProgress_StudentId_GroupId",
+                table: "StudentProgress",
+                columns: new[] { "StudentId", "GroupId" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Students_UserId",
@@ -997,9 +1004,15 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                 column: "GroupId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_WeekResults_StudentId",
+                name: "IX_WeekResults_GroupId1",
                 table: "WeekResults",
-                column: "StudentId");
+                column: "GroupId1");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_WeekResults_StudentId_GroupId_WeekNumber",
+                table: "WeekResults",
+                columns: new[] { "StudentId", "GroupId", "WeekNumber" },
+                unique: true);
         }
 
         /// <inheritdoc />
@@ -1036,7 +1049,7 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                 name: "Schedules");
 
             migrationBuilder.DropTable(
-                name: "StudentProgresses");
+                name: "StudentProgress");
 
             migrationBuilder.DropTable(
                 name: "VerificationCodes");

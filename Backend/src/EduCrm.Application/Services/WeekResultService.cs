@@ -3,6 +3,8 @@ using EduCrm.Application.DTOs.WeekResult.Request;
 using EduCrm.Application.DTOs.WeekResult.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Constants;
+using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -11,6 +13,7 @@ namespace EduCrm.Application.Services;
 public class WeekResultService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
+    IAuditLogService auditLogService,
     ILogger<WeekResultService> logger) : IWeekResultService
 {
     private const string WeekResultCachePrefix = "weekresults:";
@@ -59,39 +62,36 @@ public class WeekResultService(
 
         if (weekResult is null)
             return Result<WeekResultResponse>.Fail(
-                "Week result not found. Recalculate first.", ErrorType.NotFound);
+                "Week result not found. Recalculate first.");
 
         return Result<WeekResultResponse>.Ok(MapToResponse(weekResult));
     }
 
     public async Task<Result<WeekResultResponse>> RecalculateAsync(RecalculateWeekRequest request)
     {
-        // 1. студент существует?
         var student = await unitOfWork.Students.GetByIdAsync(request.StudentId);
         if (student is null)
-            return Result<WeekResultResponse>.Fail("Student not found", ErrorType.NotFound);
+            return Result<WeekResultResponse>.Fail("Student not found");
 
-        // 2. группа существует?
         var group = await unitOfWork.Groups.GetByIdAsync(request.GroupId);
         if (group is null)
-            return Result<WeekResultResponse>.Fail("Group not found", ErrorType.NotFound);
+            return Result<WeekResultResponse>.Fail("Group not found");
 
-        // 3. студент реально в этой группе?
-        // (защита от пересчёта «не его» недели)
         var enrollment = student.GroupStudents?
             .FirstOrDefault(gs => gs.GroupId == request.GroupId && gs.IsActive);
+
         if (enrollment is null)
             return Result<WeekResultResponse>.Fail(
-                "Student is not enrolled in this group", ErrorType.BadRequest);
+                "Student is not enrolled in this group",
+                ErrorType.BadRequest);
 
-        // 4. берём существующую запись недели или создаём новую (upsert)
         var weekResult = await unitOfWork.WeekResults
             .GetByKeyAsync(request.StudentId, request.GroupId, request.WeekNumber);
 
         var isNew = weekResult is null;
-        var existingComment = weekResult?.MentorComment;   // сохраним комментарий при пересчёте
+        var existingComment = weekResult?.MentorComment;
 
-        weekResult ??= new Domain.Entities.WeekResult
+        weekResult ??= new WeekResult
         {
             StudentId = request.StudentId,
             GroupId = request.GroupId,
@@ -99,64 +99,58 @@ public class WeekResultService(
             CreatedAt = DateTime.UtcNow
         };
 
-        // 5. ВЫЧИСЛЯЕМ агрегаты ЗА КОНКРЕТНУЮ НЕДЕЛЮ
-        // ВАЖНО: эти формулы — КАРКАС. Они опираются на Attendance/LessonScore/ExamResult
-        // (модули Жвохира). Когда они будут готовы, имена полей могут отличаться —
-        // подгонишь под реальные сущности. Принцип одинаковый.
-
-        // оценки за уроки этой недели
         var lessonScores = student.LessonScores?
-            .Where(ls => ls.Lesson.GroupId == request.GroupId
-                      && ls.Lesson.WeekNumber == request.WeekNumber)
+            .Where(ls =>
+                ls.Lesson.GroupId == request.GroupId &&
+                ls.Lesson.WeekNumber == request.WeekNumber)
             .Select(ls => ls.Score)
-            .ToList() ?? new();
+            .ToList() ?? new List<decimal>();
+
         weekResult.LessonAverageScore = lessonScores.Count == 0
             ? 0
             : Math.Round(lessonScores.Average(), 2);
 
-        // оценки за домашки этой недели (если LessonScore покрывает и домашки —
-        // надо разделить по флагу, или брать из HomeworkSubmission через LessonScore)
-        // оставляю заглушкой — Жвохир уточнит схему
         weekResult.HomeworkAverageScore = 0;
 
-        // посещаемость этой недели в процентах
         var weekAttendances = student.Attendances?
-            .Where(a => a.Lesson.GroupId == request.GroupId
-                     && a.Lesson.WeekNumber == request.WeekNumber)
-            .ToList() ?? new();
+            .Where(a =>
+                a.Lesson.GroupId == request.GroupId &&
+                a.Lesson.WeekNumber == request.WeekNumber)
+            .ToList() ?? new List<Attendance>();
+
         var totalLessonsInWeek = weekAttendances.Count;
-        var attendedInWeek = weekAttendances.Count(a => a.Status == AttendanceStatus.Present);
+
+        var attendedInWeek = weekAttendances.Count(a =>
+            a.Status == AttendanceStatus.Present);
+
         weekResult.AttendanceScore = totalLessonsInWeek == 0
             ? 0
-            : Math.Round((decimal)attendedInWeek / totalLessonsInWeek * 100, 2);
+            : Math.Round(
+                (decimal)attendedInWeek / totalLessonsInWeek * 100,
+                2);
 
-        // экзамен на этой неделе (если был)
         var examScores = student.ExamResults?
-            .Where(er => er.Exam.GroupId == request.GroupId
-                      /* && er.Exam.WeekNumber == request.WeekNumber */)
+            .Where(er => er.Exam.GroupId == request.GroupId)
             .Select(er => er.Score)
-            .ToList() ?? new();
+            .ToList() ?? new List<decimal>();
+
         weekResult.ExamScore = examScores.Count == 0
             ? 0
             : Math.Round(examScores.Average(), 2);
 
-        // бонусы — пока 0, добавишь когда появится механика бонусов
         weekResult.BonusScore = 0;
 
-        // итоговый балл — взвешенная сумма (формулу согласуйте командой)
         weekResult.TotalScore = Math.Round(
-            (weekResult.LessonAverageScore * 0.3m) +
-            (weekResult.HomeworkAverageScore * 0.2m) +
-            (weekResult.AttendanceScore * 0.2m) +
-            (weekResult.ExamScore * 0.25m) +
-            (weekResult.BonusScore * 0.05m), 2);
+            weekResult.LessonAverageScore * 0.3m +
+            weekResult.HomeworkAverageScore * 0.2m +
+            weekResult.AttendanceScore * 0.2m +
+            weekResult.ExamScore * 0.25m +
+            weekResult.BonusScore * 0.05m,
+            2);
 
-        // комментарий ментора сохраняем — пересчёт баллов не должен его стирать
         weekResult.MentorComment = existingComment;
-
         weekResult.UpdatedAt = DateTime.UtcNow;
 
-        // 6. сохраняем
         if (isNew)
             await unitOfWork.WeekResults.CreateAsync(weekResult);
         else
@@ -166,21 +160,45 @@ public class WeekResultService(
 
         await cache.RemoveByPrefixAsync(WeekResultCachePrefix);
 
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.RecalculateWeekResult,
+            entityName: "WeekResult",
+            entityId: weekResult.Id,
+            newValues: new
+            {
+                weekResult.StudentId,
+                weekResult.GroupId,
+                weekResult.WeekNumber,
+                weekResult.TotalScore
+            });
+
         logger.LogInformation(
             "WeekResult recalculated: student {StudentId} group {GroupId} week {Week} = {Total}",
-            request.StudentId, request.GroupId, request.WeekNumber, weekResult.TotalScore);
+            request.StudentId,
+            request.GroupId,
+            request.WeekNumber,
+            weekResult.TotalScore);
 
         var saved = await unitOfWork.WeekResults
-            .GetByKeyAsync(request.StudentId, request.GroupId, request.WeekNumber);
+            .GetByKeyAsync(
+                request.StudentId,
+                request.GroupId,
+                request.WeekNumber);
+
         return Result<WeekResultResponse>.Ok(MapToResponse(saved!));
     }
 
     public async Task<Result<WeekResultResponse>> SetMentorCommentAsync(
-        int weekResultId, SetMentorCommentRequest request)
+        int weekResultId,
+        SetMentorCommentRequest request)
     {
         var weekResult = await unitOfWork.WeekResults.GetByIdAsync(weekResultId);
+
         if (weekResult is null)
-            return Result<WeekResultResponse>.Fail("Week result not found", ErrorType.NotFound);
+            return Result<WeekResultResponse>.Fail("Week result not found");
+
+        var oldComment = weekResult.MentorComment;
 
         weekResult.MentorComment = request.Comment?.Trim();
         weekResult.UpdatedAt = DateTime.UtcNow;
@@ -190,28 +208,46 @@ public class WeekResultService(
 
         await cache.RemoveByPrefixAsync(WeekResultCachePrefix);
 
+        await auditLogService.LogAsync(
+            userId: null,
+            action: AuditActions.UpdateWeekResultComment,
+            entityName: "WeekResult",
+            entityId: weekResult.Id,
+            oldValues: new
+            {
+                MentorComment = oldComment
+            },
+            newValues: new
+            {
+                MentorComment = weekResult.MentorComment
+            });
+
         logger.LogInformation(
-            "WeekResult comment set: {WeekResultId}", weekResultId);
+            "WeekResult comment updated: {WeekResultId}",
+            weekResultId);
 
         return Result<WeekResultResponse>.Ok(MapToResponse(weekResult));
     }
 
-    private static WeekResultResponse MapToResponse(Domain.Entities.WeekResult w) => new()
+    private static WeekResultResponse MapToResponse(WeekResult w)
     {
-        Id = w.Id,
-        StudentId = w.StudentId,
-        StudentName = w.Student?.User.FullName ?? string.Empty,
-        GroupId = w.GroupId,
-        GroupName = w.Group?.Name ?? string.Empty,
-        WeekNumber = w.WeekNumber,
-        LessonAverageScore = w.LessonAverageScore,
-        HomeworkAverageScore = w.HomeworkAverageScore,
-        AttendanceScore = w.AttendanceScore,
-        BonusScore = w.BonusScore,
-        ExamScore = w.ExamScore,
-        TotalScore = w.TotalScore,
-        MentorComment = w.MentorComment,
-        CreatedAt = w.CreatedAt,
-        UpdatedAt = w.UpdatedAt
-    };
+        return new WeekResultResponse
+        {
+            Id = w.Id,
+            StudentId = w.StudentId,
+            StudentName = w.Student?.User.FullName ?? string.Empty,
+            GroupId = w.GroupId,
+            GroupName = w.Group?.Name ?? string.Empty,
+            WeekNumber = w.WeekNumber,
+            LessonAverageScore = w.LessonAverageScore,
+            HomeworkAverageScore = w.HomeworkAverageScore,
+            AttendanceScore = w.AttendanceScore,
+            BonusScore = w.BonusScore,
+            ExamScore = w.ExamScore,
+            TotalScore = w.TotalScore,
+            MentorComment = w.MentorComment,
+            CreatedAt = w.CreatedAt,
+            UpdatedAt = w.UpdatedAt
+        };
+    }
 }

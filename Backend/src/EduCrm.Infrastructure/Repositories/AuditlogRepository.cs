@@ -46,5 +46,7 @@ public class AuditLogRepository(AppDbContext context) : IAuditLogRepository
     public async Task CreateAsync(
         AuditLog log,
         CancellationToken cancellationToken = default)
-        => await context.AuditLogs.AddAsync(log, cancellationToken);
+    {
+        await context.AuditLogs.AddAsync(log, cancellationToken);
+    }
 }

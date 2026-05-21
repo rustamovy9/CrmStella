@@ -95,12 +95,12 @@ public class MentorService(
         await cache.RemoveByPrefixAsync(MentorCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.UpdateMentor,
-            entityName: nameof(Mentor),
-            entityId: mentor.Id,
-            oldValues: oldValues,
-            newValues: request
+            null,
+            AuditActions.UpdateMentor,
+            nameof(Mentor),
+            mentor.Id,
+            oldValues,
+            request
         );
 
         logger.LogInformation("Mentor updated: {MentorId}", id);
@@ -127,12 +127,12 @@ public class MentorService(
         await cache.RemoveByPrefixAsync(MentorCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.UpdateMentor,
-            entityName: nameof(Mentor),
-            entityId: mentor.Id,
-            oldValues: oldValues,
-            newValues: new { request.IsActive }
+            null,
+            AuditActions.UpdateMentor,
+            nameof(Mentor),
+            mentor.Id,
+            oldValues,
+            new { request.IsActive }
         );
 
         logger.LogInformation(

@@ -33,7 +33,8 @@ public class NotificationRepository(AppDbContext context) : INotificationReposit
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<Notification>> GetUnreadByUserIdAsync(int userId, CancellationToken cancellationToken = default)
+    public async Task<List<Notification>> GetUnreadByUserIdAsync(int userId,
+        CancellationToken cancellationToken = default)
     {
         return await context.Notifications
             .AsNoTracking()
@@ -92,6 +93,7 @@ public class NotificationRepository(AppDbContext context) : INotificationReposit
             notification.IsRead = true;
             notification.ReadAt = DateTime.UtcNow;
         }
+
         await context.SaveChangesAsync(cancellationToken);
     }
 }

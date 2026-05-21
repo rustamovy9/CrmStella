@@ -65,10 +65,10 @@ public class AuthService(
             TimeSpan.FromMinutes(60));
 
         await auditLogService.LogAsync(
-            userId: user.Id,
-            action: AuditActions.Login,
-            entityName: "User",
-            entityId: user.Id,
+            user.Id,
+            AuditActions.Login,
+            "User",
+            user.Id,
             newValues: new { user.Email, Role = user.Role.Name });
 
         return Result<AuthResponse>.Ok(new AuthResponse
@@ -106,16 +106,13 @@ public class AuthService(
         await unitOfWork.Users.CreateAsync(user);
 
         if (request.RoleId == 2)
-        {
             await unitOfWork.Mentors.CreateAsync(new Mentor
             {
                 User = user,
                 HireDate = DateTime.UtcNow,
                 IsActive = true
             });
-        }
         else if (request.RoleId == 3)
-        {
             await unitOfWork.Students.CreateAsync(new Student
             {
                 User = user,
@@ -123,7 +120,6 @@ public class AuthService(
                 IsActive = true,
                 EnrolledAt = DateTime.UtcNow
             });
-        }
 
         await unitOfWork.SaveChangesAsync();
         await unitOfWork.Users.LoadRoleAsync(user);
@@ -133,10 +129,10 @@ public class AuthService(
         await emailService.SendWelcomeAsync(user.Email, user.FullName, tempPassword);
 
         await auditLogService.LogAsync(
-            userId: adminUserId,
-            action: AuditActions.Register,
-            entityName: "User",
-            entityId: user.Id,
+            adminUserId,
+            AuditActions.Register,
+            "User",
+            user.Id,
             newValues: new { user.FullName, user.Email, user.RoleId });
 
         return Result<RegisterResponse>.Ok(new RegisterResponse
@@ -172,10 +168,10 @@ public class AuthService(
         await unitOfWork.SaveChangesAsync();
 
         await auditLogService.LogAsync(
-            userId: user.Id,
-            action: AuditActions.RefreshToken,
-            entityName: "User",
-            entityId: user.Id);
+            user.Id,
+            AuditActions.RefreshToken,
+            "User",
+            user.Id);
 
         return Result<AuthResponse>.Ok(new AuthResponse
         {
@@ -220,10 +216,10 @@ public class AuthService(
         await emailService.SendPasswordResetAsync(user.Email, user.FullName, code);
 
         await auditLogService.LogAsync(
-            userId: user.Id,
-            action: AuditActions.ForgotPassword,
-            entityName: "User",
-            entityId: user.Id);
+            user.Id,
+            AuditActions.ForgotPassword,
+            "User",
+            user.Id);
 
         return Result<bool>.Ok(true);
     }
@@ -259,10 +255,10 @@ public class AuthService(
         await unitOfWork.SaveChangesAsync();
 
         await auditLogService.LogAsync(
-            userId: user.Id,
-            action: AuditActions.SendVerificationCode,
-            entityName: "VerificationCode",
-            entityId: code.Id);
+            user.Id,
+            AuditActions.SendVerificationCode,
+            "VerificationCode",
+            code.Id);
 
         return Result<bool>.Ok(true);
     }
@@ -287,10 +283,10 @@ public class AuthService(
         await cache.RemoveByPrefixAsync(AuthUserCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: user.Id,
-            action: AuditActions.ResetPassword,
-            entityName: "User",
-            entityId: user.Id);
+            user.Id,
+            AuditActions.ResetPassword,
+            "User",
+            user.Id);
 
         return Result<bool>.Ok(true);
     }
@@ -316,10 +312,10 @@ public class AuthService(
         await cache.RemoveByPrefixAsync(AuthUserCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: user.Id,
-            action: AuditActions.ChangePassword,
-            entityName: "User",
-            entityId: user.Id);
+            user.Id,
+            AuditActions.ChangePassword,
+            "User",
+            user.Id);
 
         return Result<bool>.Ok(true);
     }
@@ -339,16 +335,18 @@ public class AuthService(
         await cache.RemoveByPrefixAsync(AuthUserCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: user.Id,
-            action: AuditActions.Logout,
-            entityName: "User",
-            entityId: user.Id);
+            user.Id,
+            AuditActions.Logout,
+            "User",
+            user.Id);
 
         return Result<bool>.Ok(true);
     }
 
     private static string GenerateCode()
-        => RandomNumberGenerator.GetInt32(100000, 999999).ToString();
+    {
+        return RandomNumberGenerator.GetInt32(100000, 999999).ToString();
+    }
 
     private static string HashCode(string code)
     {

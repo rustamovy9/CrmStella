@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+
 namespace EduCrm.Application.DTOs.HomeworkSubmission.Request;
 
 public class GradeHomeworkRequest

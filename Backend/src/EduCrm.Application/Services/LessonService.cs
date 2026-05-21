@@ -3,9 +3,9 @@ using EduCrm.Application.DTOs.Lesson.Request;
 using EduCrm.Application.DTOs.Lesson.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Constants;
 using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
-using EduCrm.Domain.Constants;
 using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
@@ -65,7 +65,7 @@ public class LessonService(
 
         var group = await unitOfWork.Groups.GetByIdAsync(groupId, cancellationToken);
         if (group is null)
-            return Result<List<LessonResponse>>.Fail("Group not found", ErrorType.NotFound);
+            return Result<List<LessonResponse>>.Fail("Group not found");
 
         var lessons = await unitOfWork.Lessons.GetByGroupIdAsync(groupId, cancellationToken);
         var result = lessons.Select(MapToResponse).ToList();
@@ -81,7 +81,7 @@ public class LessonService(
     {
         var group = await unitOfWork.Groups.GetByIdAsync(request.GroupId, cancellationToken);
         if (group is null)
-            return Result<LessonResponse>.Fail("Group not found", ErrorType.NotFound);
+            return Result<LessonResponse>.Fail("Group not found");
 
         if (request.EndTime <= request.StartTime)
             return Result<LessonResponse>.Fail("EndTime must be after StartTime", ErrorType.BadRequest);
@@ -113,10 +113,10 @@ public class LessonService(
         await cache.RemoveByPrefixAsync(LessonCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.CreateLesson,
-            entityName: "Lesson",
-            entityId: lesson.Id,
+            null,
+            AuditActions.CreateLesson,
+            "Lesson",
+            lesson.Id,
             newValues: new
             {
                 lesson.GroupId,
@@ -133,7 +133,7 @@ public class LessonService(
     {
         var lesson = await unitOfWork.Lessons.GetByIdAsync(request.Id, cancellationToken);
         if (lesson is null)
-            return Result<LessonResponse>.Fail("Lesson not found", ErrorType.NotFound);
+            return Result<LessonResponse>.Fail("Lesson not found");
 
         if (request.EndTime <= request.StartTime)
             return Result<LessonResponse>.Fail("EndTime must be after StartTime", ErrorType.BadRequest);
@@ -155,10 +155,10 @@ public class LessonService(
         await cache.RemoveByPrefixAsync(LessonCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.UpdateLesson,
-            entityName: "Lesson",
-            entityId: lesson.Id,
+            null,
+            AuditActions.UpdateLesson,
+            "Lesson",
+            lesson.Id,
             newValues: new
             {
                 lesson.Title,
@@ -172,7 +172,7 @@ public class LessonService(
     {
         var lesson = await unitOfWork.Lessons.GetByIdAsync(id, cancellationToken);
         if (lesson is null)
-            return Result<bool>.Fail("Lesson not found", ErrorType.NotFound);
+            return Result<bool>.Fail("Lesson not found");
 
         await unitOfWork.Lessons.DeleteAsync(id, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -180,10 +180,10 @@ public class LessonService(
         await cache.RemoveByPrefixAsync(LessonCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.DeleteLesson,
-            entityName: "Lesson",
-            entityId: id);
+            null,
+            AuditActions.DeleteLesson,
+            "Lesson",
+            id);
 
         return Result<bool>.Ok(true);
     }

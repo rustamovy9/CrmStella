@@ -36,7 +36,8 @@ public class LessonScoreRepository(AppDbContext context) : ILessonScoreRepositor
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<List<LessonScore>> GetByStudentIdAsync(int studentId, CancellationToken cancellationToken = default)
+    public async Task<List<LessonScore>> GetByStudentIdAsync(int studentId,
+        CancellationToken cancellationToken = default)
     {
         return await context.LessonScores
             .AsNoTracking()
@@ -45,14 +46,16 @@ public class LessonScoreRepository(AppDbContext context) : ILessonScoreRepositor
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<LessonScore?> GetByHomeworkSubmissionIdAsync(int homeworkSubmissionId, CancellationToken cancellationToken = default)
+    public async Task<LessonScore?> GetByHomeworkSubmissionIdAsync(int homeworkSubmissionId,
+        CancellationToken cancellationToken = default)
     {
         return await context.LessonScores
             .AsNoTracking()
             .FirstOrDefaultAsync(ls => ls.HomeworkSubmissionId == homeworkSubmissionId, cancellationToken);
     }
 
-    public async Task<bool> ExistsByLessonAndStudentAsync(int lessonId, int studentId, CancellationToken cancellationToken = default)
+    public async Task<bool> ExistsByLessonAndStudentAsync(int lessonId, int studentId,
+        CancellationToken cancellationToken = default)
     {
         return await context.LessonScores
             .AnyAsync(ls => ls.LessonId == lessonId && ls.StudentId == studentId, cancellationToken);

@@ -14,10 +14,16 @@ public interface IAttendanceService
 
     Task<Result<AttendanceResponse>> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 
-    Task<Result<AttendanceResponse>> CreateAsync(CreateAttendanceRequest request, int mentorUserId,
+    Task<Result<AttendanceResponse>> CreateAsync(
+        CreateAttendanceRequest request,
+        int userId,
+        bool isAdmin,
         CancellationToken cancellationToken = default);
 
-    Task<Result<List<AttendanceResponse>>> BulkCreateAsync(BulkCreateAttendanceRequest request, int mentorUserId,
+    Task<Result<List<AttendanceResponse>>> BulkCreateAsync(
+        BulkCreateAttendanceRequest request,
+        int userId,
+        bool isAdmin,
         CancellationToken cancellationToken = default);
 
     Task<Result<AttendanceResponse>> UpdateAsync(int id, UpdateAttendanceRequest request,

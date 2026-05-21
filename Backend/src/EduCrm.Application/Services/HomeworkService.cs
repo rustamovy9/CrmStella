@@ -44,7 +44,7 @@ public class HomeworkService(
 
         var lesson = await unitOfWork.Lessons.GetByIdAsync(lessonId);
         if (lesson is null)
-            return Result<List<HomeworkListItemResponse>>.Fail("Lesson not found", ErrorType.NotFound);
+            return Result<List<HomeworkListItemResponse>>.Fail("Lesson not found");
 
         var homeworks = await unitOfWork.Homeworks.GetByLessonIdAsync(lessonId);
 
@@ -67,7 +67,7 @@ public class HomeworkService(
         if (homework is null)
         {
             logger.LogWarning("Homework not found: {HomeworkId}", id);
-            return Result<HomeworkResponse>.Fail("Homework not found", ErrorType.NotFound);
+            return Result<HomeworkResponse>.Fail("Homework not found");
         }
 
         var response = MapToResponse(homework);
@@ -112,10 +112,10 @@ public class HomeworkService(
         await cache.RemoveByPrefixAsync(HomeworkCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.CreateHomework,
-            entityName: "Homework",
-            entityId: homework.Id,
+            null,
+            AuditActions.CreateHomework,
+            "Homework",
+            homework.Id,
             newValues: new
             {
                 homework.LessonId,
@@ -132,7 +132,7 @@ public class HomeworkService(
     {
         var homework = await unitOfWork.Homeworks.GetByIdAsync(id);
         if (homework is null)
-            return Result<HomeworkResponse>.Fail("Homework not found", ErrorType.NotFound);
+            return Result<HomeworkResponse>.Fail("Homework not found");
 
         var oldValues = new
         {
@@ -166,12 +166,12 @@ public class HomeworkService(
         await cache.RemoveByPrefixAsync(HomeworkCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.UpdateHomework,
-            entityName: "Homework",
-            entityId: homework.Id,
-            oldValues: oldValues,
-            newValues: new
+            null,
+            AuditActions.UpdateHomework,
+            "Homework",
+            homework.Id,
+            oldValues,
+            new
             {
                 homework.Title,
                 homework.Description,
@@ -187,7 +187,7 @@ public class HomeworkService(
     {
         var homework = await unitOfWork.Homeworks.GetByIdAsync(id);
         if (homework is null)
-            return Result<bool>.Fail("Homework not found", ErrorType.NotFound);
+            return Result<bool>.Fail("Homework not found");
 
         await unitOfWork.Homeworks.DeleteAsync(id);
         await unitOfWork.SaveChangesAsync();
@@ -195,11 +195,11 @@ public class HomeworkService(
         await cache.RemoveByPrefixAsync(HomeworkCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.DeleteHomework,
-            entityName: "Homework",
-            entityId: id,
-            oldValues: new
+            null,
+            AuditActions.DeleteHomework,
+            "Homework",
+            id,
+            new
             {
                 homework.Title,
                 homework.LessonId
@@ -212,7 +212,7 @@ public class HomeworkService(
     {
         var homework = await unitOfWork.Homeworks.GetByIdAsync(id);
         if (homework is null)
-            return Result<bool>.Fail("Homework not found", ErrorType.NotFound);
+            return Result<bool>.Fail("Homework not found");
 
         var oldStatus = homework.IsActive;
 
@@ -224,42 +224,48 @@ public class HomeworkService(
         await cache.RemoveByPrefixAsync(HomeworkCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.SetHomeworkStatus,
-            entityName: "Homework",
-            entityId: homework.Id,
-            oldValues: new { IsActive = oldStatus },
-            newValues: new { homework.IsActive });
+            null,
+            AuditActions.SetHomeworkStatus,
+            "Homework",
+            homework.Id,
+            new { IsActive = oldStatus },
+            new { homework.IsActive });
 
         return Result<bool>.Ok(true);
     }
 
-    private static HomeworkResponse MapToResponse(Homework h) => new()
+    private static HomeworkResponse MapToResponse(Homework h)
     {
-        Id = h.Id,
-        LessonId = h.LessonId,
-        LessonTitle = h.Lesson?.Title ?? string.Empty,
-        Title = h.Title,
-        Description = h.Description,
-        FileUrl = h.FileUrl,
-        Deadline = h.Deadline,
-        MaxScore = h.MaxScore,
-        IsActive = h.IsActive,
-        IsOverdue = h.Deadline < DateTime.UtcNow,
-        CreatedAt = h.CreatedAt,
-        UpdatedAt = h.UpdatedAt,
-        SubmissionsCount = h.Submissions?.Count ?? 0
-    };
+        return new HomeworkResponse
+        {
+            Id = h.Id,
+            LessonId = h.LessonId,
+            LessonTitle = h.Lesson?.Title ?? string.Empty,
+            Title = h.Title,
+            Description = h.Description,
+            FileUrl = h.FileUrl,
+            Deadline = h.Deadline,
+            MaxScore = h.MaxScore,
+            IsActive = h.IsActive,
+            IsOverdue = h.Deadline < DateTime.UtcNow,
+            CreatedAt = h.CreatedAt,
+            UpdatedAt = h.UpdatedAt,
+            SubmissionsCount = h.Submissions?.Count ?? 0
+        };
+    }
 
-    private static HomeworkListItemResponse MapToListItem(Homework h) => new()
+    private static HomeworkListItemResponse MapToListItem(Homework h)
     {
-        Id = h.Id,
-        LessonId = h.LessonId,
-        LessonTitle = h.Lesson?.Title ?? string.Empty,
-        Title = h.Title,
-        Deadline = h.Deadline,
-        MaxScore = h.MaxScore,
-        IsActive = h.IsActive,
-        IsOverdue = h.Deadline < DateTime.UtcNow
-    };
+        return new HomeworkListItemResponse
+        {
+            Id = h.Id,
+            LessonId = h.LessonId,
+            LessonTitle = h.Lesson?.Title ?? string.Empty,
+            Title = h.Title,
+            Deadline = h.Deadline,
+            MaxScore = h.MaxScore,
+            IsActive = h.IsActive,
+            IsOverdue = h.Deadline < DateTime.UtcNow
+        };
+    }
 }

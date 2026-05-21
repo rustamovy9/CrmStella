@@ -48,14 +48,14 @@ public class HomeworkSubmissionController(IHomeworkSubmissionService submissionS
 
         return Ok(result);
     }
-    
+
     [HttpPost("grade")]
     [Authorize(Roles = "Admin,Mentor")] // Доступ открыт обеим ролям
     public async Task<IActionResult> Grade([FromBody] GradeHomeworkRequest request)
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        
-        bool isAdmin = User.IsInRole("Admin");
+
+        var isAdmin = User.IsInRole("Admin");
 
         var result = await submissionService.GradeAsync(request, userId, isAdmin);
 
