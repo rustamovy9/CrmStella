@@ -4,6 +4,7 @@ using EduCrm.Application.DTOs.ExamResult.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Constants;
+using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -45,7 +46,7 @@ public class ExamResultService(
         if (result is null)
         {
             logger.LogWarning("ExamResult not found: {ResultId}", id);
-            return Result<ExamResultResponse>.Fail("Exam result not found", ErrorType.NotFound);
+            return Result<ExamResultResponse>.Fail("Exam result not found");
         }
 
         var response = MapToResponse(result);
@@ -60,11 +61,11 @@ public class ExamResultService(
     {
         var exam = await unitOfWork.Exams.GetByIdAsync(request.ExamId);
         if (exam is null)
-            return Result<ExamResultResponse>.Fail("Exam not found", ErrorType.NotFound);
+            return Result<ExamResultResponse>.Fail("Exam not found");
 
         var student = await unitOfWork.Students.GetByIdAsync(request.StudentId);
         if (student is null)
-            return Result<ExamResultResponse>.Fail("Student not found", ErrorType.NotFound);
+            return Result<ExamResultResponse>.Fail("Student not found");
 
         if (request.Score > exam.MaxScore)
             return Result<ExamResultResponse>.Fail(
@@ -81,7 +82,7 @@ public class ExamResultService(
 
         var mentor = await unitOfWork.Mentors.GetByUserIdAsync(mentorUserId);
 
-        var examResult = new Domain.Entities.ExamResult
+        var examResult = new ExamResult
         {
             ExamId = request.ExamId,
             StudentId = request.StudentId,
@@ -100,10 +101,10 @@ public class ExamResultService(
         await cache.RemoveByPrefixAsync(ExamResultCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: mentorUserId,
-            action: AuditActions.CreateExamResult,
-            entityName: "ExamResult",
-            entityId: examResult.Id,
+            mentorUserId,
+            AuditActions.CreateExamResult,
+            "ExamResult",
+            examResult.Id,
             newValues: new
             {
                 examResult.ExamId,
@@ -127,7 +128,7 @@ public class ExamResultService(
         if (examResult is null)
         {
             logger.LogWarning("Update failed - exam result not found: {ResultId}", id);
-            return Result<ExamResultResponse>.Fail("Exam result not found", ErrorType.NotFound);
+            return Result<ExamResultResponse>.Fail("Exam result not found");
         }
 
         var oldValues = new
@@ -165,12 +166,12 @@ public class ExamResultService(
         await cache.RemoveByPrefixAsync(ExamResultCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: mentorUserId,
-            action: AuditActions.UpdateExamResult,
-            entityName: "ExamResult",
-            entityId: examResult.Id,
-            oldValues: oldValues,
-            newValues: new
+            mentorUserId,
+            AuditActions.UpdateExamResult,
+            "ExamResult",
+            examResult.Id,
+            oldValues,
+            new
             {
                 examResult.Score,
                 examResult.Status,
@@ -180,19 +181,22 @@ public class ExamResultService(
         return Result<ExamResultResponse>.Ok(MapToResponse(examResult));
     }
 
-    private static ExamResultResponse MapToResponse(Domain.Entities.ExamResult r) => new()
+    private static ExamResultResponse MapToResponse(ExamResult r)
     {
-        Id = r.Id,
-        ExamId = r.ExamId,
-        ExamTitle = r.Exam?.Title ?? string.Empty,
-        StudentId = r.StudentId,
-        StudentName = r.Student?.User.FullName ?? string.Empty,
-        Score = r.Score,
-        Status = r.Status.ToString(),
-        Comment = r.Comment,
-        ScoredByMentorId = r.ScoredByMentorId,
-        ScoredByMentorName = r.ScoredByMentor?.User.FullName,
-        ScoredAt = r.ScoredAt,
-        UpdatedAt = r.UpdatedAt
-    };
+        return new ExamResultResponse
+        {
+            Id = r.Id,
+            ExamId = r.ExamId,
+            ExamTitle = r.Exam?.Title ?? string.Empty,
+            StudentId = r.StudentId,
+            StudentName = r.Student?.User.FullName ?? string.Empty,
+            Score = r.Score,
+            Status = r.Status.ToString(),
+            Comment = r.Comment,
+            ScoredByMentorId = r.ScoredByMentorId,
+            ScoredByMentorName = r.ScoredByMentor?.User.FullName,
+            ScoredAt = r.ScoredAt,
+            UpdatedAt = r.UpdatedAt
+        };
+    }
 }

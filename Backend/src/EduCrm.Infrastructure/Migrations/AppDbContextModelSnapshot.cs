@@ -3,20 +3,17 @@ using System;
 using EduCrm.Infrastructure.Persistence.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
-namespace EduCrm.Infrastructure.Persistence.Migrations
+namespace EduCrm.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260518133900_Set CreatedAt timestamp for Group entity on creation")]
-    partial class SetCreatedAttimestampforGroupentityoncreation
+    partial class AppDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -195,6 +192,9 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
 
                     b.Property<int>("GroupId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
 
                     b.Property<decimal>("MaxScore")
                         .HasPrecision(5, 2)
@@ -600,8 +600,8 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(1000)");
 
                     b.Property<decimal>("Score")
-                        .HasPrecision(3, 1)
-                        .HasColumnType("numeric(3,1)");
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
 
                     b.Property<DateTime>("ScoredAt")
                         .HasColumnType("timestamp with time zone");
@@ -642,13 +642,18 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("HireDate")
-                        .HasColumnType("timestamp with time zone");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<string>("Specialization")
-                        .HasColumnType("text");
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
 
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
@@ -792,8 +797,8 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("DateOfBirth")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<DateOnly?>("DateOfBirth")
+                        .HasColumnType("date");
 
                     b.Property<string>("GithubUrl")
                         .HasMaxLength(300)
@@ -892,13 +897,17 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("Balance")
-                        .HasColumnType("numeric");
+                        .HasColumnType("decimal(18,2)");
 
                     b.Property<DateTime>("EnrolledAt")
-                        .HasColumnType("timestamp with time zone");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("CURRENT_TIMESTAMP");
 
                     b.Property<bool>("IsActive")
-                        .HasColumnType("boolean");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
 
                     b.Property<int>("UserId")
                         .HasColumnType("integer");
@@ -920,40 +929,68 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("AttendanceRate")
-                        .HasColumnType("numeric");
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<int>("AttendedLessons")
-                        .HasColumnType("integer");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<decimal>("AverageHomeworkScore")
-                        .HasColumnType("numeric");
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<decimal>("AverageLessonScore")
-                        .HasColumnType("numeric");
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<int>("ExamsFailed")
-                        .HasColumnType("integer");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("ExamsPassed")
-                        .HasColumnType("integer");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("GroupId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("GroupId1")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("IsRecommendedForCertificate")
-                        .HasColumnType("boolean");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<decimal>("OverallProgressPercent")
-                        .HasColumnType("numeric");
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<int>("StudentId")
                         .HasColumnType("integer");
 
                     b.Property<decimal>("TotalBonusScore")
-                        .HasColumnType("numeric");
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasDefaultValue(0m);
 
                     b.Property<int>("TotalLessons")
-                        .HasColumnType("integer");
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -962,9 +999,12 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("GroupId");
 
-                    b.HasIndex("StudentId");
+                    b.HasIndex("GroupId1");
 
-                    b.ToTable("StudentProgresses");
+                    b.HasIndex("StudentId", "GroupId")
+                        .IsUnique();
+
+                    b.ToTable("StudentProgress", (string)null);
                 });
 
             modelBuilder.Entity("EduCrm.Domain.Entities.User", b =>
@@ -1095,34 +1135,44 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<decimal>("AttendanceScore")
-                        .HasColumnType("numeric");
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
 
                     b.Property<decimal>("BonusScore")
-                        .HasColumnType("numeric");
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal>("ExamScore")
-                        .HasColumnType("numeric");
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
 
                     b.Property<int>("GroupId")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("GroupId1")
+                        .HasColumnType("integer");
+
                     b.Property<decimal>("HomeworkAverageScore")
-                        .HasColumnType("numeric");
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
 
                     b.Property<decimal>("LessonAverageScore")
-                        .HasColumnType("numeric");
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
 
                     b.Property<string>("MentorComment")
-                        .HasColumnType("text");
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
 
                     b.Property<int>("StudentId")
                         .HasColumnType("integer");
 
                     b.Property<decimal>("TotalScore")
-                        .HasColumnType("numeric");
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1134,9 +1184,12 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("GroupId");
 
-                    b.HasIndex("StudentId");
+                    b.HasIndex("GroupId1");
 
-                    b.ToTable("WeekResults");
+                    b.HasIndex("StudentId", "GroupId", "WeekNumber")
+                        .IsUnique();
+
+                    b.ToTable("WeekResults", (string)null);
                 });
 
             modelBuilder.Entity("EduCrm.Domain.Entities.Attendance", b =>
@@ -1440,10 +1493,14 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("EduCrm.Domain.Entities.StudentProgress", b =>
                 {
                     b.HasOne("EduCrm.Domain.Entities.Group", "Group")
-                        .WithMany("StudentProgresses")
+                        .WithMany()
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("EduCrm.Domain.Entities.Group", null)
+                        .WithMany("StudentProgresses")
+                        .HasForeignKey("GroupId1");
 
                     b.HasOne("EduCrm.Domain.Entities.Student", "Student")
                         .WithMany("StudentProgresses")
@@ -1481,10 +1538,14 @@ namespace EduCrm.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("EduCrm.Domain.Entities.WeekResult", b =>
                 {
                     b.HasOne("EduCrm.Domain.Entities.Group", "Group")
-                        .WithMany("WeekResults")
+                        .WithMany()
                         .HasForeignKey("GroupId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.HasOne("EduCrm.Domain.Entities.Group", null)
+                        .WithMany("WeekResults")
+                        .HasForeignKey("GroupId1");
 
                     b.HasOne("EduCrm.Domain.Entities.Student", "Student")
                         .WithMany("WeekResults")

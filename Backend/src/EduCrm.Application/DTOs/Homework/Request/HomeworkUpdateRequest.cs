@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+
 namespace EduCrm.Application.DTOs.Homework.Request;
 
 public class HomeworkUpdateRequest
@@ -22,8 +23,7 @@ public class HomeworkUpdateRequest
     [MaxLength(500, ErrorMessage = "FileUrl cannot exceed 500 characters")]
     public string? FileUrl { get; set; }
 
-    [Required]
-    public DateTime Deadline { get; set; }
+    [Required] public DateTime Deadline { get; set; }
 
     [Range(1, 100, ErrorMessage = "MaxScore must be between 1 and 100")]
     public int MaxScore { get; set; }

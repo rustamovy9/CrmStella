@@ -22,7 +22,7 @@ public class LessonScoreController(ILessonScoreService lessonScoreService) : Bas
 
         return Ok(result);
     }
-    
+
     [HttpGet("{id:int}")]
     [Authorize(Roles = "Admin,Mentor")]
     public async Task<IActionResult> GetById(int id)
@@ -34,7 +34,7 @@ public class LessonScoreController(ILessonScoreService lessonScoreService) : Bas
 
         return Ok(result);
     }
-    
+
     [HttpGet("lesson/{lessonId:int}")]
     [Authorize(Roles = "Admin,Mentor")]
     public async Task<IActionResult> GetByLesson(int lessonId)
@@ -46,7 +46,7 @@ public class LessonScoreController(ILessonScoreService lessonScoreService) : Bas
 
         return Ok(result);
     }
-    
+
     [HttpGet("student/{studentId:int}")]
     [Authorize(Roles = "Admin,Mentor,Student")]
     public async Task<IActionResult> GetByStudent(int studentId)
@@ -58,14 +58,14 @@ public class LessonScoreController(ILessonScoreService lessonScoreService) : Bas
 
         return Ok(result);
     }
-    
+
     [HttpPost]
     [Authorize(Roles = "Admin,Mentor")]
     public async Task<IActionResult> Create([FromBody] CreateLessonScoreRequest request)
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        
-        bool isAdmin = User.IsInRole("Admin");
+
+        var isAdmin = User.IsInRole("Admin");
 
         var result = await lessonScoreService.CreateAsync(request, userId, isAdmin);
 
@@ -86,7 +86,7 @@ public class LessonScoreController(ILessonScoreService lessonScoreService) : Bas
 
         return Ok(result);
     }
-    
+
     [HttpDelete("{id:int}")]
     [Authorize(Roles = "Admin")]
     public async Task<IActionResult> Delete(int id)

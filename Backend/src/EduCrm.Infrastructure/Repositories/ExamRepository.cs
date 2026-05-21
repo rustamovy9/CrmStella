@@ -9,31 +9,39 @@ public class ExamRepository(AppDbContext context) : IExamRepository
 {
     public async Task<List<Exam>> GetAllAsync(
         CancellationToken cancellationToken = default)
-        => await context.Exams
+    {
+        return await context.Exams
             .Include(e => e.Group)
             .OrderByDescending(e => e.ExamDate)
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<List<Exam>> GetByGroupAsync(
         int groupId,
         CancellationToken cancellationToken = default)
-        => await context.Exams
+    {
+        return await context.Exams
             .Include(e => e.Group)
             .Where(e => e.GroupId == groupId)
             .OrderByDescending(e => e.ExamDate)
             .ToListAsync(cancellationToken);
+    }
 
     public async Task<Exam?> GetByIdAsync(
         int id,
         CancellationToken cancellationToken = default)
-        => await context.Exams
+    {
+        return await context.Exams
             .Include(e => e.Group)
             .FirstOrDefaultAsync(e => e.Id == id, cancellationToken);
+    }
 
     public async Task CreateAsync(
         Exam exam,
         CancellationToken cancellationToken = default)
-        => await context.Exams.AddAsync(exam, cancellationToken);
+    {
+        await context.Exams.AddAsync(exam, cancellationToken);
+    }
 
     public Task UpdateAsync(
         Exam exam,

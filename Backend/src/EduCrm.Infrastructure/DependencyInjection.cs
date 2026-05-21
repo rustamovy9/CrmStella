@@ -45,6 +45,7 @@ public static class DependencyInjection
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IMentorService, MentorService>();
         services.AddScoped<IStudentService, StudentService>();
+        services.AddScoped<IStudentProgressService, StudentProgressService>();
 
         services.AddScoped<ICourseService, CourseService>();
         services.AddScoped<IGroupService, GroupService>();
@@ -58,16 +59,18 @@ public static class DependencyInjection
         services.AddScoped<IFileStorageService, FileStorageService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IProfileService, ProfileService>();
+
         //Exam module
         services.AddScoped<IExamService, ExamService>();
         services.AddScoped<IExamResultService, ExamResultService>();
         services.AddScoped<IAuditLogService, AuditLogService>();
+
         // Homework module
         services.AddScoped<IHomeworkService, HomeworkService>();
         services.AddScoped<IHomeworkSubmissionService, HomeworkSubmissionService>();
         services.AddScoped<IWeekResultService, WeekResultService>();
         services.AddScoped<IUserService, UserService>();
-        services.AddScoped<INotificationService , NotificationService>();
+        services.AddScoped<INotificationService, NotificationService>();
 
         // Settings
         services.Configure<EmailSettings>(

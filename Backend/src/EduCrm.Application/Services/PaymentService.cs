@@ -262,7 +262,7 @@ public class PaymentService(
             AuditActions.DeletePayment,
             nameof(Payment),
             id,
-            oldValues: payment
+            payment
         );
 
         await cache.RemoveByPrefixAsync(PaymentCachePrefix);
@@ -303,39 +303,45 @@ public class PaymentService(
         return Result<PaymentResponse>.Ok(MapToResponse(payment));
     }
 
-    
-    private static PaymentResponse MapToResponse(Payment p) => new()
-    {
-        Id = p.Id,
-        StudentId = p.StudentId,
-        StudentFullName = p.Student?.User?.FullName ?? "",
-        GroupId = p.GroupId,
-        GroupName = p.Group?.Name ?? "",
-        Amount = p.Amount,
-        Type = p.Type.ToString(),
-        Method = p.Method.ToString(),
-        Date = p.Date,
-        DueDate = p.DueDate,
-        IsConfirmed = p.IsConfirmed,
-        Note = p.Note,
-        ReceiptUrl = p.ReceiptUrl,
-        CreatedByUserId = p.CreatedByUserId,
-        CreatedByFullName = p.CreatedByUser?.FullName,
-        CreatedAt = p.CreatedAt
-    };
 
-    private static PaymentListItemResponse MapToListItem(Payment p) => new()
+    private static PaymentResponse MapToResponse(Payment p)
     {
-        Id = p.Id,
-        StudentId = p.StudentId,
-        StudentFullName = p.Student?.User?.FullName ?? "",
-        GroupId = p.GroupId,
-        GroupName = p.Group?.Name ?? "",
-        Amount = p.Amount,
-        Type = p.Type.ToString(),
-        Method = p.Method.ToString(),
-        Date = p.Date,
-        IsConfirmed = p.IsConfirmed,
-        CreatedAt = p.CreatedAt
-    };
+        return new PaymentResponse
+        {
+            Id = p.Id,
+            StudentId = p.StudentId,
+            StudentFullName = p.Student?.User?.FullName ?? "",
+            GroupId = p.GroupId,
+            GroupName = p.Group?.Name ?? "",
+            Amount = p.Amount,
+            Type = p.Type.ToString(),
+            Method = p.Method.ToString(),
+            Date = p.Date,
+            DueDate = p.DueDate,
+            IsConfirmed = p.IsConfirmed,
+            Note = p.Note,
+            ReceiptUrl = p.ReceiptUrl,
+            CreatedByUserId = p.CreatedByUserId,
+            CreatedByFullName = p.CreatedByUser?.FullName,
+            CreatedAt = p.CreatedAt
+        };
+    }
+
+    private static PaymentListItemResponse MapToListItem(Payment p)
+    {
+        return new PaymentListItemResponse
+        {
+            Id = p.Id,
+            StudentId = p.StudentId,
+            StudentFullName = p.Student?.User?.FullName ?? "",
+            GroupId = p.GroupId,
+            GroupName = p.Group?.Name ?? "",
+            Amount = p.Amount,
+            Type = p.Type.ToString(),
+            Method = p.Method.ToString(),
+            Date = p.Date,
+            IsConfirmed = p.IsConfirmed,
+            CreatedAt = p.CreatedAt
+        };
+    }
 }

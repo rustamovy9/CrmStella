@@ -1,6 +1,5 @@
 ﻿using EduCrm.Application.DTOs.Notification.Request;
 using EduCrm.Application.Interfaces.Services;
-using EduCrm.Application.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -70,7 +69,8 @@ public class NotificationController : BaseController
 
     [HttpPost]
     [Authorize(Roles = "Admin,Mentor")]
-    public async Task<IActionResult> Create([FromBody] CreateNotificationRequest request, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Create([FromBody] CreateNotificationRequest request,
+        CancellationToken cancellationToken = default)
     {
         var result = await _notificationService.CreateAsync(request, cancellationToken);
         if (!result.IsSuccess)
@@ -81,7 +81,8 @@ public class NotificationController : BaseController
 
     [HttpPut]
     [Authorize(Roles = "Admin")]
-    public async Task<IActionResult> Update([FromBody] UpdateNotificationRequest request, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Update([FromBody] UpdateNotificationRequest request,
+        CancellationToken cancellationToken = default)
     {
         var result = await _notificationService.UpdateAsync(request, cancellationToken);
         if (!result.IsSuccess)

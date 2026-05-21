@@ -4,6 +4,7 @@ using EduCrm.Application.DTOs.Exam.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Constants;
+using EduCrm.Domain.Entities;
 using EduCrm.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
@@ -65,7 +66,7 @@ public class ExamService(
         if (exam is null)
         {
             logger.LogWarning("Exam not found: {ExamId}", id);
-            return Result<ExamResponse>.Fail("Exam not found", ErrorType.NotFound);
+            return Result<ExamResponse>.Fail("Exam not found");
         }
 
         var response = MapToResponse(exam);
@@ -74,7 +75,7 @@ public class ExamService(
         return Result<ExamResponse>.Ok(response);
     }
 
-  
+
     public async Task<Result<ExamResponse>> CreateAsync(CreateExamRequest request)
     {
         var group = await unitOfWork.Groups.GetByIdAsync(request.GroupId);
@@ -92,7 +93,7 @@ public class ExamService(
             return Result<ExamResponse>.Fail(
                 "ExamDate must be in the future", ErrorType.BadRequest);
 
-        var exam = new Domain.Entities.Exam
+        var exam = new Exam
         {
             GroupId = request.GroupId,
             Title = request.Title.Trim(),
@@ -110,10 +111,10 @@ public class ExamService(
         await cache.RemoveByPrefixAsync(ExamCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.CreateExam,
-            entityName: "Exam",
-            entityId: exam.Id,
+            null,
+            AuditActions.CreateExam,
+            "Exam",
+            exam.Id,
             newValues: new
             {
                 exam.GroupId,
@@ -131,14 +132,14 @@ public class ExamService(
         return Result<ExamResponse>.Ok(MapToResponse(created!));
     }
 
-    
+
     public async Task<Result<ExamResponse>> UpdateAsync(int id, UpdateExamRequest request)
     {
         var exam = await unitOfWork.Exams.GetByIdAsync(id);
         if (exam is null)
         {
             logger.LogWarning("Update failed - exam not found: {ExamId}", id);
-            return Result<ExamResponse>.Fail("Exam not found", ErrorType.NotFound);
+            return Result<ExamResponse>.Fail("Exam not found");
         }
 
         var oldValues = new
@@ -181,12 +182,12 @@ public class ExamService(
         await cache.RemoveByPrefixAsync(ExamCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.UpdateExam,
-            entityName: "Exam",
-            entityId: exam.Id,
-            oldValues: oldValues,
-            newValues: new
+            null,
+            AuditActions.UpdateExam,
+            "Exam",
+            exam.Id,
+            oldValues,
+            new
             {
                 exam.Title,
                 exam.Description,
@@ -200,14 +201,14 @@ public class ExamService(
         return Result<ExamResponse>.Ok(MapToResponse(exam));
     }
 
-    
+
     public async Task<Result<bool>> SetStatusAsync(int id, SetExamStatusRequest request)
     {
         var exam = await unitOfWork.Exams.GetByIdAsync(id);
         if (exam is null)
         {
             logger.LogWarning("SetStatus failed - exam not found: {ExamId}", id);
-            return Result<bool>.Fail("Exam not found", ErrorType.NotFound);
+            return Result<bool>.Fail("Exam not found");
         }
 
         var oldStatus = exam.IsActive;
@@ -220,44 +221,50 @@ public class ExamService(
         await cache.RemoveByPrefixAsync(ExamCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.SetExamStatus,
-            entityName: "Exam",
-            entityId: exam.Id,
-            oldValues: new { IsActive = oldStatus },
-            newValues: new { exam.IsActive });
+            null,
+            AuditActions.SetExamStatus,
+            "Exam",
+            exam.Id,
+            new { IsActive = oldStatus },
+            new { exam.IsActive });
 
         logger.LogInformation(
             "Exam status changed: {ExamId} IsActive: {IsActive}", id, request.IsActive);
 
         return Result<bool>.Ok(true);
     }
-    
-    
-    private static ExamResponse MapToResponse(Domain.Entities.Exam e) => new()
-    {
-        Id = e.Id,
-        GroupId = e.GroupId,
-        GroupName = e.Group?.Name ?? string.Empty,
-        Title = e.Title,
-        Description = e.Description,
-        ExamDate = e.ExamDate,
-        MaxScore = e.MaxScore,
-        PassScore = e.PassScore,
-        IsActive = e.IsActive,
-        IsFinished = e.ExamDate < DateTime.UtcNow,
-        CreatedAt = e.CreatedAt
-    };
 
-    private static ExamListItemResponse MapToListItem(Domain.Entities.Exam e) => new()
+
+    private static ExamResponse MapToResponse(Exam e)
     {
-        Id = e.Id,
-        GroupId = e.GroupId,
-        GroupName = e.Group?.Name ?? string.Empty,
-        Title = e.Title,
-        ExamDate = e.ExamDate,
-        PassScore = e.PassScore,
-        IsActive = e.IsActive,
-        IsFinished = e.ExamDate < DateTime.UtcNow
-    };
+        return new ExamResponse
+        {
+            Id = e.Id,
+            GroupId = e.GroupId,
+            GroupName = e.Group?.Name ?? string.Empty,
+            Title = e.Title,
+            Description = e.Description,
+            ExamDate = e.ExamDate,
+            MaxScore = e.MaxScore,
+            PassScore = e.PassScore,
+            IsActive = e.IsActive,
+            IsFinished = e.ExamDate < DateTime.UtcNow,
+            CreatedAt = e.CreatedAt
+        };
+    }
+
+    private static ExamListItemResponse MapToListItem(Exam e)
+    {
+        return new ExamListItemResponse
+        {
+            Id = e.Id,
+            GroupId = e.GroupId,
+            GroupName = e.Group?.Name ?? string.Empty,
+            Title = e.Title,
+            ExamDate = e.ExamDate,
+            PassScore = e.PassScore,
+            IsActive = e.IsActive,
+            IsFinished = e.ExamDate < DateTime.UtcNow
+        };
+    }
 }

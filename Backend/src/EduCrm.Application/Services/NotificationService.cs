@@ -57,7 +57,8 @@ public class NotificationService(
         return Result<NotificationResponse>.Ok(response);
     }
 
-    public async Task<Result<List<NotificationResponse>>> GetByUserIdAsync(int userId, CancellationToken cancellationToken = default)
+    public async Task<Result<List<NotificationResponse>>> GetByUserIdAsync(int userId,
+        CancellationToken cancellationToken = default)
     {
         var cacheKey = $"{NotificationCachePrefix}user:{userId}";
 
@@ -77,7 +78,7 @@ public class NotificationService(
 
         return Result<List<NotificationResponse>>.Ok(result);
     }
-    
+
     public async Task<Result<List<NotificationResponse>>> GetUnreadByUserIdAsync(
         int userId,
         CancellationToken cancellationToken = default)
@@ -92,7 +93,7 @@ public class NotificationService(
 
         return Result<List<NotificationResponse>>.Ok(result);
     }
-    
+
     public async Task<Result<int>> GetUnreadCountAsync(
         int userId,
         CancellationToken cancellationToken = default)
@@ -106,7 +107,8 @@ public class NotificationService(
         return Result<int>.Ok(count);
     }
 
-    public async Task<Result<NotificationResponse>> CreateAsync(CreateNotificationRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result<NotificationResponse>> CreateAsync(CreateNotificationRequest request,
+        CancellationToken cancellationToken = default)
     {
         var user = await unitOfWork.Users.GetByIdAsync(request.UserId, cancellationToken);
         if (user is null)
@@ -126,10 +128,10 @@ public class NotificationService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.CreateNotification,
-            entityName: nameof(Notification),
-            entityId: notification.Id,
+            null,
+            AuditActions.CreateNotification,
+            nameof(Notification),
+            notification.Id,
             newValues: request
         );
 
@@ -138,12 +140,12 @@ public class NotificationService(
             var subject = notification.Title;
 
             var emailBody = $"""
-                <h2>{notification.Title}</h2>
-                <p>{notification.Message}</p>
-                <hr/>
-                <p>Type: {notification.Type}</p>
-                <p>Sent: {notification.CreatedAt:dd MMM yyyy HH:mm} UTC</p>
-            """;
+                                 <h2>{notification.Title}</h2>
+                                 <p>{notification.Message}</p>
+                                 <hr/>
+                                 <p>Type: {notification.Type}</p>
+                                 <p>Sent: {notification.CreatedAt:dd MMM yyyy HH:mm} UTC</p>
+                             """;
 
             await emailService.SendAsync(user.Email, subject, emailBody);
 
@@ -159,7 +161,8 @@ public class NotificationService(
         return Result<NotificationResponse>.Ok(MapToResponse(notification));
     }
 
-    public async Task<Result<NotificationResponse>> UpdateAsync(UpdateNotificationRequest request, CancellationToken cancellationToken = default)
+    public async Task<Result<NotificationResponse>> UpdateAsync(UpdateNotificationRequest request,
+        CancellationToken cancellationToken = default)
     {
         var notification = await unitOfWork.Notifications.GetByIdAsync(request.Id, cancellationToken);
         if (notification is null)
@@ -185,12 +188,12 @@ public class NotificationService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.UpdateNotification,
-            entityName: nameof(Notification),
-            entityId: notification.Id,
-            oldValues: oldValues,
-            newValues: request
+            null,
+            AuditActions.UpdateNotification,
+            nameof(Notification),
+            notification.Id,
+            oldValues,
+            request
         );
 
         await cache.RemoveByPrefixAsync(NotificationCachePrefix);
@@ -208,11 +211,11 @@ public class NotificationService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.DeleteNotification,
-            entityName: nameof(Notification),
-            entityId: id,
-            oldValues: notification
+            null,
+            AuditActions.DeleteNotification,
+            nameof(Notification),
+            id,
+            notification
         );
 
         await cache.RemoveByPrefixAsync(NotificationCachePrefix);
@@ -232,12 +235,12 @@ public class NotificationService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(
-            userId: notification.UserId,
-            action: AuditActions.MarkNotificationAsRead,
-            entityName: nameof(Notification),
-            entityId: id,
-            oldValues: oldValues,
-            newValues: new { IsRead = true }
+            notification.UserId,
+            AuditActions.MarkNotificationAsRead,
+            nameof(Notification),
+            id,
+            oldValues,
+            new { IsRead = true }
         );
 
         await cache.RemoveByPrefixAsync(NotificationCachePrefix);
@@ -255,10 +258,10 @@ public class NotificationService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(
-            userId: userId,
-            action: AuditActions.MarkAllNotificationsAsRead,
-            entityName: nameof(Notification),
-            entityId: null,
+            userId,
+            AuditActions.MarkAllNotificationsAsRead,
+            nameof(Notification),
+            null,
             newValues: new { userId }
         );
 

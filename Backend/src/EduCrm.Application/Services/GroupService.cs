@@ -110,14 +110,17 @@ public class GroupService(
 
         await unitOfWork.Groups.CreateAsync(group);
         await unitOfWork.SaveChangesAsync();
+        
+        await cache.RemoveByPrefixAsync("groups:");
+        await cache.RemoveAsync("groups:list");
 
         await cache.RemoveByPrefixAsync(GroupCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.CreateGroup,
-            entityName: "Group",
-            entityId: group.Id,
+            null,
+            AuditActions.CreateGroup,
+            "Group",
+            group.Id,
             newValues: new
             {
                 group.Name,
@@ -182,12 +185,12 @@ public class GroupService(
         await cache.RemoveByPrefixAsync(GroupCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.UpdateGroup,
-            entityName: "Group",
-            entityId: group.Id,
-            oldValues: oldValues,
-            newValues: new
+            null,
+            AuditActions.UpdateGroup,
+            "Group",
+            group.Id,
+            oldValues,
+            new
             {
                 group.Name,
                 group.MentorId,
@@ -220,12 +223,12 @@ public class GroupService(
         await cache.RemoveByPrefixAsync(GroupCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.SetGroupStatus,
-            entityName: "Group",
-            entityId: group.Id,
-            oldValues: new { Status = oldStatus },
-            newValues: new { group.Status });
+            null,
+            AuditActions.SetGroupStatus,
+            "Group",
+            group.Id,
+            new { Status = oldStatus },
+            new { group.Status });
 
         logger.LogInformation("Group status changed: {GroupId} Status: {Status}", id, group.Status);
 
@@ -246,7 +249,8 @@ public class GroupService(
             EndDate = g.EndDate,
             MaxStudents = g.MaxStudents,
             ActiveStudentsCount = g.GroupStudents?.Count(gs => gs.IsActive) ?? 0,
-            Status = g.Status.ToString()
+            Status = g.Status.ToString(),
+            CreatedAt = g.CreatedAt
         };
     }
 }

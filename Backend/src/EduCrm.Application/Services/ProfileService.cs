@@ -179,7 +179,7 @@ public class ProfileService(
             AuditActions.DeleteProfile,
             nameof(Profile),
             profile.Id,
-            oldValues: profile
+            profile
         );
 
         await cache.RemoveByPrefixAsync(ProfileCachePrefix);

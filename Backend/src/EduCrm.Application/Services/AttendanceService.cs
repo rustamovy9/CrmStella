@@ -83,132 +83,182 @@ public class AttendanceService(
     }
 
     public async Task<Result<AttendanceResponse>> CreateAsync(
-        CreateAttendanceRequest request,
-        int mentorUserId,
-        CancellationToken cancellationToken = default)
+    CreateAttendanceRequest request,
+    int userId,
+    bool isAdmin,
+    CancellationToken cancellationToken = default)
+{
+    var lesson = await unitOfWork.Lessons.GetByIdAsync(request.LessonId, cancellationToken);
+    if (lesson is null)
+        return Result<AttendanceResponse>.Fail("Lesson not found");
+
+    var student = await unitOfWork.Students.GetByIdAsync(request.StudentId, cancellationToken);
+    if (student is null)
+        return Result<AttendanceResponse>.Fail("Student not found");
+
+    int? mentorId = null;
+
+    if (!isAdmin)
     {
-        var lesson = await unitOfWork.Lessons.GetByIdAsync(request.LessonId, cancellationToken);
-        if (lesson is null)
-            return Result<AttendanceResponse>.Fail("Lesson not found");
+        var mentor = await unitOfWork.Mentors.GetByUserIdAsync(userId, cancellationToken);
 
-        var student = await unitOfWork.Students.GetByIdAsync(request.StudentId, cancellationToken);
-        if (student is null)
-            return Result<AttendanceResponse>.Fail("Student not found");
-
-        var mentor = await unitOfWork.Mentors.GetByUserIdAsync(mentorUserId, cancellationToken);
         if (mentor is null)
         {
-            logger.LogWarning("Mentor not found: {UserId}", mentorUserId);
+            logger.LogWarning("Mentor not found: {UserId}", userId);
             return Result<AttendanceResponse>.Fail("Mentor not found");
         }
 
+        mentorId = mentor.Id;
+    }
+
+    var exists = await unitOfWork.Attendances.ExistsAsync(
+        request.LessonId,
+        request.StudentId,
+        cancellationToken);
+
+    if (exists)
+    {
+        return Result<AttendanceResponse>.Fail(
+            "Attendance already exists",
+            ErrorType.Conflict);
+    }
+
+    var attendance = new Attendance
+    {
+        LessonId = request.LessonId,
+        StudentId = request.StudentId,
+        Status = request.Status,
+        AbsenceReason = request.AbsenceReason?.Trim(),
+        MentorNote = request.MentorNote?.Trim(),
+        MarkedByMentorId = mentorId,
+        MarkedAt = DateTime.UtcNow
+    };
+
+    await unitOfWork.Attendances.CreateAsync(attendance, cancellationToken);
+    await unitOfWork.SaveChangesAsync(cancellationToken);
+
+    await auditLogService.LogAsync(
+        userId,
+        AuditActions.MarkAttendance,
+        nameof(Attendance),
+        attendance.Id,
+        newValues: new
+        {
+            attendance.LessonId,
+            attendance.StudentId,
+            attendance.Status,
+            attendance.MarkedByMentorId
+        });
+
+    await cache.RemoveByPrefixAsync(AttendanceCachePrefix);
+
+    var created = await unitOfWork.Attendances
+        .GetByIdAsync(attendance.Id, cancellationToken);
+
+    return Result<AttendanceResponse>.Ok(MapToResponse(created!));
+}
+
+    public async Task<Result<List<AttendanceResponse>>> BulkCreateAsync(
+    BulkCreateAttendanceRequest request,
+    int userId,
+    bool isAdmin,
+    CancellationToken cancellationToken = default)
+{
+    var lesson = await unitOfWork.Lessons.GetByIdAsync(
+        request.LessonId,
+        cancellationToken);
+
+    if (lesson is null)
+        return Result<List<AttendanceResponse>>
+            .Fail("Lesson not found");
+
+    int? mentorId = null;
+
+    if (!isAdmin)
+    {
+        var mentor = await unitOfWork.Mentors.GetByUserIdAsync(
+            userId,
+            cancellationToken);
+
+        if (mentor is null)
+        {
+            logger.LogWarning(
+                "Mentor not found: {UserId}",
+                userId);
+
+            return Result<List<AttendanceResponse>>
+                .Fail("Mentor not found");
+        }
+
+        mentorId = mentor.Id;
+    }
+
+    var createdList = new List<AttendanceResponse>();
+
+    foreach (var item in request.Students)
+    {
+        var student = await unitOfWork.Students.GetByIdAsync(
+            item.StudentId,
+            cancellationToken);
+
+        if (student is null)
+            continue;
+
         var exists = await unitOfWork.Attendances.ExistsAsync(
             request.LessonId,
-            request.StudentId,
+            item.StudentId,
             cancellationToken);
 
         if (exists)
-            return Result<AttendanceResponse>.Fail(
-                "Attendance already exists",
-                ErrorType.Conflict);
+            continue;
 
         var attendance = new Attendance
         {
             LessonId = request.LessonId,
-            StudentId = request.StudentId,
-            Status = request.Status,
-            AbsenceReason = request.AbsenceReason?.Trim(),
-            MentorNote = request.MentorNote?.Trim(),
-            MarkedByMentorId = mentor.Id,
+            StudentId = item.StudentId,
+            Status = item.Status,
+            AbsenceReason = item.AbsenceReason?.Trim(),
+            MentorNote = item.MentorNote?.Trim(),
+            MarkedByMentorId = mentorId,
             MarkedAt = DateTime.UtcNow
         };
 
-        await unitOfWork.Attendances.CreateAsync(attendance, cancellationToken);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await unitOfWork.Attendances.CreateAsync(
+            attendance,
+            cancellationToken);
 
-        await auditLogService.LogAsync(
-            userId: mentorUserId,
-            action: AuditActions.MarkAttendance,
-            entityName: nameof(Attendance),
-            entityId: attendance.Id,
-            newValues: new
-            {
-                request.LessonId,
-                request.StudentId,
-                request.Status,
-                mentor.Id
-            });
-
-        await cache.RemoveByPrefixAsync(AttendanceCachePrefix);
-
-        var created = await unitOfWork.Attendances.GetByIdAsync(attendance.Id, cancellationToken);
-        return Result<AttendanceResponse>.Ok(MapToResponse(created!));
-    }
-
-    public async Task<Result<List<AttendanceResponse>>> BulkCreateAsync(
-        BulkCreateAttendanceRequest request,
-        int mentorUserId,
-        CancellationToken cancellationToken = default)
-    {
-        var lesson = await unitOfWork.Lessons.GetByIdAsync(request.LessonId, cancellationToken);
-        if (lesson is null)
-            return Result<List<AttendanceResponse>>.Fail("Lesson not found");
-
-        var mentor = await unitOfWork.Mentors.GetByUserIdAsync(mentorUserId, cancellationToken);
-        if (mentor is null)
-            return Result<List<AttendanceResponse>>.Fail("Mentor not found");
-
-        var createdList = new List<AttendanceResponse>();
-
-        foreach (var item in request.Students)
+        createdList.Add(new AttendanceResponse
         {
-            var exists = await unitOfWork.Attendances.ExistsAsync(
-                request.LessonId,
-                item.StudentId,
-                cancellationToken);
-
-            if (exists) continue;
-
-            var attendance = new Attendance
-            {
-                LessonId = request.LessonId,
-                StudentId = item.StudentId,
-                Status = item.Status,
-                AbsenceReason = item.AbsenceReason?.Trim(),
-                MentorNote = item.MentorNote?.Trim(),
-                MarkedByMentorId = mentor.Id,
-                MarkedAt = DateTime.UtcNow
-            };
-
-            await unitOfWork.Attendances.CreateAsync(attendance, cancellationToken);
-
-            createdList.Add(new AttendanceResponse
-            {
-                LessonId = request.LessonId,
-                StudentId = item.StudentId,
-                Status = item.Status.ToString(),
-                MarkedByMentorId = mentor.Id,
-                MarkedAt = attendance.MarkedAt
-            });
-        }
-
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        await auditLogService.LogAsync(
-            userId: mentorUserId,
-            action: AuditActions.MarkAttendance,
-            entityName: nameof(Attendance),
-            entityId: request.LessonId,
-            newValues: new
-            {
-                request.LessonId,
-                Count = createdList.Count
-            });
-
-        await cache.RemoveByPrefixAsync(AttendanceCachePrefix);
-
-        return Result<List<AttendanceResponse>>.Ok(createdList);
+            LessonId = attendance.LessonId,
+            StudentId = attendance.StudentId,
+            Status = attendance.Status.ToString(),
+            MarkedByMentorId = attendance.MarkedByMentorId,
+            MarkedAt = attendance.MarkedAt
+        });
     }
+
+    await unitOfWork.SaveChangesAsync(cancellationToken);
+
+    await auditLogService.LogAsync(
+        userId,
+        AuditActions.MarkAttendance,
+        nameof(Attendance),
+        request.LessonId,
+        newValues: new
+        {
+            request.LessonId,
+            CreatedCount = createdList.Count
+        });
+
+    await cache.RemoveByPrefixAsync(AttendanceCachePrefix);
+
+    logger.LogInformation(
+        "Bulk attendance created for lesson {LessonId}. Count: {Count}",
+        request.LessonId,
+        createdList.Count);
+
+    return Result<List<AttendanceResponse>>.Ok(createdList);
+}
 
     public async Task<Result<AttendanceResponse>> UpdateAsync(
         int id,
@@ -234,12 +284,12 @@ public class AttendanceService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.UpdateAttendance,
-            entityName: nameof(Attendance),
-            entityId: id,
-            oldValues: oldValues,
-            newValues: new
+            null,
+            AuditActions.UpdateAttendance,
+            nameof(Attendance),
+            id,
+            oldValues,
+            new
             {
                 attendance.Status,
                 attendance.AbsenceReason,
@@ -261,11 +311,11 @@ public class AttendanceService(
             return Result<bool>.Fail("Attendance not found");
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.DeleteAttendance,
-            entityName: nameof(Attendance),
-            entityId: id,
-            oldValues: new
+            null,
+            AuditActions.DeleteAttendance,
+            nameof(Attendance),
+            id,
+            new
             {
                 attendance.LessonId,
                 attendance.StudentId,

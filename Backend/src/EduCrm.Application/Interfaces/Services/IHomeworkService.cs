@@ -7,7 +7,7 @@ namespace EduCrm.Application.Interfaces.Services;
 public interface IHomeworkService
 {
     Task<Result<List<HomeworkListItemResponse>>> GetAllAsync();
-    
+
     Task<Result<List<HomeworkListItemResponse>>> GetByLessonAsync(int lessonId);
 
     Task<Result<HomeworkResponse>> GetByIdAsync(int id);

@@ -195,7 +195,7 @@ public class ScheduleService(
             AuditActions.DeleteSchedule,
             nameof(Schedule),
             id,
-            oldValues: oldValues
+            oldValues
         );
 
         await cache.RemoveByPrefixAsync(ScheduleCachePrefix);

@@ -1,5 +1,3 @@
-using EduCrm.Application.Common;
-
 namespace EduCrm.Application.Interfaces.Services;
 
 public interface IEmailService

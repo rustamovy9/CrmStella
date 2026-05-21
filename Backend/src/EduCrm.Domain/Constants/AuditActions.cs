@@ -11,14 +11,14 @@ public static class AuditActions
     public const string VerifyResetCode = "VerifyResetCode";
     public const string ResetPassword = "ResetPassword";
     public const string ChangePassword = "ChangePassword";
-    
+
     public const string CreateUser = "CreateUser";
     public const string UpdateUser = "UpdateUser";
     public const string DeleteUser = "DeleteUser";
     public const string ActivateUser = "ActivateUser";
     public const string DeactivateUser = "DeactivateUser";
     public const string ChangeUserRole = "ChangeUserRole";
-    
+
     public const string CreateProfile = "CreateProfile";
     public const string UpdateProfile = "UpdateProfile";
     public const string DeleteProfile = "DeleteProfile";
@@ -33,14 +33,14 @@ public static class AuditActions
     public const string UpdateStudent = "UpdateStudent";
     public const string DeleteStudent = "DeleteStudent";
     public const string EnrollStudent = "EnrollStudent";
-    
+
     public const string CreateCourse = "CreateCourse";
     public const string UpdateCourse = "UpdateCourse";
     public const string DeleteCourse = "DeleteCourse";
     public const string SetCourseStatus = "SetCourseStatus";
     public const string PublishCourse = "PublishCourse";
     public const string ArchiveCourse = "ArchiveCourse";
-    
+
     public const string CreateGroup = "CreateGroup";
     public const string UpdateGroup = "UpdateGroup";
     public const string DeleteGroup = "DeleteGroup";
@@ -48,11 +48,11 @@ public static class AuditActions
     public const string TransferStudent = "TransferStudent";
     public const string AddStudentToGroup = "AddStudentToGroup";
     public const string RemoveStudentFromGroup = "RemoveStudentFromGroup";
-    
+
     public const string CreateSchedule = "CreateSchedule";
     public const string UpdateSchedule = "UpdateSchedule";
     public const string DeleteSchedule = "DeleteSchedule";
-    
+
     public const string MarkAttendance = "MarkAttendance";
     public const string UpdateAttendance = "UpdateAttendance";
     public const string DeleteAttendance = "DeleteAttendance";
@@ -80,7 +80,7 @@ public static class AuditActions
     public const string CreateLesson = "CreateLesson";
     public const string UpdateLesson = "UpdateLesson";
     public const string DeleteLesson = "DeleteLesson";
-    
+
     public const string CreateLessonScore = "CreateLessonScore";
     public const string UpdateLessonScore = "UpdateLessonScore";
     public const string DeleteLessonScore = "DeleteLessonScore";
@@ -93,8 +93,11 @@ public static class AuditActions
 
     public const string UploadFile = "UploadFile";
     public const string DeleteFile = "DeleteFile";
-
     
+    public const string RecalculateWeekResult = "RecalculateWeekResult";
+    public const string UpdateWeekResultComment = "UpdateWeekResultComment";
+
+
     public const string SystemError = "SystemError";
     public const string AccessDenied = "AccessDenied";
     public const string ClearCache = "ClearCache";

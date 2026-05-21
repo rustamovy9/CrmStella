@@ -10,7 +10,6 @@ namespace EduCrm.WebApi.Controllers;
 [Route("api/attendances")]
 public class AttendanceController(IAttendanceService attendanceService) : BaseController
 {
-    // получить посещаемость урока
     [HttpGet("lesson/{lessonId}")]
     public async Task<IActionResult> GetByLesson(
         int lessonId,
@@ -20,7 +19,6 @@ public class AttendanceController(IAttendanceService attendanceService) : BaseCo
         return Ok(result);
     }
 
-    // получить посещаемость студента
     [HttpGet("student/{studentId}")]
     public async Task<IActionResult> GetByStudent(
         int studentId,
@@ -42,30 +40,42 @@ public class AttendanceController(IAttendanceService attendanceService) : BaseCo
         return Ok(result);
     }
 
-    // отметить одного студента
     [Authorize(Roles = "Admin,Mentor")]
     [HttpPost]
     public async Task<IActionResult> Create(
         [FromBody] CreateAttendanceRequest request,
         CancellationToken cancellationToken)
     {
-        var mentorId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var result = await attendanceService.CreateAsync(request, mentorId, cancellationToken);
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var isAdmin = User.IsInRole("Admin");
+
+        var result = await attendanceService.CreateAsync(
+            request,
+            userId,
+            isAdmin,
+            cancellationToken);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
         return Ok(result);
     }
 
-    // отметить всю группу сразу
     [Authorize(Roles = "Admin,Mentor")]
     [HttpPost("bulk")]
     public async Task<IActionResult> BulkCreate(
         [FromBody] BulkCreateAttendanceRequest request,
         CancellationToken cancellationToken)
     {
-        var mentorId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var result = await attendanceService.BulkCreateAsync(request, mentorId, cancellationToken);
+        var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var isAdmin = User.IsInRole("Admin");
+
+        var result = await attendanceService.BulkCreateAsync(
+            request,
+            userId,
+            isAdmin,
+            cancellationToken);
+
         if (!result.IsSuccess)
             return HandleError(result);
 

@@ -76,10 +76,10 @@ public class GroupStudentService(
         await cache.RemoveByPrefixAsync(GroupStudentCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.EnrollStudent,
-            entityName: "GroupStudent",
-            entityId: enrollment.Id,
+            null,
+            AuditActions.EnrollStudent,
+            "GroupStudent",
+            enrollment.Id,
             newValues: new
             {
                 enrollment.GroupId,
@@ -125,12 +125,12 @@ public class GroupStudentService(
         await cache.RemoveByPrefixAsync(GroupStudentCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.RemoveStudentFromGroup,
-            entityName: "GroupStudent",
-            entityId: enrollment.Id,
-            oldValues: oldValues,
-            newValues: new
+            null,
+            AuditActions.RemoveStudentFromGroup,
+            "GroupStudent",
+            enrollment.Id,
+            oldValues,
+            new
             {
                 enrollment.IsActive,
                 enrollment.LeftAt,
@@ -196,16 +196,16 @@ public class GroupStudentService(
         await cache.RemoveByPrefixAsync(GroupStudentCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.TransferStudent,
-            entityName: "GroupStudent",
-            entityId: newEnrollment.Id,
-            oldValues: new
+            null,
+            AuditActions.TransferStudent,
+            "GroupStudent",
+            newEnrollment.Id,
+            new
             {
                 FromGroupId = oldGroupId,
                 current.StudentId
             },
-            newValues: new
+            new
             {
                 ToGroupId = request.TargetGroupId,
                 current.StudentId

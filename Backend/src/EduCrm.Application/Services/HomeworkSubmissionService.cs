@@ -26,14 +26,14 @@ public class HomeworkSubmissionService(
     {
         var homework = await unitOfWork.Homeworks.GetByIdAsync(request.HomeworkId);
         if (homework is null)
-            return Result<HomeworkSubmissionResponse>.Fail("Homework not found", ErrorType.NotFound);
+            return Result<HomeworkSubmissionResponse>.Fail("Homework not found");
 
         if (!homework.IsActive)
             return Result<HomeworkSubmissionResponse>.Fail("Homework is closed", ErrorType.BadRequest);
 
         var student = await unitOfWork.Students.GetByUserIdAsync(studentUserId);
         if (student is null)
-            return Result<HomeworkSubmissionResponse>.Fail("Student not found", ErrorType.NotFound);
+            return Result<HomeworkSubmissionResponse>.Fail("Student not found");
 
         var exists = await unitOfWork.HomeworkSubmissions
             .GetByHomeworkAndStudentAsync(request.HomeworkId, student.Id);
@@ -43,7 +43,7 @@ public class HomeworkSubmissionService(
 
         var now = DateTime.UtcNow;
 
-        var submission = new Domain.Entities.HomeworkSubmission
+        var submission = new HomeworkSubmission
         {
             HomeworkId = request.HomeworkId,
             StudentId = student.Id,
@@ -72,10 +72,10 @@ public class HomeworkSubmissionService(
         await cache.RemoveByPrefixAsync(SubmissionCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: studentUserId,
-            action: AuditActions.SubmitHomework,
-            entityName: "HomeworkSubmission",
-            entityId: submission.Id,
+            studentUserId,
+            AuditActions.SubmitHomework,
+            "HomeworkSubmission",
+            submission.Id,
             newValues: new
             {
                 submission.HomeworkId,
@@ -137,12 +137,12 @@ public class HomeworkSubmissionService(
         await cache.RemoveByPrefixAsync(SubmissionCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: userId,
-            action: AuditActions.GradeHomework,
-            entityName: "HomeworkSubmission",
-            entityId: submission.Id,
-            oldValues: new { OldScore = oldScore },
-            newValues: new
+            userId,
+            AuditActions.GradeHomework,
+            "HomeworkSubmission",
+            submission.Id,
+            new { OldScore = oldScore },
+            new
             {
                 request.Score,
                 request.Feedback,
@@ -182,7 +182,7 @@ public class HomeworkSubmissionService(
         var submission = await unitOfWork.HomeworkSubmissions.GetByIdAsync(id);
 
         if (submission is null)
-            return Result<HomeworkSubmissionResponse>.Fail("Not found", ErrorType.NotFound);
+            return Result<HomeworkSubmissionResponse>.Fail("Not found");
 
         var result = MapToResponse(submission);
 
@@ -191,16 +191,19 @@ public class HomeworkSubmissionService(
         return Result<HomeworkSubmissionResponse>.Ok(result);
     }
 
-    private static HomeworkSubmissionResponse MapToResponse(Domain.Entities.HomeworkSubmission s) => new()
+    private static HomeworkSubmissionResponse MapToResponse(HomeworkSubmission s)
     {
-        Id = s.Id,
-        HomeworkId = s.HomeworkId,
-        HomeworkTitle = s.Homework?.Title ?? string.Empty,
-        StudentId = s.StudentId,
-        StudentName = s.Student?.User?.FullName ?? string.Empty,
-        TextAnswer = s.TextAnswer,
-        FileUrl = s.FileUrl,
-        SubmittedAt = s.SubmittedAt,
-        IsLate = s.IsLate
-    };
+        return new HomeworkSubmissionResponse
+        {
+            Id = s.Id,
+            HomeworkId = s.HomeworkId,
+            HomeworkTitle = s.Homework?.Title ?? string.Empty,
+            StudentId = s.StudentId,
+            StudentName = s.Student?.User?.FullName ?? string.Empty,
+            TextAnswer = s.TextAnswer,
+            FileUrl = s.FileUrl,
+            SubmittedAt = s.SubmittedAt,
+            IsLate = s.IsLate
+        };
+    }
 }

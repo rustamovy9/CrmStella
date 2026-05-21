@@ -3,8 +3,8 @@ using EduCrm.Application.DTOs.Users.Request;
 using EduCrm.Application.DTOs.Users.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
-using EduCrm.Domain.Entities;
 using EduCrm.Domain.Constants;
+using EduCrm.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
@@ -145,7 +145,7 @@ public class UserService(
             AuditActions.DeleteUser,
             nameof(User),
             id,
-            oldValues: user
+            user
         );
 
         await cache.RemoveByPrefixAsync(UserCachePrefix);

@@ -4,7 +4,7 @@ using EduCrm.Application.DTOs.AuditLog.Request;
 using EduCrm.Application.DTOs.AuditLog.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
-using EduCrm.Domain.Enums;
+using EduCrm.Domain.Entities;
 using Microsoft.Extensions.Logging;
 
 namespace EduCrm.Application.Services;
@@ -56,7 +56,7 @@ public class AuditLogService(
     {
         try
         {
-            var log = new Domain.Entities.AuditLog
+            var log = new AuditLog
             {
                 UserId = userId,
                 Action = action,
