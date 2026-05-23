@@ -60,4 +60,12 @@ public class MentorRepository(AppDbContext context) : IMentorRepository
         context.Mentors.Update(mentor);
         return Task.CompletedTask;
     }
+
+    public async Task DeleteAsync(int id)
+    {
+        var mentor = await context.Mentors.FindAsync(id);
+
+        if (mentor is not null)
+            context.Mentors.Remove(mentor);
+    }
 }
