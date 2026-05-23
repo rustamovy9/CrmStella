@@ -1,5 +1,5 @@
+import { AlertCircle, Play, Wallet } from 'lucide-react';
 import React from 'react';
-import { BookOpen, Wallet, GraduationCap, AlertCircle, Play } from 'lucide-react';
 
 const StudentDashboard: React.FC = () => {
   return (

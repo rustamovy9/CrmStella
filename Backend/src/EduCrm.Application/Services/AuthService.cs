@@ -320,6 +320,7 @@ public class AuthService(
         return Result<bool>.Ok(true);
     }
 
+    
     public async Task<Result<bool>> LogoutAsync(int userId)
     {
         var user = await unitOfWork.Users.GetByIdAsync(userId);

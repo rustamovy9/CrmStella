@@ -60,4 +60,12 @@ public class StudentRepository(AppDbContext context) : IStudentRepository
         context.Students.Update(student);
         return Task.CompletedTask;
     }
+
+    public async Task DeleteAsync(int id)
+    {
+        var student = await context.Students.FindAsync(id);
+
+        if (student is not null)
+            context.Students.Remove(student);
+    }
 }

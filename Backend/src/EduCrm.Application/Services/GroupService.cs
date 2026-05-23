@@ -110,7 +110,7 @@ public class GroupService(
 
         await unitOfWork.Groups.CreateAsync(group);
         await unitOfWork.SaveChangesAsync();
-        
+
         await cache.RemoveByPrefixAsync("groups:");
         await cache.RemoveAsync("groups:list");
 
