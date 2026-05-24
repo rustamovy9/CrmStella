@@ -11,4 +11,5 @@ public interface IMentorRepository
 
     Task CreateAsync(Mentor mentor, CancellationToken cancellationToken = default);
     Task UpdateAsync(Mentor mentor, CancellationToken cancellationToken = default);
+    Task DeleteAsync(int id, CancellationToken ct = default);
 }

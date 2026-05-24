@@ -103,4 +103,7 @@ public static class AuditActions
     public const string ClearCache = "ClearCache";
     public const string SendEmail = "SendEmail";
     public const string SendVerificationCode = "SendVerificationCode";
+    
+    //
+    public const string AssignRole = "assign_role";
 }
