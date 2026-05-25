@@ -6,6 +6,7 @@ public static class AuditActions
     public const string Logout = "Logout";
     public const string Register = "Register";
     public const string RefreshToken = "RefreshToken";
+    public const string AssignRole = "AssignRole";
 
     public const string ForgotPassword = "ForgotPassword";
     public const string VerifyResetCode = "VerifyResetCode";
@@ -93,7 +94,7 @@ public static class AuditActions
 
     public const string UploadFile = "UploadFile";
     public const string DeleteFile = "DeleteFile";
-    
+
     public const string RecalculateWeekResult = "RecalculateWeekResult";
     public const string UpdateWeekResultComment = "UpdateWeekResultComment";
 

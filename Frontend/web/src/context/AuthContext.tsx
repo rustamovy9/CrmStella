@@ -16,8 +16,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
-        if (storedUser) {
+        const token = localStorage.getItem('token');
+
+        // Проверяем связку: должен быть и юзер, и его рабочий токен
+        if (storedUser && token) {
             setUser(JSON.parse(storedUser));
+        } else {
+            // Если чего-то не хватает — чистим кэш, это неавторизованный вход
+            localStorage.clear();
+            setUser(null);
         }
         setLoading(false);
     }, []);

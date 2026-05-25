@@ -83,6 +83,7 @@ public class AuthController(IAuthService authService) : BaseController
 
         return Ok(result);
     }
+    
 
     [Authorize]
     [HttpPost("logout")]

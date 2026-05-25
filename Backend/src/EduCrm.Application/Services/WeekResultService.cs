@@ -161,10 +161,10 @@ public class WeekResultService(
         await cache.RemoveByPrefixAsync(WeekResultCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.RecalculateWeekResult,
-            entityName: "WeekResult",
-            entityId: weekResult.Id,
+            null,
+            AuditActions.RecalculateWeekResult,
+            "WeekResult",
+            weekResult.Id,
             newValues: new
             {
                 weekResult.StudentId,
@@ -209,17 +209,17 @@ public class WeekResultService(
         await cache.RemoveByPrefixAsync(WeekResultCachePrefix);
 
         await auditLogService.LogAsync(
-            userId: null,
-            action: AuditActions.UpdateWeekResultComment,
-            entityName: "WeekResult",
-            entityId: weekResult.Id,
-            oldValues: new
+            null,
+            AuditActions.UpdateWeekResultComment,
+            "WeekResult",
+            weekResult.Id,
+            new
             {
                 MentorComment = oldComment
             },
-            newValues: new
+            new
             {
-                MentorComment = weekResult.MentorComment
+                weekResult.MentorComment
             });
 
         logger.LogInformation(
