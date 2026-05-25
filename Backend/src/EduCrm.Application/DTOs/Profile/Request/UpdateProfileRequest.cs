@@ -1,6 +1,5 @@
-// DTOs/Profile/Request/UpdateProfileRequest.cs
-
 using System.ComponentModel.DataAnnotations;
+using EduCrm.Application.Attributes;
 
 namespace EduCrm.Application.DTOs.Profile.Request;
 
@@ -9,19 +8,19 @@ public class UpdateProfileRequest
     [MaxLength(500, ErrorMessage = "About me must be at most 500 characters")]
     public string? AboutMe { get; set; }
 
-    [DataType(DataType.Date)] public DateOnly? DateOfBirth { get; set; }
+    public DateOnly? DateOfBirth { get; set; }
 
     [MaxLength(200, ErrorMessage = "Address must be at most 200 characters")]
     public string? Address { get; set; }
 
-    [RegularExpression(@"^@?[\w]{5,32}$", ErrorMessage = "Invalid Telegram username")]
+    [MaxLength(50, ErrorMessage = "Telegram username must be at most 50 characters")]
     public string? TelegramUsername { get; set; }
 
-    [Url(ErrorMessage = "Invalid LinkedIn URL")]
+    [OptionalUrl(ErrorMessage = "Invalid LinkedIn URL")]
     [MaxLength(500)]
-    public string? LinkedInUrl { get; set; } = null;
+    public string? LinkedInUrl { get; set; }
 
-    [Url(ErrorMessage = "Invalid GitHub URL")]
+    [OptionalUrl(ErrorMessage = "Invalid GitHub URL")]
     [MaxLength(500)]
-    public string? GithubUrl { get; set; } = null;
+    public string? GithubUrl { get; set; }
 }

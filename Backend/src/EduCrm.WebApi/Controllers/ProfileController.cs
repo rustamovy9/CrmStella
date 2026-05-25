@@ -8,7 +8,9 @@ namespace EduCrm.WebApi.Controllers;
 
 [Route("api/profiles")]
 [Authorize]
-public class ProfileController(IProfileService profileService) : BaseController
+public class ProfileController(
+    IProfileService profileService,
+    IFileStorageService fileStorage) : BaseController
 {
     [HttpGet("me")]
     public async Task<IActionResult> GetCurrentProfile()
@@ -54,12 +56,13 @@ public class ProfileController(IProfileService profileService) : BaseController
     }
 
     [HttpPatch("avatar")]
-    public async Task<IActionResult> SetAvatar(IFormFile file)
+    public async Task<IActionResult> SetAvatar(IFormFile? file)
     {
         if (file is null || file.Length == 0)
             return BadRequest(new { error = "Avatar file is required" });
 
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
         var result = await profileService.SetAvatarAsync(userId, file, userId);
         if (!result.IsSuccess)
             return HandleError(result);
@@ -75,6 +78,6 @@ public class ProfileController(IProfileService profileService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok(new { message = "Profile deleted successfully" });
+        return Ok(result);
     }
 }

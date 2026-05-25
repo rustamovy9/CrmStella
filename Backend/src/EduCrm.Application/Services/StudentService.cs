@@ -1,6 +1,7 @@
 using EduCrm.Application.Common;
+using EduCrm.Application.DTOs.Student.Request;
+using EduCrm.Application.DTOs.Student.Response;
 using EduCrm.Application.DTOs.Students.Request;
-using EduCrm.Application.DTOs.Students.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Constants;
@@ -18,30 +19,43 @@ public class StudentService(
     private const string StudentCachePrefix = "students:";
     private const string StudentListCacheKey = "students:list";
 
-    public async Task<Result<List<StudentListItemResponse>>> GetAllAsync()
+    public async Task<Result<PagedResult<StudentListItemResponse>>> GetAllAsync(
+        StudentQueryRequest query,
+        CancellationToken cancellationToken = default)
     {
-        var cached = await cache.GetAsync<List<StudentListItemResponse>>(StudentListCacheKey);
+        var cacheKey =
+            $"{StudentCachePrefix}list:{query.Page}:{query.PageSize}:{query.Search}:{query.IsActive}:{query.GroupId}";
+
+        var cached = await cache.GetAsync<PagedResult<StudentListItemResponse>>(cacheKey);
         if (cached is not null)
         {
             logger.LogInformation("Students list served from cache");
-            return Result<List<StudentListItemResponse>>.Ok(cached);
+            return Result<PagedResult<StudentListItemResponse>>.Ok(cached);
         }
 
-        var students = await unitOfWork.Students.GetAllAsync();
+        var pagedStudents = await unitOfWork.Students.GetAllAsync(query, cancellationToken);
 
-        var result = students.Select(s => new StudentListItemResponse
+        var result = new PagedResult<StudentListItemResponse>
         {
-            Id = s.Id,
-            UserId = s.UserId,
-            FullName = s.User.FullName,
-            Email = s.User.Email,
-            Balance = s.Balance,
-            IsActive = s.IsActive
-        }).ToList();
+            Items = pagedStudents.Items.Select(s => new StudentListItemResponse
+            {
+                Id = s.Id,
+                UserId = s.UserId,
+                FullName = s.User.FullName,
+                Email = s.User.Email,
+                Balance = s.Balance,
+                IsActive = s.IsActive,
+                AvatarUrl = s.User.Profile?.AvatarUrl,  
+                EnrolledAt = s.EnrolledAt
+            }).ToList(),
+            TotalCount = pagedStudents.TotalCount,
+            Page = pagedStudents.Page,
+            PageSize = pagedStudents.PageSize
+        };
 
-        await cache.SetAsync(StudentListCacheKey, result, TimeSpan.FromMinutes(30));
+        await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
 
-        return Result<List<StudentListItemResponse>>.Ok(result);
+        return Result<PagedResult<StudentListItemResponse>>.Ok(result);
     }
 
     public async Task<Result<StudentResponse>> GetByIdAsync(int id)
@@ -151,6 +165,7 @@ public class StudentService(
             Email = s.User.Email,
             PhoneNumber = s.User.PhoneNumber,
             AvatarUrl = s.User.Profile?.AvatarUrl,
+            ImageUrl = s.User.Profile?.AvatarUrl,
             Balance = s.Balance,
             IsActive = s.IsActive,
             EnrolledAt = s.EnrolledAt,

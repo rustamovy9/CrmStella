@@ -1,4 +1,4 @@
-namespace EduCrm.Application.DTOs.Students.Response;
+namespace EduCrm.Application.DTOs.Student.Response;
 
 public class StudentListItemResponse
 {
@@ -8,4 +8,7 @@ public class StudentListItemResponse
     public string Email { get; set; } = string.Empty;
     public decimal Balance { get; set; }
     public bool IsActive { get; set; }
+    public string? AvatarUrl { get; set; }
+    public DateTime EnrolledAt { get; set; }  
+
 }

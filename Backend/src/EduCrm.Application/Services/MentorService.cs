@@ -18,28 +18,44 @@ public class MentorService(
     private const string MentorCachePrefix = "mentors:";
     private const string MentorListCacheKey = "mentors:list";
 
-    public async Task<Result<List<MentorListItemResponse>>> GetAllAsync()
+    // MentorService.cs
+    public async Task<Result<PagedResult<MentorListItemResponse>>> GetAllAsync(
+        MentorQueryRequest query,
+        CancellationToken cancellationToken = default)
     {
-        var cached = await cache.GetAsync<List<MentorListItemResponse>>(MentorListCacheKey);
+        var cacheKey =
+            $"{MentorCachePrefix}list:{query.Page}:{query.PageSize}:{query.Search}:{query.IsActive}:{query.Specialization}";
+
+        var cached = await cache.GetAsync<PagedResult<MentorListItemResponse>>(cacheKey);
         if (cached is not null)
-            return Result<List<MentorListItemResponse>>.Ok(cached);
-
-        var mentors = await unitOfWork.Mentors.GetAllAsync();
-
-        var result = mentors.Select(m => new MentorListItemResponse
         {
-            Id = m.Id,
-            UserId = m.UserId,
-            FullName = m.User.FullName,
-            Email = m.User.Email,
-            Specialization = m.Specialization,
-            ExperienceYears = m.ExperienceYears,
-            IsActive = m.IsActive
-        }).ToList();
+            logger.LogInformation("Mentors list served from cache");
+            return Result<PagedResult<MentorListItemResponse>>.Ok(cached);
+        }
 
-        await cache.SetAsync(MentorListCacheKey, result, TimeSpan.FromMinutes(30));
+        var pagedMentors = await unitOfWork.Mentors.GetAllAsync(query, cancellationToken);
 
-        return Result<List<MentorListItemResponse>>.Ok(result);
+        var result = new PagedResult<MentorListItemResponse>
+        {
+            Items = pagedMentors.Items.Select(m => new MentorListItemResponse
+            {
+                Id = m.Id,
+                UserId = m.UserId,
+                FullName = m.User.FullName,
+                Email = m.User.Email,
+                Specialization = m.Specialization,
+                ExperienceYears = m.ExperienceYears,
+                IsActive = m.IsActive,
+                AvatarUrl = m.User.Profile?.AvatarUrl
+            }).ToList(),
+            TotalCount = pagedMentors.TotalCount,
+            Page = pagedMentors.Page,
+            PageSize = pagedMentors.PageSize
+        };
+
+        await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(10));
+
+        return Result<PagedResult<MentorListItemResponse>>.Ok(result);
     }
 
     public async Task<Result<MentorResponse>> GetByIdAsync(int id)

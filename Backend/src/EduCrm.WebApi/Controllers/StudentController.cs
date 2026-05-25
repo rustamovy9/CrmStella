@@ -1,3 +1,4 @@
+using EduCrm.Application.DTOs.Student.Request;
 using EduCrm.Application.DTOs.Students.Request;
 using EduCrm.Application.Interfaces.Services;
 using Microsoft.AspNetCore.Authorization;
@@ -10,9 +11,11 @@ namespace EduCrm.WebApi.Controllers;
 public class StudentsController(IStudentService studentService) : BaseController
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll(
+        [FromQuery] StudentQueryRequest query,  
+        CancellationToken cancellationToken)
     {
-        var result = await studentService.GetAllAsync();
+        var result = await studentService.GetAllAsync(query, cancellationToken);
         if (!result.IsSuccess)
             return HandleError(result);
 

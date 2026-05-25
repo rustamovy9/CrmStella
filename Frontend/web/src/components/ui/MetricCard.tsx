@@ -6,6 +6,7 @@ interface MetricCardProps {
     subLabel?: string;
     variant?: 'purple' | 'blue' | 'green' | 'amber';
     isMain?: boolean;
+    onClick?: () => void; // ◄ Добавили необязательный проп клика в интерфейс
 }
 
 const MetricCard: React.FC<MetricCardProps> = ({ 
@@ -13,7 +14,8 @@ const MetricCard: React.FC<MetricCardProps> = ({
     label, 
     subLabel, 
     variant = 'purple',
-    isMain = false 
+    isMain = false,
+    onClick // ◄ Достаем его из пропсов
 }) => {
     const config = {
         purple: { 
@@ -66,7 +68,14 @@ const MetricCard: React.FC<MetricCardProps> = ({
     // Главная карточка (Премиальный Градиентный Стиль)
     if (isMain) {
         return (
-            <div style={{ ...styles.card, ...styles.mainCard }}>
+            <div 
+                onClick={onClick} // ◄ Вешаем клик на контейнер
+                style={{ 
+                    ...styles.card, 
+                    ...styles.mainCard,
+                    cursor: onClick ? 'pointer' : 'default' // Меняем курсор, если передана функция
+                }}
+            >
                 <div style={styles.mainOverlay} />
                 <div style={styles.contentMain}>
                     <div style={styles.mainHeaderRow}>
@@ -86,10 +95,14 @@ const MetricCard: React.FC<MetricCardProps> = ({
         );
     }
 
-    // Стандартная стильная карточка (Исправленная структура стилей)
+    // Стандартная стильная карточка
     return (
         <div 
-            style={styles.card}
+            onClick={onClick} // ◄ Для остальных карточек тоже на всякий случай прокидываем
+            style={{
+                ...styles.card,
+                cursor: onClick ? 'pointer' : 'default'
+            }}
             onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-5px)';
                 e.currentTarget.style.boxShadow = '0 20px 30px -10px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(99, 102, 241, 0.15)';

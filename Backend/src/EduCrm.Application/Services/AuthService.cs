@@ -24,6 +24,8 @@ public class AuthService(
 {
     private const string UserCachePrefix = "users:";
     private const string AuthUserCachePrefix = "auth:user:";
+    private const string MentorCachePrefix = "mentors:";
+    private const string StudentCachePrefix = "students:";
 
     public async Task<Result<AuthResponse>> LoginAsync(LoginRequest request)
     {
@@ -71,6 +73,8 @@ public class AuthService(
             user.Id,
             newValues: new { user.Email, Role = user.Role.Name });
 
+        logger.LogInformation("User logged in: {Email}", user.Email);
+
         return Result<AuthResponse>.Ok(new AuthResponse
         {
             AccessToken = accessToken,
@@ -103,28 +107,44 @@ public class AuthService(
             IsPasswordSet = false
         };
 
+        // 1️⃣ Сначала сохраняем User — получаем user.Id
         await unitOfWork.Users.CreateAsync(user);
-
-        if (request.RoleId == 2)
-            await unitOfWork.Mentors.CreateAsync(new Mentor
-            {
-                User = user,
-                HireDate = DateTime.UtcNow,
-                IsActive = true
-            });
-        else if (request.RoleId == 3)
-            await unitOfWork.Students.CreateAsync(new Student
-            {
-                User = user,
-                Balance = 0,
-                IsActive = true,
-                EnrolledAt = DateTime.UtcNow
-            });
-
         await unitOfWork.SaveChangesAsync();
+
+        // 2️⃣ Потом создаём профиль роли с правильным UserId
+        switch (request.RoleId)
+        {
+            case 2: // Mentor
+                await unitOfWork.Mentors.CreateAsync(new Mentor
+                {
+                    UserId = user.Id,  // ✅ Используем user.Id
+                    HireDate = DateTime.UtcNow,
+                    IsActive = true
+                });
+                break;
+
+            case 3: // Student
+                await unitOfWork.Students.CreateAsync(new Student
+                {
+                    UserId = user.Id,  // ✅ Используем user.Id
+                    Balance = 0,
+                    IsActive = true,
+                    EnrolledAt = DateTime.UtcNow
+                });
+                break;
+            // case 1 (Admin) — профиль роли не нужен
+        }
+
+        // 3️⃣ Сохраняем профиль роли
+        await unitOfWork.SaveChangesAsync();
+
+        // 4️⃣ Загружаем роль
         await unitOfWork.Users.LoadRoleAsync(user);
 
+        // 5️⃣ Инвалидируем все кэши
         await cache.RemoveByPrefixAsync(UserCachePrefix);
+        await cache.RemoveByPrefixAsync(MentorCachePrefix);   // ✅ Сразу виден в GetAll
+        await cache.RemoveByPrefixAsync(StudentCachePrefix);  // ✅ Сразу виден в GetAll
 
         await emailService.SendWelcomeAsync(user.Email, user.FullName, tempPassword);
 
@@ -134,6 +154,10 @@ public class AuthService(
             "User",
             user.Id,
             newValues: new { user.FullName, user.Email, user.RoleId });
+
+        logger.LogInformation(
+            "New user registered by Admin {AdminId}: {Email} Role: {RoleId}",
+            adminUserId, user.Email, user.RoleId);
 
         return Result<RegisterResponse>.Ok(new RegisterResponse
         {
@@ -172,6 +196,8 @@ public class AuthService(
             AuditActions.RefreshToken,
             "User",
             user.Id);
+
+        logger.LogInformation("Token refreshed: {UserId}", user.Id);
 
         return Result<AuthResponse>.Ok(new AuthResponse
         {
@@ -221,6 +247,8 @@ public class AuthService(
             "User",
             user.Id);
 
+        logger.LogInformation("Password reset code sent: {Email}", request.Email);
+
         return Result<bool>.Ok(true);
     }
 
@@ -260,6 +288,8 @@ public class AuthService(
             "VerificationCode",
             code.Id);
 
+        logger.LogInformation("Code verified: {UserId}", user.Id);
+
         return Result<bool>.Ok(true);
     }
 
@@ -273,6 +303,7 @@ public class AuthService(
             return Result<bool>.Fail("User not found");
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.IsPasswordSet = true;  // ✅ Отмечаем что пароль установлен
         user.RefreshToken = null;
         user.RefreshTokenExpiry = null;
 
@@ -287,6 +318,8 @@ public class AuthService(
             AuditActions.ResetPassword,
             "User",
             user.Id);
+
+        logger.LogInformation("Password reset: {UserId}", user.Id);
 
         return Result<bool>.Ok(true);
     }
@@ -304,6 +337,7 @@ public class AuthService(
             return Result<bool>.Fail("Current password is incorrect", ErrorType.BadRequest);
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.IsPasswordSet = true;  // ✅ Отмечаем что пароль установлен
 
         await unitOfWork.Users.UpdateAsync(user);
         await unitOfWork.SaveChangesAsync();
@@ -317,10 +351,11 @@ public class AuthService(
             "User",
             user.Id);
 
+        logger.LogInformation("Password changed: {UserId}", userId);
+
         return Result<bool>.Ok(true);
     }
 
-    
     public async Task<Result<bool>> LogoutAsync(int userId)
     {
         var user = await unitOfWork.Users.GetByIdAsync(userId);
@@ -333,7 +368,7 @@ public class AuthService(
         await unitOfWork.Users.UpdateAsync(user);
         await unitOfWork.SaveChangesAsync();
 
-        await cache.RemoveByPrefixAsync(AuthUserCachePrefix);
+        await cache.RemoveByPrefixAsync($"{AuthUserCachePrefix}{userId}");
 
         await auditLogService.LogAsync(
             user.Id,
@@ -341,13 +376,13 @@ public class AuthService(
             "User",
             user.Id);
 
+        logger.LogInformation("User logged out: {UserId}", userId);
+
         return Result<bool>.Ok(true);
     }
 
     private static string GenerateCode()
-    {
-        return RandomNumberGenerator.GetInt32(100000, 999999).ToString();
-    }
+        => RandomNumberGenerator.GetInt32(100000, 999999).ToString();
 
     private static string HashCode(string code)
     {

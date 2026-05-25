@@ -134,35 +134,79 @@ public class ProfileService(
         IFormFile avatarFile,
         int uploadedByUserId)
     {
+        var oldFile = await unitOfWork.Files.GetByOwnerAsync(FileOwnerType.Profile, userId);
+        if (oldFile is not null)
+            try
+            {
+                await fileStorage.DeleteAsync(oldFile.Id);
+                logger.LogInformation("Old avatar deleted: {UserId}", userId);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to delete old avatar: {UserId}", userId);
+            }
+
+        FileStorage fileRecord;
+        try
+        {
+            fileRecord = await fileStorage.UploadAsync(
+                avatarFile,
+                FileOwnerType.Profile,
+                userId,
+                uploadedByUserId);
+        }
+        catch (ArgumentException ex)
+        {
+            logger.LogWarning(ex, "SetAvatar validation failed: {UserId}", userId);
+            return Result<ProfileResponse>.Fail(ex.Message, ErrorType.BadRequest);
+        }
+
+        var profile = await unitOfWork.Profiles.GetByUserIdAsync(userId);
+        if (profile is not null)
+        {
+            profile.AvatarUrl = fileRecord.Url;
+            profile.UpdatedAt = DateTime.UtcNow;
+
+            await unitOfWork.Profiles.UpdateAsync(profile);
+            await unitOfWork.SaveChangesAsync();
+
+            await cache.RemoveByPrefixAsync(ProfileCachePrefix);
+
+            logger.LogInformation(
+                "Avatar set: {UserId} - {Url}",
+                userId, fileRecord.Url);
+
+            return Result<ProfileResponse>.Ok(MapToResponse(profile));
+        }
+
+        logger.LogInformation(
+            "Avatar uploaded without profile: {UserId} - {Url}",
+            userId, fileRecord.Url);
+
+        return Result<ProfileResponse>.Ok(new ProfileResponse
+        {
+            UserId = userId,
+            AvatarUrl = fileRecord.Url
+        });
+    }
+
+    public async Task<Result<bool>> UpdateAvatarUrlAsync(int userId, string avatarUrl)
+    {
         var profile = await unitOfWork.Profiles.GetByUserIdAsync(userId);
         if (profile is null)
-            return Result<ProfileResponse>.Fail("Profile not found");
+            return Result<bool>.Fail("Profile not found");
 
-        var oldAvatar = profile.AvatarUrl;
-
-        var fileRecord = await fileStorage.UploadAsync(
-            avatarFile,
-            FileOwnerType.Profile,
-            userId,
-            uploadedByUserId);
-
-        profile.AvatarUrl = fileRecord.Url;
+        profile.AvatarUrl = avatarUrl;
         profile.UpdatedAt = DateTime.UtcNow;
 
         await unitOfWork.Profiles.UpdateAsync(profile);
         await unitOfWork.SaveChangesAsync();
 
-        await auditLogService.LogAsync(
-            uploadedByUserId,
-            AuditActions.UploadAvatar,
-            nameof(Profile),
-            profile.Id,
-            newValues: new { oldAvatar, fileRecord.Url }
-        );
-
         await cache.RemoveByPrefixAsync(ProfileCachePrefix);
 
-        return Result<ProfileResponse>.Ok(MapToResponse(profile));
+        logger.LogInformation("Avatar URL updated: {UserId} - {Url}", userId, avatarUrl);
+
+        return Result<bool>.Ok(true);
     }
 
     public async Task<Result<bool>> DeleteAsync(int userId)
