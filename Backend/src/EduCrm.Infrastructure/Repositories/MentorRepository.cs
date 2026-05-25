@@ -33,8 +33,7 @@ public class MentorRepository(AppDbContext context) : IMentorRepository
         CancellationToken cancellationToken = default)
     {
         return await context.Mentors
-            .Include(m => m.User)
-            .ThenInclude(u => u.Profile)
+            .AsNoTracking()
             .FirstOrDefaultAsync(m => m.UserId == userId, cancellationToken);
     }
 
@@ -57,15 +56,27 @@ public class MentorRepository(AppDbContext context) : IMentorRepository
         Mentor mentor,
         CancellationToken cancellationToken = default)
     {
-        context.Mentors.Update(mentor);
+        var tracked = context.ChangeTracker.Entries<Mentor>()
+            .FirstOrDefault(e => e.Entity.Id == mentor.Id);
+
+        if (tracked is not null)
+            tracked.CurrentValues.SetValues(mentor);
+        else
+            context.Mentors.Update(mentor);
+
         return Task.CompletedTask;
     }
 
-    public async Task DeleteAsync(int id)
+    public async Task DeleteAsync(
+        int id,
+        CancellationToken cancellationToken = default)
     {
-        var mentor = await context.Mentors.FindAsync(id);
+        var mentor = await context.Mentors
+            .FindAsync([id], cancellationToken);
 
-        if (mentor is not null)
-            context.Mentors.Remove(mentor);
+        if (mentor is null)
+            return;
+
+        context.Mentors.Remove(mentor);
     }
 }

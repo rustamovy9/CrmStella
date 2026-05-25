@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using EduCrm.Application.DTOs.Auth.Request;
 using EduCrm.Application.Interfaces.Services;
+using EduCrm.Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -94,5 +95,13 @@ public class AuthController(IAuthService authService) : BaseController
             return HandleError(result);
 
         return Ok(result);
+    }
+    
+    [HttpPatch("assign-role")]
+    [Authorize(Roles = nameof(UserRole.Admin))]
+    public async Task<IActionResult> AssignRole([FromBody] AssignRoleRequest request, CancellationToken ct)
+    {
+        var result = await authService.AssignRoleAsync(GetUserId(), request, ct);
+        return HandleResult(result);
     }
 }

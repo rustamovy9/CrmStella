@@ -61,11 +61,16 @@ public class StudentRepository(AppDbContext context) : IStudentRepository
         return Task.CompletedTask;
     }
 
-    public async Task DeleteAsync(int id)
+    public async Task DeleteAsync(
+        int id,
+        CancellationToken cancellationToken = default)
     {
-        var student = await context.Students.FindAsync(id);
+        var student = await context.Students
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
 
-        if (student is not null)
-            context.Students.Remove(student);
+        if (student is null)
+            return;
+
+        context.Students.Remove(student);
     }
 }

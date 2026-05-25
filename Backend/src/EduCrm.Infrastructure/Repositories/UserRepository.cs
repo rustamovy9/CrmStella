@@ -32,16 +32,12 @@ public class UserRepository(AppDbContext context) : IUserRepository
             .ToListAsync(cancellationToken);
     }
 
-    public async Task<User?> GetByIdAsync(
-        int id,
-        CancellationToken cancellationToken = default)
-    {
-        return await context.Users
-            .AsNoTracking()
-            .Include(x => x.Role)
-            .Include(x => x.Profile)
-            .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-    }
+    
+    public async Task<User?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
+        => await context.Users
+            .Include(u => u.Role)
+            .Include(u => u.Profile)
+            .FirstOrDefaultAsync(u => u.Id == id, cancellationToken); 
 
     public async Task<User?> GetByEmailAsync(
         string email,
@@ -93,12 +89,9 @@ public class UserRepository(AppDbContext context) : IUserRepository
         return user;
     }
 
-    public Task<User> UpdateAsync(
-        User user,
-        CancellationToken cancellationToken = default)
+    public Task<User> UpdateAsync(User user, CancellationToken cancellationToken = default)
     {
         user.UpdatedAt = DateTime.UtcNow;
-        context.Users.Update(user);
         return Task.FromResult(user);
     }
 

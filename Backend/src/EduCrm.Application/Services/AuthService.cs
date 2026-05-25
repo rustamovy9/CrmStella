@@ -362,4 +362,71 @@ public class AuthService(
             .Select(_ => chars[RandomNumberGenerator.GetInt32(chars.Length)])
             .ToArray());
     }
+    
+    public async Task<Result<bool>> AssignRoleAsync(int adminUserId, AssignRoleRequest request, CancellationToken ct = default)
+{
+    var user = await unitOfWork.Users.GetByIdAsync(request.UserId, ct);
+    if (user is null)
+        return Result<bool>.Fail("User not found", ErrorType.NotFound);
+
+    if (user.RoleId == request.RoleId)
+        return Result<bool>.Fail("User already has this role", ErrorType.BadRequest);
+
+    var oldRoleId = user.RoleId;
+
+    // удаляем старую роль
+    if (oldRoleId == (int)UserRole.Mentor)
+    {
+        var mentor = await unitOfWork.Mentors.GetByUserIdAsync(user.Id, ct);
+        if (mentor is not null)
+            await unitOfWork.Mentors.DeleteAsync(mentor.Id, ct);
+    }
+    else if (oldRoleId == (int)UserRole.Student)
+    {
+        var student = await unitOfWork.Students.GetByUserIdAsync(user.Id, ct);
+        if (student is not null)
+            await unitOfWork.Students.DeleteAsync(student.Id, ct);
+    }
+    
+    user.RoleId = request.RoleId;
+    user.UpdatedAt = DateTime.UtcNow;
+    
+    if (request.RoleId == (int)UserRole.Mentor)
+    {
+        var mentor = new Mentor
+        {
+            UserId = user.Id,       // ✅ только Id, не user объект
+            HireDate = DateTime.UtcNow,
+            IsActive = true
+        };
+        await unitOfWork.Mentors.CreateAsync(mentor, ct);
+    }
+    else if (request.RoleId == (int)UserRole.Student)
+    {
+        var student = new Student
+        {
+            UserId = user.Id,       // ✅ только Id, не user объект
+            Balance = 0,
+            IsActive = true,
+            EnrolledAt = DateTime.UtcNow
+        };
+        await unitOfWork.Students.CreateAsync(student, ct);
+    }
+
+    await unitOfWork.Users.UpdateAsync(user, ct);
+    await unitOfWork.SaveChangesAsync(ct);
+
+    await cache.RemoveByPrefixAsync(UserCachePrefix);
+    await cache.RemoveByPrefixAsync(AuthUserCachePrefix);
+
+    await auditLogService.LogAsync(
+        adminUserId,
+        AuditActions.AssignRole,
+        "User",
+        user.Id,
+        oldValues: new { RoleId = oldRoleId },
+        newValues: new { RoleId = request.RoleId });
+
+    return Result<bool>.Ok(true);
+}
 }
