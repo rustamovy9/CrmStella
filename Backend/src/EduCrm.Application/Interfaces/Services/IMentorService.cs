@@ -6,7 +6,10 @@ namespace EduCrm.Application.Interfaces.Services;
 
 public interface IMentorService
 {
-    Task<Result<List<MentorListItemResponse>>> GetAllAsync();
+    public Task<Result<PagedResult<MentorListItemResponse>>> GetAllAsync(
+        MentorQueryRequest query,
+        CancellationToken cancellationToken = default);
+
     Task<Result<MentorResponse>> GetByIdAsync(int id);
     Task<Result<MentorResponse>> UpdateAsync(int id, UpdateMentorRequest request);
     Task<Result<bool>> SetStatusAsync(int id, SetMentorStatusRequest request);

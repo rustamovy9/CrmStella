@@ -10,9 +10,11 @@ namespace EduCrm.WebApi.Controllers;
 public class MentorsController(IMentorService mentorService) : BaseController
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll(
+        [FromQuery] MentorQueryRequest query,
+        CancellationToken cancellationToken)
     {
-        var result = await mentorService.GetAllAsync();
+        var result = await mentorService.GetAllAsync(query, cancellationToken);
         if (!result.IsSuccess)
             return HandleError(result);
 

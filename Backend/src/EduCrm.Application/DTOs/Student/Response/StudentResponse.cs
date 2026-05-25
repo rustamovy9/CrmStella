@@ -1,4 +1,4 @@
-namespace EduCrm.Application.DTOs.Students.Response;
+namespace EduCrm.Application.DTOs.Student.Response;
 
 public class StudentResponse
 {
@@ -9,6 +9,7 @@ public class StudentResponse
     public string Email { get; set; } = string.Empty;
     public string? PhoneNumber { get; set; }
     public string? AvatarUrl { get; set; }
+    public string? ImageUrl { get; set; }
 
     public decimal Balance { get; set; }
     public bool IsActive { get; set; }

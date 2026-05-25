@@ -1,305 +1,174 @@
-import React, { useState } from 'react';
-import { Mail, Wallet } from 'lucide-react';
+import React from 'react';
+import { Mail, Wallet, Briefcase, Phone } from 'lucide-react';
 
 interface UserCardProps {
     id: number;
     name: string;
     email: string;
-    role: 'student' | 'mentor' | 'user';
+    role: 'student' | 'mentor';
     isActive: boolean;
+    onStatusToggle: (id: number, currentStatus: boolean) => void;
     balance?: number;
-    onStatusToggle?: (id: number, currentStatus: boolean) => void;
+    specialization?: string;
+    experienceYears?: number;
+    phoneNumber?: string;
+    avatarUrl?: string | null;
 }
 
-const UserCard: React.FC<UserCardProps> = ({ 
+const UserCard: React.FC<UserCardProps> = ({
     id,
-    name, 
-    email, 
-    role, 
-    isActive, 
-    balance,
-    onStatusToggle 
+    name,
+    email,
+    role,
+    isActive,
+    onStatusToggle,
+    balance = 0,
+    specialization,
+    experienceYears,
+    phoneNumber,
+    avatarUrl
 }) => {
-    const [isHovered, setIsHovered] = useState(false);
-
-    // Стилизация ролей (градиенты и мягкие подложки)
-    const roleConfig = {
-        student: { 
-            color: '#4F46E5', 
-            bg: '#EEF2FF', 
-            glow: 'linear-gradient(135deg, #6366F1 0%, #4338CA 100%)',
-            label: 'Студент' 
-        },
-        mentor: { 
-            color: '#7C3AED', 
-            bg: '#F5F3FF', 
-            glow: 'linear-gradient(135deg, #A855F7 0%, #6D28D9 100%)',
-            label: 'Ментор' 
-        },
-        user: { 
-            color: '#475569', 
-            bg: '#F8FAFC', 
-            glow: 'linear-gradient(135deg, #94A3B8 0%, #475569 100%)',
-            label: 'Пользователь' 
-        }
-    };
-
-    const currentRole = roleConfig[role];
-    const firstLetter = name ? name.charAt(0).toUpperCase() : '?';
+    const firstLetter = name ? name.charAt(0).toUpperCase() : 'U';
 
     return (
-        <div 
-            style={{
-                ...styles.card,
-                boxShadow: isHovered 
-                    ? '0 20px 35px -8px rgba(15, 23, 42, 0.08), 0 0 0 1px rgba(15, 23, 42, 0.08)' 
-                    : '0 6px 16px -4px rgba(15, 23, 42, 0.02), 0 0 0 1px rgba(15, 23, 42, 0.04)',
-                transform: isHovered ? 'translateY(-4px)' : 'translateY(0)'
-            }}
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => setIsHovered(false)}
-        >
-            {/* ШАПКА КАРТОЧКИ */}
-            <div style={styles.headerRow}>
-                <div style={{ ...styles.avatar, background: currentRole.glow }}>
-                    {firstLetter}
+        <div style={styles.card}>
+            {/* Верхняя часть: Аватар, имя, бейдж роли и ID */}
+            <div style={styles.topSection}>
+                {/* Круглая синеватая аватарка увеличенного размера */}
+                <div style={styles.avatar}>
+                    {avatarUrl ? (
+                        <img
+                            src={avatarUrl}
+                            alt={name}
+                            style={styles.avatarImage}
+                        />
+                    ) : (
+                        firstLetter
+                    )}
                 </div>
-                <div style={styles.identityBlock}>
-                    <div style={styles.nameContainer}>
-                        <h3 style={styles.nameText} title={name}>{name || 'Без имени'}</h3>
+
+                <div style={styles.metaContainer}>
+                    <div style={styles.nameRow}>
+                        <h4 style={styles.fullName}>{name}</h4>
                         <span style={styles.idBadge}>#{id}</span>
                     </div>
-                    <span style={{ ...styles.roleTag, color: currentRole.color, backgroundColor: currentRole.bg }}>
-                        {currentRole.label}
+                    <span style={{
+                        ...styles.roleBadge,
+                        backgroundColor: role === 'mentor' ? '#EFF6FF' : '#EEF2FF',
+                        color: role === 'mentor' ? '#3B82F6' : '#4F46E5'
+                    }}>
+                        {role === 'mentor' ? 'Ментор' : 'Студент'}
                     </span>
                 </div>
             </div>
 
-            {/* ОСНОВНОЙ КОНТЕНТ */}
-            <div style={styles.contentBody}>
-                {/* Email */}
+            {/* Средняя часть: Контакты и кастомные поля */}
+            <div style={styles.infoSection}>
                 <div style={styles.infoRow}>
-                    <Mail size={14} color="#94A3B8" style={{ flexShrink: 0 }} />
-                    <span style={styles.emailText} title={email}>{email || 'нет почты'}</span>
+                    <Mail size={14} style={styles.infoIcon} />
+                    <span style={styles.infoText}>{email}</span>
                 </div>
 
-                {/* Прокачанный, красивый блок Баланса */}
-                {balance !== undefined && (
-                    <div style={{
-                        ...styles.balanceWidget,
-                        backgroundColor: balance < 0 ? '#FEF2F2' : '#F0FDF4',
-                        borderColor: balance < 0 ? '#FEE2E2' : '#DCFCE7'
-                    }}>
-                        <div style={styles.balanceMeta}>
-                            <Wallet size={13} color={balance < 0 ? '#EF4444' : '#10B981'} />
-                            <span style={{ ...styles.balanceTitle, color: balance < 0 ? '#991B1B' : '#166534' }}>
-                                Баланс счёта
-                            </span>
-                        </div>
-                        <span style={{ 
-                            ...styles.balanceValue, 
-                            color: balance < 0 ? '#EF4444' : '#10B981' 
-                        }}>
-                            {balance.toLocaleString()} <span style={styles.currency}>TJS</span>
+                {phoneNumber && (
+                    <div style={styles.infoRow}>
+                        <Phone size={14} style={styles.infoIcon} />
+                        <span style={styles.infoText}>{phoneNumber}</span>
+                    </div>
+                )}
+
+                {role === 'student' ? (
+                    <div style={styles.balanceBox}>
+                        <Wallet size={14} color="#10B981" style={{ marginRight: '6px' }} />
+                        <span style={styles.balanceText}>
+                            Баланс счёта: <strong style={{ color: '#10B981' }}>{balance} TJS</strong>
+                        </span>
+                    </div>
+                ) : (
+                    <div style={styles.mentorBox}>
+                        <Briefcase size={14} color="#3B82F6" style={{ marginRight: '6px' }} />
+                        <span style={styles.mentorText}>
+                            {specialization || 'Не указано'} • Опыт: {experienceYears ?? 0} лет
                         </span>
                     </div>
                 )}
             </div>
 
-            {/* Мягкий разделитель перед футером */}
-            <div style={styles.divider} />
-
-            {/* ФУТЕР: Статус и iOS Switch перенесены вниз */}
-            <div style={styles.footerRow}>
-                <div style={styles.statusBlock}>
-                    <span style={{ 
-                        ...styles.statusDot, 
-                        backgroundColor: isActive ? '#34C759' : '#94A3B8',
-                        boxShadow: isActive ? '0 0 10px rgba(52, 199, 89, 0.6)' : 'none'
+            {/* Нижняя часть: Статус и Тоггл */}
+            <div style={styles.bottomSection}>
+                <div style={styles.statusWrapper}>
+                    <div style={{
+                        ...styles.statusDot,
+                        backgroundColor: isActive ? '#10B981' : '#F59E0B'
                     }} />
-                    <span style={{ ...styles.statusText, color: isActive ? '#1E293B' : '#64748B' }}>
-                        {isActive ? 'Активен' : 'Заморожен'}
+                    <span style={styles.statusLabel}>
+                        {isActive ? 'Доступ активен' : 'Доступ ограничен'}
                     </span>
                 </div>
 
-                {onStatusToggle && (
-                    <div 
-                        onClick={() => onStatusToggle(id, isActive)}
-                        style={{
-                            ...styles.iosSwitch,
-                            backgroundColor: isActive ? '#34C759' : '#E9E9EA',
-                        }}
-                    >
-                        <div style={{
-                            ...styles.iosHandle,
-                            transform: isActive ? 'translateX(16px)' : 'translateX(0)',
+                <label style={styles.switch}>
+                    <input
+                        type="checkbox"
+                        checked={isActive}
+                        onChange={() => onStatusToggle(id, isActive)}
+                        style={styles.switchInput}
+                    />
+                    <span style={{
+                        ...styles.slider,
+                        backgroundColor: isActive ? '#10B981' : '#CBD5E1'
+                    }}>
+                        <span style={{
+                            ...styles.sliderCircle,
+                            transform: isActive ? 'translateX(16px)' : 'translateX(0px)'
                         }} />
-                    </div>
-                )}
+                    </span>
+                </label>
             </div>
         </div>
     );
 };
 
 const styles = {
-    card: {
-        background: '#ffffff',
-        borderRadius: '22px',
-        padding: '24px', // Чуть увеличили внутренний отступ для "дыхания" интерфейса
-        display: 'flex',
-        flexDirection: 'column' as const,
-        position: 'relative' as const,
-        transition: 'all 0.35s cubic-bezier(0.16, 1, 0.3, 1)',
-        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    },
-    headerRow: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '14px',
-        marginBottom: '18px',
-    },
+    card: { background: '#ffffff', border: '1px solid #F1F5F9', borderRadius: '20px', padding: '24px', display: 'flex', flexDirection: 'column' as const, boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.01), 0 2px 4px -1px rgba(0, 0, 0, 0.01)', boxSizing: 'border-box' as const },
+    topSection: { display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' },
+
+    // Идеально круглая аватарка (размер увеличен с 48px до 56px, убран динамический цвет фона)
+    // Найди в самом низу styles.avatar и замени на этот:
     avatar: {
-        width: '44px',
-        height: '44px',
-        borderRadius: '14px',
+        width: '56px',
+        height: '56px',
+        borderRadius: '50%',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'center',
+        justifyContent: 'center', // <-- Вот здесь исправлена опечатка (было просто justify)
+        backgroundColor: '#4F46E5',
         color: '#ffffff',
-        fontSize: '15px',
-        fontWeight: '700',
-        flexShrink: 0,
-        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.04)',
+        fontSize: '22px',
+        fontWeight: 700,
+        overflow: 'hidden'
     },
-    identityBlock: {
-        display: 'flex',
-        flexDirection: 'column' as const,
-        gap: '4px',
-        minWidth: 0,
-    },
-    nameContainer: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-    },
-    nameText: {
-        margin: 0,
-        fontSize: '15px',
-        fontWeight: '600',
-        color: '#0F172A',
-        whiteSpace: 'nowrap' as const,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-        letterSpacing: '-0.01em',
-    },
-    idBadge: {
-        fontSize: '11px',
-        color: '#94A3B8',
-        fontWeight: '500',
-    },
-    roleTag: {
-        alignSelf: 'flex-start',
-        padding: '2px 8px',
-        borderRadius: '6px',
-        fontSize: '11px',
-        fontWeight: '600',
-    },
-    contentBody: {
-        display: 'flex',
-        flexDirection: 'column' as const,
-        gap: '14px',
-    },
-    infoRow: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        minWidth: 0,
-        paddingLeft: '2px',
-    },
-    emailText: {
-        fontSize: '13px',
-        color: '#475569',
-        whiteSpace: 'nowrap' as const,
-        overflow: 'hidden',
-        textOverflow: 'ellipsis',
-    },
-    balanceWidget: {
-        border: '1px solid',
-        padding: '12px 16px',
-        borderRadius: '14px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        transition: 'all 0.3s ease',
-    },
-    balanceMeta: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-    },
-    balanceTitle: {
-        fontSize: '12px',
-        fontWeight: '500',
-    },
-    balanceValue: {
-        fontSize: '15px',
-        fontWeight: '700',
-        letterSpacing: '-0.01em',
-    },
-    currency: {
-        fontSize: '12px',
-        fontWeight: '600',
-        opacity: 0.8,
-        marginLeft: '1px',
-    },
-    divider: {
-        height: '1px',
-        backgroundColor: '#F1F5F9',
-        width: '100%',
-        marginTop: '18px',
-        marginBottom: '14px',
-    },
-    footerRow: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    statusBlock: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-    },
-    statusDot: {
-        width: '8px',
-        height: '8px',
-        borderRadius: '50%',
-        transition: 'all 0.3s ease',
-    },
-    statusText: {
-        fontSize: '13px',
-        fontWeight: '600',
-        letterSpacing: '-0.01em',
-    },
-    iosSwitch: {
-        width: '38px',
-        height: '22px',
-        borderRadius: '999px',
-        padding: '2px',
-        display: 'flex',
-        alignItems: 'center',
-        cursor: 'pointer',
-        transition: 'background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-        flexShrink: 0,
-        boxSizing: 'border-box' as const,
-    },
-    iosHandle: {
-        width: '18px',
-        height: '18px',
-        borderRadius: '50%',
-        backgroundColor: '#ffffff',
-        transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-        boxShadow: '0 3px 8px rgba(0, 0, 0, 0.15)',
-    }
+    avatarImage: { width: '100%', height: '100%', objectFit: 'cover' as const },
+
+    metaContainer: { display: 'flex', flexDirection: 'column' as const, gap: '4px', flex: 1 },
+    nameRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    fullName: { margin: 0, fontSize: '16px', fontWeight: 700, color: '#0F172A' },
+    idBadge: { fontSize: '12px', fontWeight: 600, color: '#94A3B8' },
+    roleBadge: { alignSelf: 'flex-start', fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px' },
+    infoSection: { display: 'flex', flexDirection: 'column' as const, gap: '12px', marginBottom: '20px', flex: 1 },
+    infoRow: { display: 'flex', alignItems: 'center', gap: '8px', color: '#64748B' },
+    infoIcon: { color: '#94A3B8' },
+    infoText: { fontSize: '13px', fontWeight: 500 },
+    balanceBox: { display: 'flex', alignItems: 'center', backgroundColor: '#F0FDF4', borderRadius: '10px', padding: '10px 14px', marginTop: '6px' },
+    balanceText: { fontSize: '13px', fontWeight: 600, color: '#166534' },
+    mentorBox: { display: 'flex', alignItems: 'center', backgroundColor: '#EFF6FF', borderRadius: '10px', padding: '10px 14px', marginTop: '6px' },
+    mentorText: { fontSize: '13px', fontWeight: 600, color: '#1E40AF' },
+    bottomSection: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '16px', borderTop: '1px solid #F8FAFC' },
+    statusWrapper: { display: 'flex', alignItems: 'center', gap: '8px' },
+    statusDot: { width: '8px', height: '8px', borderRadius: '50%' },
+    statusLabel: { fontSize: '13px', fontWeight: 600, color: '#334155' },
+    switch: { position: 'relative' as const, display: 'inline-block', width: '38px', height: '22px', cursor: 'pointer' },
+    switchInput: { opacity: 0, width: 0, height: 0 },
+    slider: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0, borderRadius: '34px', transition: '0.2s', display: 'flex', alignItems: 'center', padding: '0 3px' },
+    sliderCircle: { height: '16px', width: '16px', borderRadius: '50%', backgroundColor: 'white', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' }
 };
 
 export default UserCard;

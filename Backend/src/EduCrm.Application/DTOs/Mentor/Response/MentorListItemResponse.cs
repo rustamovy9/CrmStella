@@ -9,4 +9,5 @@ public class MentorListItemResponse
     public string? Specialization { get; set; }
     public int? ExperienceYears { get; set; }
     public bool IsActive { get; set; }
+    public string? AvatarUrl { get; set; }
 }

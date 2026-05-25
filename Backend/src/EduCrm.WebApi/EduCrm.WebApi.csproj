@@ -23,4 +23,12 @@
         <ProjectReference Include="..\EduCrm.Infrastructure\EduCrm.Infrastructure.csproj"/>
     </ItemGroup>
 
+    <ItemGroup>
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\Course\03cf8c34-759f-4686-befe-7b92b4436b0b.png" />
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\Course\0735bc85-5128-4682-afd6-4fa20b6ce925.png" />
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\Course\28207c85-bab8-4b2c-9d7a-cf47be9acc34.jpg" />
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\Course\d1c1d9b8-3279-4029-bcbc-2904de652357.png" />
+      <_ContentIncludedByDefault Remove="wwwroot\uploads\Course\e13a1e67-d354-4a31-a0cf-cb04c27b0b3b.jpg" />
+    </ItemGroup>
+
 </Project>
