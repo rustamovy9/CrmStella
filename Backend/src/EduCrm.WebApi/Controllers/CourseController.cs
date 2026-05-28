@@ -11,9 +11,9 @@ namespace EduCrm.WebApi.Controllers;
 public class CourseController(ICourseService courseService) : BaseController
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll([FromQuery] CourseQueryRequest query)
     {
-        var result = await courseService.GetAllAsync();
+        var result = await courseService.GetAllAsync(query);
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -38,7 +38,7 @@ public class CourseController(ICourseService courseService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return CreatedAtAction(nameof(GetById), new { id = result.Data.Id }, result.Data);
+        return CreatedAtAction(nameof(GetById), result);
     }
 
     [HttpPut("{id:int}")]

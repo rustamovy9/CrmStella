@@ -6,7 +6,9 @@ namespace EduCrm.Application.Interfaces.Services;
 
 public interface IGroupService
 {
-    Task<Result<List<GroupListItemResponse>>> GetAllAsync();
+    public Task<Result<PagedResult<GroupListItemResponse>>> GetAllAsync(
+        GroupQueryRequest query);
+
     Task<Result<GroupResponse>> GetByIdAsync(int id);
     Task<Result<GroupResponse>> CreateAsync(CreateGroupRequest request);
     Task<Result<GroupResponse>> UpdateAsync(int id, UpdateGroupRequest request);

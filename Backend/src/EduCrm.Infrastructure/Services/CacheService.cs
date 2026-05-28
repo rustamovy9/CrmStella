@@ -6,7 +6,13 @@ namespace EduCrm.Infrastructure.Services;
 public class CacheService(IMemoryCache cache) : ICacheService
 {
     private static readonly TimeSpan DefaultExpiry = TimeSpan.FromMinutes(10);
-    private readonly List<string> _keys = [];
+
+    // ✅ Static - один список для всех экземпляров
+    private static readonly HashSet<string> _keys = [];
+    // HashSet быстрее List для поиска и удаления дубликатов
+
+    // ✅ Лок для thread-safety
+    private static readonly object _lock = new();
 
     public Task<T?> GetAsync<T>(string key)
     {
@@ -18,13 +24,29 @@ public class CacheService(IMemoryCache cache) : ICacheService
     {
         var options = new MemoryCacheEntryOptions
         {
-            AbsoluteExpirationRelativeToNow = expiry ?? DefaultExpiry
+            AbsoluteExpirationRelativeToNow = expiry ?? DefaultExpiry,
+            // ✅ Автоматически удаляем из _keys когда кэш истекает
+            PostEvictionCallbacks =
+            {
+                new PostEvictionCallbackRegistration
+                {
+                    EvictionCallback = (k, _, _, _) =>
+                    {
+                        lock (_lock)
+                        {
+                            _keys.Remove(k.ToString()!);
+                        }
+                    }
+                }
+            }
         };
 
         cache.Set(key, value, options);
 
-        if (!_keys.Contains(key))
+        lock (_lock)
+        {
             _keys.Add(key);
+        }
 
         return Task.CompletedTask;
     }
@@ -32,22 +54,34 @@ public class CacheService(IMemoryCache cache) : ICacheService
     public Task RemoveAsync(string key)
     {
         cache.Remove(key);
-        _keys.Remove(key);
+
+        lock (_lock)
+        {
+            _keys.Remove(key);
+        }
+
         return Task.CompletedTask;
     }
 
     public Task RemoveByPrefixAsync(string prefix)
     {
-        var keysToRemove = _keys
-            .Where(x => x.StartsWith(prefix))
-            .ToList();
+        List<string> keysToRemove;
 
-        Console.WriteLine($"Removing {keysToRemove.Count} keys with prefix '{prefix}'");
+        lock (_lock)
+        {
+            keysToRemove = _keys
+                .Where(x => x.StartsWith(prefix))
+                .ToList();
+        }
 
         foreach (var key in keysToRemove)
         {
             cache.Remove(key);
-            _keys.Remove(key);
+
+            lock (_lock)
+            {
+                _keys.Remove(key);
+            }
         }
 
         return Task.CompletedTask;

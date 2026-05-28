@@ -14,6 +14,7 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         var result = await authService.LoginAsync(request);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -25,7 +26,9 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
         var adminId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
         var result = await authService.RegisterAsync(adminId, request);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -36,6 +39,7 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request)
     {
         var result = await authService.RefreshTokenAsync(request);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -46,6 +50,7 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
     {
         var result = await authService.ForgotPasswordAsync(request);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -56,6 +61,7 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<IActionResult> VerifyCode([FromBody] VerifyCodeRequest request)
     {
         var result = await authService.VerifyCodeAsync(request);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -66,6 +72,7 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
     {
         var result = await authService.ResetPasswordAsync(request);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
@@ -77,31 +84,46 @@ public class AuthController(IAuthService authService) : BaseController
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
         var result = await authService.ChangePasswordAsync(userId, request);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
         return Ok(result);
     }
-
 
     [Authorize]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
         var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
         var result = await authService.LogoutAsync(userId);
+
         if (!result.IsSuccess)
             return HandleError(result);
 
         return Ok(result);
     }
-    
-    [HttpPatch("assign-role")]
+
     [Authorize(Roles = nameof(UserRole.Admin))]
-    public async Task<IActionResult> AssignRole([FromBody] AssignRoleRequest request, CancellationToken ct)
+    [HttpPatch("assign-role")]
+    public async Task<IActionResult> AssignRole(
+        [FromBody] AssignRoleRequest request,
+        CancellationToken cancellationToken)
     {
-        var result = await authService.AssignRoleAsync(GetUserId(), request, ct);
-        return HandleResult(result);
+        var adminUserId = int.Parse(
+            User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+        var result = await authService.AssignRoleAsync(
+            adminUserId,
+            request,
+            cancellationToken);
+
+        if (!result.IsSuccess)
+            return HandleError(result);
+
+        return Ok(result);
     }
 }

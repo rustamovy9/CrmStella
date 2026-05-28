@@ -4,6 +4,7 @@ import type { MentorListItemResponse } from '../../../types/admin';
 import { Search, Filter, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import MetricCard from '../../../components/ui/MetricCard';
 import UserCard from '../../../components/ui/UserCard'; // 🌟 Перешли на единый компонент карточки
+import { useNavigate } from 'react-router-dom';
 
 const MentorsPage: React.FC = () => {
     const [mentors, setMentors] = useState<MentorListItemResponse[]>([]);
@@ -16,6 +17,7 @@ const MentorsPage: React.FC = () => {
     const [totalPages, setTotalPages] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
     const pageSize = 10;
+    const navigate = useNavigate();
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [submitting, setSubmitting] = useState(false);
@@ -43,8 +45,11 @@ const MentorsPage: React.FC = () => {
 
             if (response.data && response.data.isSuccess) {
                 setMentors(response.data.data.items || []);
-                setTotalPages(response.data.data.totalPages || 1);
-                setTotalItems(response.data.data.totalCount || 0);
+                const data = response.data.data;
+                if (data) {
+                    const pages = Math.ceil(data.totalCount / data.pageSize) || 1;
+                    setTotalPages(pages);
+                } setTotalItems(response.data.data.totalCount || 0);
                 setError(null);
             } else {
                 setError("Не удалось корректно прочитать данные преподавателей");
@@ -70,8 +75,12 @@ const MentorsPage: React.FC = () => {
         setSubmitting(true);
 
         try {
+            // В MentorsPage.tsx внутри функции handleRegisterSubmit:
             const response = await adminService.registerUser({
-                ...formData,
+                firstName: formData.firstName,
+                lastName: formData.lastName,
+                email: formData.email,
+                phoneNumber: formData.phoneNumber,
                 roleId: 2
             });
 
@@ -191,23 +200,30 @@ const MentorsPage: React.FC = () => {
                 <>
                     <div style={styles.gridContainer}>
                         {mentors.map((mentor) => {
-                            const displayName = mentor.fullName || mentor.name || "Без имени";
+                            const displayName = mentor.fullName || "Без имени";
                             const BACKEND_URL = 'http://localhost:5046';
-                            const fullAvatarUrl = mentor.avatarUrl ? `${BACKEND_URL}${mentor.avatarUrl}` : null;
+                            const fullAvatarUrl = mentor.avatarUrl ? `${BACKEND_URL}/${mentor.avatarUrl}` : null;
 
                             return (
                                 <UserCard
                                     key={mentor.id}
-                                    id={mentor.id}
+                                    id={mentor.userId}  // Оставляем для внутренней логики карточки
                                     name={displayName}
                                     email={mentor.email}
                                     role="mentor"
                                     isActive={mentor.isActive}
+                                    specialization={mentor.specialization}
+                                    experienceYears={mentor.experienceYears}
                                     avatarUrl={fullAvatarUrl}
-                                    onStatusToggle={handleStatusToggle}
-                                    // Дополнительные параметры ментора, если UserCard умеет их выводить:
-                                    specialization={mentor.specialization || "Не указано"}
-                                    experienceYears={mentor.experienceYears ?? 0} />
+
+                                    // 🎯 ТРЕБОВАНИЕ 1: Для статуса передаем только mentor.id (mentorId)
+                                    onStatusToggle={() => handleStatusToggle(mentor.id, mentor.isActive)}
+
+                                    // 🎯 ТРЕБОВАНИЕ 2: Для UserInfoPage передаем userId в URL, а mentorId — в state роутера
+                                    onView={() => navigate(`/admin/users/${mentor.userId}`, {
+                                        state: { mentorId: mentor.id }
+                                    })}
+                                />
                             );
                         })}
                     </div>

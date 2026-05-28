@@ -21,34 +21,43 @@ public class CourseService(
     private const string CourseCachePrefix = "courses:";
     private const string CourseListCacheKey = "courses:list";
 
-    public async Task<Result<List<CourseListItemResponse>>> GetAllAsync()
+    public async Task<Result<PagedResult<CourseListItemResponse>>> GetAllAsync(
+        CourseQueryRequest query)
     {
-        var cached = await cache.GetAsync<List<CourseListItemResponse>>(CourseListCacheKey);
+        var cacheKey = $"{CourseCachePrefix}list:{query.Page}:{query.PageSize}:{query.Search}:{query.IsActive}";
+
+        var cached = await cache.GetAsync<PagedResult<CourseListItemResponse>>(cacheKey);
         if (cached is not null)
-            return Result<List<CourseListItemResponse>>.Ok(cached);
+            return Result<PagedResult<CourseListItemResponse>>.Ok(cached);
 
-        var courses = await unitOfWork.Courses.GetAllAsync();
+        var pagedCourses = await unitOfWork.Courses.GetAllAsync(query);
 
-        var result = courses.Select(c => new CourseListItemResponse
+        var result = new PagedResult<CourseListItemResponse>
         {
-            Id = c.Id,
-            Name = c.Name,
-            Description = c.Description,
-            Price = c.Price,
-            IconUrl = c.IconUrl,
-            DurationWeeks = c.DurationWeeks,
-            IsActive = c.IsActive,
-            GroupsCount = c.Groups?.Count ?? 0,
-            ActiveGroupsCount = c.Groups?.Count(g => g.Status == GroupStatus.Active) ?? 0,
-            TotalStudentsCount = c.Groups?
-                .SelectMany(g => g.GroupStudents)
-                .Count(gs => gs.IsActive) ?? 0,
-            CreatedAt = c.CreatedAt
-        }).ToList();
+            Items = pagedCourses.Items.Select(c => new CourseListItemResponse
+            {
+                Id = c.Id,
+                Name = c.Name,
+                Description = c.Description,
+                Price = c.Price,
+                IconUrl = c.IconUrl,
+                DurationWeeks = c.DurationWeeks,
+                IsActive = c.IsActive,
+                GroupsCount = c.Groups?.Count ?? 0,
+                ActiveGroupsCount = c.Groups?.Count(g => g.Status == GroupStatus.Active) ?? 0,
+                TotalStudentsCount = c.Groups?
+                    .SelectMany(g => g.GroupStudents)
+                    .Count(gs => gs.IsActive) ?? 0,
+                CreatedAt = c.CreatedAt
+            }).ToList(),
+            TotalCount = pagedCourses.TotalCount,
+            Page = pagedCourses.Page,
+            PageSize = pagedCourses.PageSize
+        };
 
-        await cache.SetAsync(CourseListCacheKey, result, TimeSpan.FromMinutes(30));
+        await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(30));
 
-        return Result<List<CourseListItemResponse>>.Ok(result);
+        return Result<PagedResult<CourseListItemResponse>>.Ok(result);
     }
 
     public async Task<Result<CourseResponse>> GetByIdAsync(int id)

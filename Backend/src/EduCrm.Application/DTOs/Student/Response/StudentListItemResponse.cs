@@ -9,6 +9,5 @@ public class StudentListItemResponse
     public decimal Balance { get; set; }
     public bool IsActive { get; set; }
     public string? AvatarUrl { get; set; }
-    public DateTime EnrolledAt { get; set; }  
-
+    public DateTime EnrolledAt { get; set; }
 }

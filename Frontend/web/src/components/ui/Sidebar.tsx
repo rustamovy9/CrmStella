@@ -132,7 +132,7 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
                 subItems: [
                     { path: '/admin/courses', label: 'Все курсы', icon: <BookOpen size={18} /> },
                     { path: '/admin/groups', label: 'Группы и потоки', icon: <Layers size={18} /> },
-                    { path: '/admin/schedule', label: 'Расписание', icon: <Calendar size={18} /> }
+                    { path: '/admin/schedules', label: 'Расписание', icon: <Calendar size={18} /> }
                 ]
             },
             { path: '/admin/payments', label: 'Финансы и счета', icon: <CreditCard size={24} /> },

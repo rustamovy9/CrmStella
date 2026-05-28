@@ -4,22 +4,24 @@ import type { StudentListItemResponse } from '../../../types/admin';
 import { Search, Filter, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import MetricCard from '../../../components/ui/MetricCard';
 import UserCard from '../../../components/ui/UserCard';
+import { useNavigate } from 'react-router-dom';
 
 const StudentsPage: React.FC = () => {
     const [students, setStudents] = useState<StudentListItemResponse[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
-    
+
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
-    const pageSize = 6; 
+    const pageSize = 6;
+    const navigate = useNavigate();
 
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
-    
+
     const [createFormData, setCreateFormData] = useState({
         firstName: '',
         lastName: '',
@@ -43,8 +45,11 @@ const StudentsPage: React.FC = () => {
 
             if (response.data && response.data.isSuccess) {
                 setStudents(response.data.data.items || []);
-                setTotalPages(response.data.data.totalPages || 1);
-                setTotalItems(response.data.data.totalCount || 0);
+                const data = response.data.data;
+                if (data) {
+                    const pages = Math.ceil(data.totalCount / data.pageSize) || 1;
+                    setTotalPages(pages);
+                } setTotalItems(response.data.data.totalCount || 0);
                 setError(null);
             } else {
                 setError("Не удалось корректно прочитать данные студентов");
@@ -92,7 +97,7 @@ const StudentsPage: React.FC = () => {
     const handleCreateStudent = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError(null);
-        
+
         try {
             const response = await adminService.registerUser({
                 firstName: createFormData.firstName,
@@ -105,7 +110,7 @@ const StudentsPage: React.FC = () => {
             if (response.data && response.data.isSuccess) {
                 setIsCreateModalOpen(false);
                 setCreateFormData({ firstName: '', lastName: '', email: '', phoneNumber: '' });
-                fetchStudents(); 
+                fetchStudents();
             } else {
                 setFormError(response.data.message || "Не удалось зарегистрировать студента");
             }
@@ -115,7 +120,7 @@ const StudentsPage: React.FC = () => {
         }
     };
 
-    const totalStudents = totalItems; 
+    const totalStudents = totalItems;
     const activeStudentsOnPage = students.filter(s => s.isActive).length;
     const frozenStudentsOnPage = students.length - activeStudentsOnPage;
     const totalBalanceOnPage = students.reduce((sum, s) => sum + (s.balance || 0), 0);
@@ -132,18 +137,18 @@ const StudentsPage: React.FC = () => {
 
             {/* Блок метрик с идеально ровными карточками */}
             <div style={styles.metricsWrapper}>
-                <div 
-                    onClick={() => setIsCreateModalOpen(true)} 
+                <div
+                    onClick={() => setIsCreateModalOpen(true)}
                     style={styles.metricCardGridWrapperClickable}
                 >
-                    <MetricCard 
-                        isMain 
-                        value={totalStudents} 
-                        label="ВСЕГО СТУДЕНТОВ" 
-                        subLabel="Нажмите, чтобы добавить" 
+                    <MetricCard
+                        isMain
+                        value={totalStudents}
+                        label="ВСЕГО СТУДЕНТОВ"
+                        subLabel="Нажмите, чтобы добавить"
                     />
                 </div>
-                
+
                 <div style={styles.metricCardGridWrapper}>
                     <MetricCard variant="green" value={activeStudentsOnPage} label="АКТИВНЫЕ НА СТР." subLabel="Доступ открыт" />
                 </div>
@@ -187,17 +192,25 @@ const StudentsPage: React.FC = () => {
                 <>
                     <div style={styles.gridContainer}>
                         {students.map((student) => {
-                            const displayName = student.fullName || student.name || "Без имени";
+                            const displayName = student.fullName || "Без имени";
+
                             return (
                                 <UserCard
                                     key={student.id}
-                                    id={student.id}
+                                    id={student.userId}  // Используется внутри карточки
                                     name={displayName}
                                     email={student.email}
                                     role="student"
                                     balance={student.balance}
                                     isActive={student.isActive}
-                                    onStatusToggle={handleStatusToggle}
+
+                                    // 🎯 Для изменения статуса студента передаем именно его student.id
+                                    onStatusToggle={() => handleStatusToggle(student.id, student.isActive)}
+
+                                    // 🎯 Для страницы деталей передаем userId в URL, а student.id (как studentId) в state
+                                    onView={() => navigate(`/admin/users/${student.userId}`, {
+                                        state: { studentId: student.id }
+                                    })}
                                 />
                             );
                         })}
@@ -208,9 +221,9 @@ const StudentsPage: React.FC = () => {
                     )}
 
                     <div style={styles.paginationContainer}>
-                        <button 
+                        <button
                             style={{
-                                ...styles.pageSquareBtn, 
+                                ...styles.pageSquareBtn,
                                 opacity: currentPage === 1 ? 0.4 : 1,
                                 cursor: currentPage === 1 ? 'not-allowed' : 'pointer'
                             }}
@@ -219,12 +232,12 @@ const StudentsPage: React.FC = () => {
                         >
                             <ChevronLeft size={16} color="#64748B" />
                         </button>
-                        
+
                         <button style={styles.pageSquareBtnActive}>{currentPage}</button>
-                        
-                        <button 
+
+                        <button
                             style={{
-                                ...styles.pageSquareBtn, 
+                                ...styles.pageSquareBtn,
                                 opacity: currentPage === totalPages ? 0.4 : 1,
                                 cursor: currentPage === totalPages ? 'not-allowed' : 'pointer'
                             }}
@@ -243,7 +256,7 @@ const StudentsPage: React.FC = () => {
                         <button style={styles.closeBtn} onClick={() => setIsCreateModalOpen(false)}>
                             <X size={20} />
                         </button>
-                        
+
                         <h3 style={styles.modalTitle}>Регистрация студента</h3>
                         <p style={styles.modalSubtitle}>Новый учащийся получит временный пароль на указанную почту.</p>
 
@@ -253,49 +266,49 @@ const StudentsPage: React.FC = () => {
                             <div style={styles.rowInputs}>
                                 <div style={styles.inputGroup}>
                                     <label style={styles.inputLabel}>ИМЯ</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         required
-                                        style={styles.modalInput} 
+                                        style={styles.modalInput}
                                         placeholder="Иван"
                                         value={createFormData.firstName}
-                                        onChange={(e) => setCreateFormData({...createFormData, firstName: e.target.value})}
+                                        onChange={(e) => setCreateFormData({ ...createFormData, firstName: e.target.value })}
                                     />
                                 </div>
                                 <div style={styles.inputGroup}>
                                     <label style={styles.inputLabel}>ФАМИЛИЯ</label>
-                                    <input 
-                                        type="text" 
+                                    <input
+                                        type="text"
                                         required
-                                        style={styles.modalInput} 
+                                        style={styles.modalInput}
                                         placeholder="Иванов"
                                         value={createFormData.lastName}
-                                        onChange={(e) => setCreateFormData({...createFormData, lastName: e.target.value})}
+                                        onChange={(e) => setCreateFormData({ ...createFormData, lastName: e.target.value })}
                                     />
                                 </div>
                             </div>
 
                             <div style={styles.inputGroup}>
                                 <label style={styles.inputLabel}>EMAIL (ЭЛЕКТРОННАЯ ПОЧТА)</label>
-                                <input 
-                                    type="email" 
+                                <input
+                                    type="email"
                                     required
-                                    style={styles.modalInput} 
+                                    style={styles.modalInput}
                                     placeholder="test@gmail.com"
                                     value={createFormData.email}
-                                    onChange={(e) => setCreateFormData({...createFormData, email: e.target.value})}
+                                    onChange={(e) => setCreateFormData({ ...createFormData, email: e.target.value })}
                                 />
                             </div>
 
                             <div style={styles.inputGroup}>
                                 <label style={styles.inputLabel}>НОМЕР ТЕЛЕФОНА</label>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     required
-                                    style={styles.modalInput} 
+                                    style={styles.modalInput}
                                     placeholder="+992914241321"
                                     value={createFormData.phoneNumber}
-                                    onChange={(e) => setCreateFormData({...createFormData, phoneNumber: e.target.value})}
+                                    onChange={(e) => setCreateFormData({ ...createFormData, phoneNumber: e.target.value })}
                                 />
                             </div>
 
@@ -315,7 +328,7 @@ const styles = {
     headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' },
     title: { fontSize: '26px', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' },
     subtitle: { fontSize: '14px', color: '#64748B', margin: '4px 0 0 0', fontWeight: 500 },
-    
+
     // Сетка для верхних карточек метрик
     metricsWrapper: { display: 'flex', flexWrap: 'wrap' as const, gap: '20px', marginBottom: '32px', width: '100%', alignItems: 'stretch' },
     metricCardGridWrapper: { flex: '1 1 240px', display: 'grid' as const },

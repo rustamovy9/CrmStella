@@ -15,6 +15,7 @@ export interface AuthResponse {
 }
 
 export interface ApiResult<T> {
+    iconUrl: any;
     isSuccess: boolean;
     data: T;         
     error?: string | null;

@@ -19,41 +19,51 @@ public class GroupService(
     private const string GroupCachePrefix = "groups:";
     private const string GroupListCacheKey = "groups:list";
 
-    public async Task<Result<List<GroupListItemResponse>>> GetAllAsync()
+    public async Task<Result<PagedResult<GroupListItemResponse>>> GetAllAsync(
+        GroupQueryRequest query)
     {
-        var cached = await cache.GetAsync<List<GroupListItemResponse>>(GroupListCacheKey);
+        var cacheKey =
+            $"{GroupCachePrefix}list:{query.Page}:{query.PageSize}:{query.Search}:{query.CourseId}:{query.MentorId}:{query.Status}";
+
+        var cached = await cache.GetAsync<PagedResult<GroupListItemResponse>>(cacheKey);
         if (cached is not null)
         {
             logger.LogInformation("Groups list served from cache");
-            return Result<List<GroupListItemResponse>>.Ok(cached);
+            return Result<PagedResult<GroupListItemResponse>>.Ok(cached);
         }
 
-        var groups = await unitOfWork.Groups.GetAllAsync();
+        var pagedGroups = await unitOfWork.Groups.GetAllAsync(query);
 
-        var result = groups.Select(g =>
+        var result = new PagedResult<GroupListItemResponse>
         {
-            var activeCount = g.GroupStudents?.Count(gs => gs.IsActive) ?? 0;
-            return new GroupListItemResponse
+            Items = pagedGroups.Items.Select(g =>
             {
-                Id = g.Id,
-                Name = g.Name,
-                CourseId = g.CourseId,
-                CourseName = g.Course.Name,
-                MentorId = g.MentorId,
-                MentorName = g.Mentor.User.FullName,
-                StartDate = g.StartDate,
-                EndDate = g.EndDate,
-                MaxStudents = g.MaxStudents,
-                ActiveStudentsCount = activeCount,
-                FreeSlots = g.MaxStudents - activeCount,
-                Status = g.Status.ToString(),
-                CreatedAt = g.CreatedAt
-            };
-        }).ToList();
+                var activeCount = g.GroupStudents?.Count(gs => gs.IsActive) ?? 0;
+                return new GroupListItemResponse
+                {
+                    Id = g.Id,
+                    Name = g.Name,
+                    CourseId = g.CourseId,
+                    CourseName = g.Course.Name,
+                    MentorId = g.MentorId,
+                    MentorName = g.Mentor.User.FullName,
+                    StartDate = g.StartDate,
+                    EndDate = g.EndDate,
+                    MaxStudents = g.MaxStudents,
+                    ActiveStudentsCount = activeCount,
+                    FreeSlots = g.MaxStudents - activeCount,
+                    Status = g.Status.ToString(),
+                    CreatedAt = g.CreatedAt
+                };
+            }).ToList(),
+            TotalCount = pagedGroups.TotalCount,
+            Page = pagedGroups.Page,
+            PageSize = pagedGroups.PageSize
+        };
 
-        await cache.SetAsync(GroupListCacheKey, result, TimeSpan.FromMinutes(30));
+        await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(30));
 
-        return Result<List<GroupListItemResponse>>.Ok(result);
+        return Result<PagedResult<GroupListItemResponse>>.Ok(result);
     }
 
     public async Task<Result<GroupResponse>> GetByIdAsync(int id)

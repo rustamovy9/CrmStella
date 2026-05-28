@@ -2,6 +2,7 @@ using EduCrm.Application.Common;
 using EduCrm.Application.DTOs.Student.Request;
 using EduCrm.Application.DTOs.Student.Response;
 using EduCrm.Application.DTOs.Students.Request;
+using EduCrm.Application.DTOs.Users.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Constants;
@@ -45,7 +46,7 @@ public class StudentService(
                 Email = s.User.Email,
                 Balance = s.Balance,
                 IsActive = s.IsActive,
-                AvatarUrl = s.User.Profile?.AvatarUrl,  
+                AvatarUrl = s.User.Profile?.AvatarUrl,
                 EnrolledAt = s.EnrolledAt
             }).ToList(),
             TotalCount = pagedStudents.TotalCount,
@@ -58,26 +59,55 @@ public class StudentService(
         return Result<PagedResult<StudentListItemResponse>>.Ok(result);
     }
 
-    public async Task<Result<StudentResponse>> GetByIdAsync(int id)
+    public async Task<Result<UserDetailResponse>> GetByIdAsync(int id)
     {
-        var cacheKey = $"{StudentCachePrefix}{id}";
+        var user = await unitOfWork.Users.GetByIdAsync(id);
+        if (user is null)
+            return Result<UserDetailResponse>.Fail("User not found");
 
-        var cached = await cache.GetAsync<StudentResponse>(cacheKey);
-        if (cached is not null)
-            return Result<StudentResponse>.Ok(cached);
-
-        var student = await unitOfWork.Students.GetByIdAsync(id);
-        if (student is null)
+        var response = new UserDetailResponse
         {
-            logger.LogWarning("Student not found: {StudentId}", id);
-            return Result<StudentResponse>.Fail("Student not found");
+            Id = user.Id,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            FullName = user.FullName,
+            Email = user.Email,
+            PhoneNumber = user.PhoneNumber,
+            Role = user.Role?.Name ?? string.Empty,
+            IsActive = user.IsActive,
+            IsPasswordSet = user.IsPasswordSet,
+            CreatedAt = user.CreatedAt,
+            UpdatedAt = user.UpdatedAt,
+
+            // Из Profile
+            AvatarUrl = user.Profile?.AvatarUrl,
+            AboutMe = user.Profile?.AboutMe,
+            TelegramUsername = user.Profile?.TelegramUsername,
+            GithubUrl = user.Profile?.GithubUrl
+        };
+
+        // ✅ Добавляем данные Student/Mentor
+        if (user.RoleId == 3) // Student
+        {
+            var student = await unitOfWork.Students.GetByUserIdAsync(id);
+            if (student is not null)
+            {
+                response.Balance = student.Balance;
+                response.EnrolledAt = student.EnrolledAt;
+            }
+        }
+        else if (user.RoleId == 2) // Mentor
+        {
+            var mentor = await unitOfWork.Mentors.GetByUserIdAsync(id);
+            if (mentor is not null)
+            {
+                response.Specialization = mentor.Specialization;
+                response.ExperienceYears = mentor.ExperienceYears;
+                response.HireDate = mentor.HireDate;
+            }
         }
 
-        var response = MapToResponse(student);
-
-        await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(30));
-
-        return Result<StudentResponse>.Ok(response);
+        return Result<UserDetailResponse>.Ok(response);
     }
 
     public async Task<Result<StudentResponse>> UpdateAsync(int id, UpdateStudentRequest request)
@@ -115,6 +145,7 @@ public class StudentService(
         );
 
         await cache.RemoveByPrefixAsync(StudentCachePrefix);
+        await cache.RemoveByPrefixAsync("users:");
 
         logger.LogInformation("Student updated: {StudentId}", id);
 

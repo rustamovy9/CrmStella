@@ -63,7 +63,46 @@ public class UserService(
         if (user is null)
             return Result<UserDetailResponse>.Fail("User not found");
 
-        var response = MapToDetailResponse(user);
+        var response = new UserDetailResponse
+        {
+            Id = user.Id,
+            FirstName = user.FirstName,
+            LastName = user.LastName,
+            FullName = user.FullName,
+            Email = user.Email,
+            PhoneNumber = user.PhoneNumber,
+            Role = user.Role?.Name ?? string.Empty,
+            IsActive = user.IsActive,
+            IsPasswordSet = user.IsPasswordSet,
+            CreatedAt = user.CreatedAt,
+            UpdatedAt = user.UpdatedAt,
+            AvatarUrl = user.Profile?.AvatarUrl,
+            AboutMe = user.Profile?.AboutMe,
+            TelegramUsername = user.Profile?.TelegramUsername,
+            GithubUrl = user.Profile?.GithubUrl
+        };
+
+        if (user.RoleId == 3) // Student
+        {
+            var student = await unitOfWork.Students.GetByUserIdAsync(id);
+            if (student is not null)
+            {
+                response.StudentId = student.Id; // ✅
+                response.Balance = student.Balance;
+                response.EnrolledAt = student.EnrolledAt;
+            }
+        }
+        else if (user.RoleId == 2) // Mentor
+        {
+            var mentor = await unitOfWork.Mentors.GetByUserIdAsync(id);
+            if (mentor is not null)
+            {
+                response.MentorId = mentor.Id; // ✅
+                response.Specialization = mentor.Specialization;
+                response.ExperienceYears = mentor.ExperienceYears;
+                response.HireDate = mentor.HireDate;
+            }
+        }
 
         await cache.SetAsync(cacheKey, response, TimeSpan.FromMinutes(5));
 
@@ -76,12 +115,7 @@ public class UserService(
         if (user is null)
             return Result<UserDetailResponse>.Fail("User not found");
 
-        var oldValues = new
-        {
-            user.FirstName,
-            user.LastName,
-            user.PhoneNumber
-        };
+        var oldValues = new { user.FirstName, user.LastName, user.PhoneNumber };
 
         user.FirstName = request.FirstName;
         user.LastName = request.LastName;
@@ -90,16 +124,14 @@ public class UserService(
         await unitOfWork.Users.UpdateAsync(user);
         await unitOfWork.SaveChangesAsync();
 
-        await auditLogService.LogAsync(
-            null,
-            AuditActions.UpdateUser,
-            nameof(User),
-            user.Id,
-            oldValues,
-            request
-        );
+        await auditLogService.LogAsync(null, AuditActions.UpdateUser, nameof(User), user.Id, oldValues, request);
 
-        await cache.RemoveByPrefixAsync(UserCachePrefix);
+        await cache.RemoveByPrefixAsync("users:");
+        await cache.RemoveByPrefixAsync("mentors:");
+        await cache.RemoveByPrefixAsync("students:");
+        await cache.RemoveByPrefixAsync("profiles:");
+
+        logger.LogInformation("User updated: {UserId}", id);
 
         return Result<UserDetailResponse>.Ok(MapToDetailResponse(user));
     }
@@ -137,6 +169,34 @@ public class UserService(
         if (user is null)
             return Result<bool>.Fail("User not found");
 
+        if (user.RoleId == 2)
+        {
+            var mentor = await unitOfWork.Mentors.GetByUserIdAsync(id);
+            if (mentor is not null)
+            {
+                await unitOfWork.Mentors.DeleteAsync(mentor.Id);
+                logger.LogInformation("Mentor deleted: {MentorId} for UserId: {UserId}", mentor.Id, id);
+            }
+        }
+        else if (user.RoleId == 3)
+        {
+            var student = await unitOfWork.Students.GetByUserIdAsync(id);
+            if (student is not null)
+            {
+                await unitOfWork.Students.DeleteAsync(student.Id);
+                logger.LogInformation("Student deleted: {StudentId} for UserId: {UserId}", student.Id, id);
+            }
+        }
+
+        // 2️⃣ Удаляем Profile если есть
+        var profile = await unitOfWork.Profiles.GetByUserIdAsync(id);
+        if (profile is not null)
+        {
+            await unitOfWork.Profiles.DeleteAsync(profile.Id);
+            logger.LogInformation("Profile deleted for UserId: {UserId}", id);
+        }
+
+        // 3️⃣ Удаляем User
         await unitOfWork.Users.DeleteAsync(id);
         await unitOfWork.SaveChangesAsync();
 
@@ -145,10 +205,16 @@ public class UserService(
             AuditActions.DeleteUser,
             nameof(User),
             id,
-            user
+            new { user.FullName, user.Email, user.RoleId }
         );
 
+        // 4️⃣ Инвалидируем все кэши
         await cache.RemoveByPrefixAsync(UserCachePrefix);
+        await cache.RemoveByPrefixAsync("mentors:");
+        await cache.RemoveByPrefixAsync("students:");
+        await cache.RemoveByPrefixAsync("profiles:");
+
+        logger.LogInformation("User deleted: {UserId} {Email}", id, user.Email);
 
         return Result<bool>.Ok(true);
     }

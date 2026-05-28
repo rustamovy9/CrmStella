@@ -6,7 +6,7 @@ const UsersPage: React.FC = () => {
     const [users, setUsers] = useState<UserResponse[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
-    
+
     // Состояния для фильтрации и поиска
     const [searchQuery, setSearchQuery] = useState<string>('');
     const [selectedRole, setSelectedRole] = useState<string>('All');
@@ -33,8 +33,7 @@ const UsersPage: React.FC = () => {
     const handleToggleStatus = async (id: number, currentStatus: boolean) => {
         try {
             const nextStatus = !currentStatus;
-            const res = await adminService.setUserStatus(id, nextStatus);
-            if (res.data.isSuccess) {
+            const res = await adminService.setUserActiveStatus(id, nextStatus); if (res.data.isSuccess) {
                 setUsers(prev => prev.map(u => u.id === id ? { ...u, isActive: nextStatus } : u));
             }
         } catch (err) {
@@ -45,7 +44,7 @@ const UsersPage: React.FC = () => {
     // Удаление пользователя
     const handleDeleteUser = async (id: number, name: string) => {
         if (!window.confirm(`Вы уверены, что хотите удалить пользователя ${name}?`)) return;
-        
+
         try {
             const res = await adminService.deleteUser(id);
             if (res.data.isSuccess) {
@@ -58,17 +57,17 @@ const UsersPage: React.FC = () => {
 
     // Логика фильтрации контента
     const filteredUsers = users.filter(user => {
-        const matchesSearch = user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                              user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                              user.phoneNumber?.includes(searchQuery);
-        
+        const matchesSearch = user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            user.phoneNumber?.includes(searchQuery);
+
         const matchesRole = selectedRole === 'All' || user.role === selectedRole;
-        
+
         return matchesSearch && matchesRole;
     });
 
     if (loading) return <div style={styles.centeredState}>Загрузка реестра пользователей...</div>;
-    if (error) return <div style={{...styles.centeredState, color: '#ef4444'}}>{error}</div>;
+    if (error) return <div style={{ ...styles.centeredState, color: '#ef4444' }}>{error}</div>;
 
     return (
         <div style={styles.pageContainer}>
@@ -85,9 +84,9 @@ const UsersPage: React.FC = () => {
                     <svg style={styles.searchIcon} width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth="2">
                         <circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                     </svg>
-                    <input 
-                        type="text" 
-                        placeholder="Поиск по имени, email или телефону..." 
+                    <input
+                        type="text"
+                        placeholder="Поиск по имени, email или телефону..."
                         style={styles.searchInput}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -121,7 +120,7 @@ const UsersPage: React.FC = () => {
                                 <th style={styles.th}>Системная Роль</th>
                                 <th style={styles.th}>Дата создания</th>
                                 <th style={styles.th}>Статус доступов</th>
-                                <th style={{...styles.th, textAlign: 'right'}}>Действия</th>
+                                <th style={{ ...styles.th, textAlign: 'right' }}>Действия</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -156,11 +155,11 @@ const UsersPage: React.FC = () => {
                                                 {user.role}
                                             </span>
                                         </td>
-                                        <td style={{...styles.td, color: '#64748B', fontWeight: 500}}>
+                                        <td style={{ ...styles.td, color: '#64748B', fontWeight: 500 }}>
                                             {new Date(user.createdAt).toLocaleDateString('ru-RU')}
                                         </td>
                                         <td style={styles.td}>
-                                            <div 
+                                            <div
                                                 onClick={() => handleToggleStatus(user.id, user.isActive)}
                                                 style={{
                                                     ...styles.statusToggleBadge,
@@ -175,9 +174,9 @@ const UsersPage: React.FC = () => {
                                                 {user.isActive ? 'Активен' : 'Заблокирован'}
                                             </div>
                                         </td>
-                                        <td style={{...styles.td, textAlign: 'right'}}>
+                                        <td style={{ ...styles.td, textAlign: 'right' }}>
                                             <div style={styles.actionsFlex}>
-                                                <button 
+                                                <button
                                                     onClick={() => handleDeleteUser(user.id, user.fullName)}
                                                     style={styles.deleteActionBtn}
                                                     title="Удалить пользователя"

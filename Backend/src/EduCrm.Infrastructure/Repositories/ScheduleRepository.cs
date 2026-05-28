@@ -7,15 +7,46 @@ namespace EduCrm.Infrastructure.Repositories;
 
 public class ScheduleRepository(AppDbContext context) : IScheduleRepository
 {
-    public async Task<List<Schedule>> GetAllAsync(
+    public async Task<(List<Schedule> Items, int TotalCount)> GetAllAsync(
+        int page,
+        int pageSize,
+        string? search = null,
+        DayOfWeek? dayOfWeek = null,
+        int? groupId = null,
         CancellationToken cancellationToken = default)
     {
-        return await context.Schedules
+        var query = context.Schedules
             .AsNoTracking()
             .Include(x => x.Group)
+            .AsQueryable();
+
+        // Фильтр по дню
+        if (dayOfWeek.HasValue)
+            query = query.Where(x => x.DayOfWeek == dayOfWeek.Value);
+
+        // Фильтр по группе
+        if (groupId.HasValue)
+            query = query.Where(x => x.GroupId == groupId.Value);
+
+        // Поиск по названию группы или аудитории
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var q = search.ToLower();
+            query = query.Where(x =>
+                x.Group!.Name.ToLower().Contains(q) ||
+                (x.Room != null && x.Room.ToLower().Contains(q)));
+        }
+
+        var totalCount = await query.CountAsync(cancellationToken);
+
+        var items = await query
             .OrderBy(x => x.DayOfWeek)
             .ThenBy(x => x.StartTime)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
             .ToListAsync(cancellationToken);
+
+        return (items, totalCount);
     }
 
     public async Task<List<Schedule>> GetByGroupIdAsync(

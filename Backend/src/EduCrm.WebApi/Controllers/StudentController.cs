@@ -12,7 +12,7 @@ public class StudentsController(IStudentService studentService) : BaseController
 {
     [HttpGet]
     public async Task<IActionResult> GetAll(
-        [FromQuery] StudentQueryRequest query,  
+        [FromQuery] StudentQueryRequest query,
         CancellationToken cancellationToken)
     {
         var result = await studentService.GetAllAsync(query, cancellationToken);
@@ -31,6 +31,7 @@ public class StudentsController(IStudentService studentService) : BaseController
 
         return Ok(result);
     }
+
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateStudentRequest request)

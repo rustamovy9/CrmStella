@@ -9,15 +9,19 @@ namespace EduCrm.WebApi.Controllers;
 public class BaseController : ControllerBase
 {
     protected int GetUserId()
-        => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    {
+        return int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    }
 
     protected string GetUserRole()
-        => User.FindFirstValue(ClaimTypes.Role)!;
+    {
+        return User.FindFirstValue(ClaimTypes.Role)!;
+    }
 
     protected IActionResult HandleResult<T>(Result<T> result, int successStatusCode = 200)
     {
         if (result.IsSuccess)
-            return StatusCode(successStatusCode, result.Data);
+            return StatusCode(successStatusCode, result);
 
         return HandleError(result);
     }
@@ -26,15 +30,15 @@ public class BaseController : ControllerBase
     {
         return result.ErrorType switch
         {
-            ErrorType.Validation   => BadRequest(result),
-            ErrorType.BadRequest   => BadRequest(result),
-            ErrorType.NotFound     => NotFound(result),
-            ErrorType.Conflict     => Conflict(result),
+            ErrorType.Validation => BadRequest(result),
+            ErrorType.BadRequest => BadRequest(result),
+            ErrorType.NotFound => NotFound(result),
+            ErrorType.Conflict => Conflict(result),
             ErrorType.Unauthorized => Unauthorized(result),
-            ErrorType.Forbidden    => StatusCode(StatusCodes.Status403Forbidden, result),
-            ErrorType.NoChange     => StatusCode(StatusCodes.Status304NotModified, result),
-            ErrorType.Unknown      => StatusCode(StatusCodes.Status500InternalServerError, result),
-            _                      => StatusCode(StatusCodes.Status500InternalServerError, result)
+            ErrorType.Forbidden => StatusCode(StatusCodes.Status403Forbidden, result),
+            ErrorType.NoChange => StatusCode(StatusCodes.Status304NotModified, result),
+            ErrorType.Unknown => StatusCode(StatusCodes.Status500InternalServerError, result),
+            _ => StatusCode(StatusCodes.Status500InternalServerError, result)
         };
     }
 }

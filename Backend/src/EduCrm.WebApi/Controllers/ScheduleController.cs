@@ -10,9 +10,11 @@ namespace EduCrm.WebApi.Controllers;
 public class ScheduleController(IScheduleService scheduleService) : BaseController
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll(CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAll([FromQuery] GetSchedulesQuery query)
     {
-        var result = await scheduleService.GetAllAsync(cancellationToken);
+        var result = await scheduleService.GetAllAsync(query);
+        if (!result.IsSuccess)
+            return HandleError(result);
         return Ok(result);
     }
 

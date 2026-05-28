@@ -40,7 +40,7 @@ public class UserController(IUserService userService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return Ok(result.Data);
+        return Ok(result);
     }
 
     [Authorize(Roles = "Admin")]

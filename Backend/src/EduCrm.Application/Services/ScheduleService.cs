@@ -19,22 +19,41 @@ public class ScheduleService(
     private const string AllSchedulesCacheKey = "schedules:all";
     private const string ScheduleCachePrefix = "schedules:";
 
-    public async Task<Result<List<ScheduleResponse>>> GetAllAsync(
+    public async Task<Result<PagedResult<ScheduleResponse>>> GetAllAsync(
+        GetSchedulesQuery query,
         CancellationToken cancellationToken = default)
     {
-        var cached = await cache.GetAsync<List<ScheduleResponse>>(AllSchedulesCacheKey);
-        if (cached is not null)
+        // Кэш только без фильтров
+        if (query.Page == 1 && string.IsNullOrEmpty(query.Search) &&
+            query.DayOfWeek == null && query.GroupId == null)
         {
-            logger.LogInformation("Schedules served from cache");
-            return Result<List<ScheduleResponse>>.Ok(cached);
+            var cached = await cache.GetAsync<PagedResult<ScheduleResponse>>(AllSchedulesCacheKey);
+            if (cached is not null)
+                return Result<PagedResult<ScheduleResponse>>.Ok(cached);
         }
 
-        var schedules = await unitOfWork.Schedules.GetAllAsync(cancellationToken);
-        var response = schedules.Select(MapToResponse).ToList();
+        var (items, totalCount) = await unitOfWork.Schedules.GetAllAsync(
+            query.Page,
+            query.PageSize,
+            query.Search,
+            query.DayOfWeek,
+            query.GroupId,
+            cancellationToken);
 
-        await cache.SetAsync(AllSchedulesCacheKey, response, TimeSpan.FromMinutes(10));
+        var result = new PagedResult<ScheduleResponse>
+        {
+            Items = items.Select(MapToResponse).ToList(),
+            TotalCount = totalCount,
+            Page = query.Page,
+            PageSize = query.PageSize
+        };
 
-        return Result<List<ScheduleResponse>>.Ok(response);
+        // Кэшируем только первую страницу без фильтров
+        if (query.Page == 1 && string.IsNullOrEmpty(query.Search) &&
+            query.DayOfWeek == null && query.GroupId == null)
+            await cache.SetAsync(AllSchedulesCacheKey, result, TimeSpan.FromMinutes(10));
+
+        return Result<PagedResult<ScheduleResponse>>.Ok(result);
     }
 
     public async Task<Result<List<ScheduleResponse>>> GetByGroupIdAsync(
@@ -132,50 +151,68 @@ public class ScheduleService(
     }
 
     public async Task<Result<ScheduleResponse>> UpdateAsync(
-        int id,
-        UpdateScheduleRequest request,
-        CancellationToken cancellationToken = default)
+    int id,
+    UpdateScheduleRequest request,
+    CancellationToken cancellationToken = default)
+{
+    var schedule = await unitOfWork.Schedules.GetByIdAsync(id, cancellationToken);
+    if (schedule is null)
+        return Result<ScheduleResponse>.Fail("Schedule not found");
+
+    if (request.StartTime >= request.EndTime)
+        return Result<ScheduleResponse>.Fail(
+            "StartTime must be before EndTime",
+            ErrorType.BadRequest);
+
+    if (request.RecurringTo.HasValue && request.RecurringTo.Value < schedule.RecurringFrom)
+        return Result<ScheduleResponse>.Fail(
+            "Дата окончания (RecurringTo) не может быть раньше даты начала занятия.",
+            ErrorType.BadRequest);
+
+    var oldValues = new
     {
-        var schedule = await unitOfWork.Schedules.GetByIdAsync(id, cancellationToken);
-        if (schedule is null)
-            return Result<ScheduleResponse>.Fail("Schedule not found");
+        schedule.DayOfWeek,
+        schedule.StartTime,
+        schedule.EndTime,
+        schedule.Room,
+        schedule.RecurringTo
+    };
 
-        if (request.StartTime >= request.EndTime)
-            return Result<ScheduleResponse>.Fail(
-                "StartTime must be before EndTime",
-                ErrorType.BadRequest);
+    schedule.DayOfWeek = request.DayOfWeek;
+    schedule.StartTime = request.StartTime;
+    schedule.EndTime = request.EndTime;
+    schedule.Room = request.Room?.Trim();
+    schedule.RecurringTo = request.RecurringTo.HasValue
+        ? DateTime.SpecifyKind(request.RecurringTo.Value, DateTimeKind.Utc)
+        : null;
 
-        var oldValues = new
-        {
-            schedule.DayOfWeek,
-            schedule.StartTime,
-            schedule.EndTime,
-            schedule.Room,
-            schedule.RecurringTo
-        };
+    await unitOfWork.Schedules.UpdateAsync(schedule, cancellationToken); // ← ключевая строка
 
-        schedule.DayOfWeek = request.DayOfWeek;
-        schedule.StartTime = request.StartTime;
-        schedule.EndTime = request.EndTime;
-        schedule.Room = request.Room?.Trim();
-        schedule.RecurringTo = request.RecurringTo;
-
-        await unitOfWork.Schedules.UpdateAsync(schedule, cancellationToken);
+    try
+    {
         await unitOfWork.SaveChangesAsync(cancellationToken);
-
-        await auditLogService.LogAsync(
-            null,
-            AuditActions.UpdateSchedule,
-            nameof(Schedule),
-            schedule.Id,
-            oldValues,
-            request
-        );
-
-        await cache.RemoveByPrefixAsync(ScheduleCachePrefix);
-
-        return Result<ScheduleResponse>.Ok(MapToResponse(schedule));
     }
+    catch (Exception ex)
+    {
+        var dbErrorMessage = ex.InnerException?.Message ?? ex.Message;
+        return Result<ScheduleResponse>.Fail($"Ошибка БД при сохранении: {dbErrorMessage}");
+    }
+
+    await auditLogService.LogAsync(
+        null,
+        AuditActions.UpdateSchedule,
+        nameof(Schedule),
+        schedule.Id,
+        oldValues,
+        request
+    );
+
+    await cache.RemoveByPrefixAsync(ScheduleCachePrefix);
+
+    // Перечитываем из БД чтобы вернуть актуальные данные с навигационными свойствами
+    var updated = await unitOfWork.Schedules.GetByIdAsync(schedule.Id, cancellationToken);
+    return Result<ScheduleResponse>.Ok(MapToResponse(updated!));
+}
 
     public async Task<Result<bool>> DeleteAsync(
         int id,

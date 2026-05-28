@@ -7,7 +7,9 @@ namespace EduCrm.Application.Interfaces.Services;
 
 public interface ICourseService
 {
-    Task<Result<List<CourseListItemResponse>>> GetAllAsync();
+    public Task<Result<PagedResult<CourseListItemResponse>>> GetAllAsync(
+        CourseQueryRequest query);
+
     Task<Result<CourseResponse>> GetByIdAsync(int id);
     Task<Result<CourseResponse>> CreateAsync(CreateCourseRequest request, int uploadedByUserId);
     Task<Result<CourseResponse>> UpdateAsync(int id, UpdateCourseRequest request);
