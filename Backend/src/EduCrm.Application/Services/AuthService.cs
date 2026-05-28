@@ -117,7 +117,7 @@ public class AuthService(
             case 2: // Mentor
                 await unitOfWork.Mentors.CreateAsync(new Mentor
                 {
-                    UserId = user.Id,  // ✅ Используем user.Id
+                    UserId = user.Id, // ✅ Используем user.Id
                     HireDate = DateTime.UtcNow,
                     IsActive = true
                 });
@@ -126,7 +126,7 @@ public class AuthService(
             case 3: // Student
                 await unitOfWork.Students.CreateAsync(new Student
                 {
-                    UserId = user.Id,  // ✅ Используем user.Id
+                    UserId = user.Id, // ✅ Используем user.Id
                     Balance = 0,
                     IsActive = true,
                     EnrolledAt = DateTime.UtcNow
@@ -143,8 +143,8 @@ public class AuthService(
 
         // 5️⃣ Инвалидируем все кэши
         await cache.RemoveByPrefixAsync(UserCachePrefix);
-        await cache.RemoveByPrefixAsync(MentorCachePrefix);   // ✅ Сразу виден в GetAll
-        await cache.RemoveByPrefixAsync(StudentCachePrefix);  // ✅ Сразу виден в GetAll
+        await cache.RemoveByPrefixAsync(MentorCachePrefix); // ✅ Сразу виден в GetAll
+        await cache.RemoveByPrefixAsync(StudentCachePrefix); // ✅ Сразу виден в GetAll
 
         await emailService.SendWelcomeAsync(user.Email, user.FullName, tempPassword);
 
@@ -303,7 +303,7 @@ public class AuthService(
             return Result<bool>.Fail("User not found");
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-        user.IsPasswordSet = true;  // ✅ Отмечаем что пароль установлен
+        user.IsPasswordSet = true; // ✅ Отмечаем что пароль установлен
         user.RefreshToken = null;
         user.RefreshTokenExpiry = null;
 
@@ -337,7 +337,7 @@ public class AuthService(
             return Result<bool>.Fail("Current password is incorrect", ErrorType.BadRequest);
 
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
-        user.IsPasswordSet = true;  // ✅ Отмечаем что пароль установлен
+        user.IsPasswordSet = true; // ✅ Отмечаем что пароль установлен
 
         await unitOfWork.Users.UpdateAsync(user);
         await unitOfWork.SaveChangesAsync();
@@ -381,8 +381,78 @@ public class AuthService(
         return Result<bool>.Ok(true);
     }
 
+    public async Task<Result<bool>> AssignRoleAsync(int adminUserId, AssignRoleRequest request,
+        CancellationToken ct = default)
+    {
+        var user = await unitOfWork.Users.GetByIdAsync(request.UserId, ct);
+        if (user is null)
+            return Result<bool>.Fail("User not found");
+
+        if (user.RoleId == request.RoleId)
+            return Result<bool>.Fail("User already has this role", ErrorType.BadRequest);
+
+        var oldRoleId = user.RoleId;
+
+        // удаляем старую роль
+        if (oldRoleId == (int)UserRole.Mentor)
+        {
+            var mentor = await unitOfWork.Mentors.GetByUserIdAsync(user.Id, ct);
+            if (mentor is not null)
+                await unitOfWork.Mentors.DeleteAsync(mentor.Id, ct);
+        }
+        else if (oldRoleId == (int)UserRole.Student)
+        {
+            var student = await unitOfWork.Students.GetByUserIdAsync(user.Id, ct);
+            if (student is not null)
+                await unitOfWork.Students.DeleteAsync(student.Id, ct);
+        }
+
+        user.RoleId = request.RoleId;
+        user.UpdatedAt = DateTime.UtcNow;
+
+        if (request.RoleId == (int)UserRole.Mentor)
+        {
+            var mentor = new Mentor
+            {
+                UserId = user.Id,
+                HireDate = DateTime.UtcNow,
+                IsActive = true
+            };
+            await unitOfWork.Mentors.CreateAsync(mentor, ct);
+        }
+        else if (request.RoleId == (int)UserRole.Student)
+        {
+            var student = new Student
+            {
+                UserId = user.Id,
+                Balance = 0,
+                IsActive = true,
+                EnrolledAt = DateTime.UtcNow
+            };
+            await unitOfWork.Students.CreateAsync(student, ct);
+        }
+
+        await unitOfWork.Users.UpdateAsync(user, ct);
+        await unitOfWork.SaveChangesAsync(ct);
+
+        await cache.RemoveByPrefixAsync(UserCachePrefix);
+        await cache.RemoveByPrefixAsync(AuthUserCachePrefix);
+
+        await auditLogService.LogAsync(
+            adminUserId,
+            AuditActions.AssignRole,
+            "User",
+            user.Id,
+            new { RoleId = oldRoleId },
+            new { request.RoleId });
+
+        return Result<bool>.Ok(true);
+    }
+
     private static string GenerateCode()
-        => RandomNumberGenerator.GetInt32(100000, 999999).ToString();
+    {
+        return RandomNumberGenerator.GetInt32(100000, 999999).ToString();
+    }
 
     private static string HashCode(string code)
     {
@@ -397,71 +467,4 @@ public class AuthService(
             .Select(_ => chars[RandomNumberGenerator.GetInt32(chars.Length)])
             .ToArray());
     }
-    
-    public async Task<Result<bool>> AssignRoleAsync(int adminUserId, AssignRoleRequest request, CancellationToken ct = default)
-{
-    var user = await unitOfWork.Users.GetByIdAsync(request.UserId, ct);
-    if (user is null)
-        return Result<bool>.Fail("User not found", ErrorType.NotFound);
-
-    if (user.RoleId == request.RoleId)
-        return Result<bool>.Fail("User already has this role", ErrorType.BadRequest);
-
-    var oldRoleId = user.RoleId;
-
-    // удаляем старую роль
-    if (oldRoleId == (int)UserRole.Mentor)
-    {
-        var mentor = await unitOfWork.Mentors.GetByUserIdAsync(user.Id, ct);
-        if (mentor is not null)
-            await unitOfWork.Mentors.DeleteAsync(mentor.Id, ct);
-    }
-    else if (oldRoleId == (int)UserRole.Student)
-    {
-        var student = await unitOfWork.Students.GetByUserIdAsync(user.Id, ct);
-        if (student is not null)
-            await unitOfWork.Students.DeleteAsync(student.Id, ct);
-    }
-    
-    user.RoleId = request.RoleId;
-    user.UpdatedAt = DateTime.UtcNow;
-    
-    if (request.RoleId == (int)UserRole.Mentor)
-    {
-        var mentor = new Mentor
-        {
-            UserId = user.Id,       // ✅ только Id, не user объект
-            HireDate = DateTime.UtcNow,
-            IsActive = true
-        };
-        await unitOfWork.Mentors.CreateAsync(mentor, ct);
-    }
-    else if (request.RoleId == (int)UserRole.Student)
-    {
-        var student = new Student
-        {
-            UserId = user.Id,       // ✅ только Id, не user объект
-            Balance = 0,
-            IsActive = true,
-            EnrolledAt = DateTime.UtcNow
-        };
-        await unitOfWork.Students.CreateAsync(student, ct);
-    }
-
-    await unitOfWork.Users.UpdateAsync(user, ct);
-    await unitOfWork.SaveChangesAsync(ct);
-
-    await cache.RemoveByPrefixAsync(UserCachePrefix);
-    await cache.RemoveByPrefixAsync(AuthUserCachePrefix);
-
-    await auditLogService.LogAsync(
-        adminUserId,
-        AuditActions.AssignRole,
-        "User",
-        user.Id,
-        oldValues: new { RoleId = oldRoleId },
-        newValues: new { RoleId = request.RoleId });
-
-    return Result<bool>.Ok(true);
-}
 }

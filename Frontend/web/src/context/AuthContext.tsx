@@ -1,10 +1,11 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { UserInfo } from '../types/auth';
+import agent from '../api/agent';
 
 interface AuthContextType {
     user: UserInfo | null;
     login: (user: UserInfo, token: string, refreshToken: string) => void;
-    logout: () => void;
+    logout: () => Promise<void>;
     loading: boolean;
 }
 
@@ -17,15 +18,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     useEffect(() => {
         const storedUser = localStorage.getItem('user');
         const token = localStorage.getItem('token');
+        const refreshToken = localStorage.getItem('refreshToken');
 
-        // Проверяем связку: должен быть и юзер, и его рабочий токен
-        if (storedUser && token) {
-            setUser(JSON.parse(storedUser));
+        // ✅ Проверяем все три — user, token и refreshToken
+        if (storedUser && token && refreshToken) {
+            try {
+                setUser(JSON.parse(storedUser));
+            } catch {
+                // ✅ Если JSON сломан — чистим
+                localStorage.clear();
+                setUser(null);
+            }
         } else {
-            // Если чего-то не хватает — чистим кэш, это неавторизованный вход
             localStorage.clear();
             setUser(null);
         }
+
         setLoading(false);
     }, []);
 
@@ -36,10 +44,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('user', JSON.stringify(userInfo));
     };
 
-    const logout = () => {
-        setUser(null);
-        localStorage.clear();
+    // ✅ Logout теперь async — вызывает бэкенд
+    const logout = async () => {
+        try {
+            await agent.post('/auth/logout');
+        } catch {
+            // Игнорируем ошибку — всё равно выходим
+        } finally {
+            setUser(null);
+            localStorage.clear();
+        }
     };
+
+    // ✅ Синхронизация между вкладками
+    useEffect(() => {
+        const handleStorageChange = (e: StorageEvent) => {
+            if (e.key === 'token' && !e.newValue) {
+                // Токен удалён в другой вкладке — выходим везде
+                setUser(null);
+            }
+            if (e.key === 'user' && e.newValue) {
+                // Пользователь обновлён в другой вкладке
+                try {
+                    setUser(JSON.parse(e.newValue));
+                } catch {
+                    setUser(null);
+                }
+            }
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        return () => window.removeEventListener('storage', handleStorageChange);
+    }, []);
 
     return (
         <AuthContext.Provider value={{ user, login, logout, loading }}>

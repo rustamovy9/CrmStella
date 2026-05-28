@@ -109,6 +109,7 @@ public class MentorService(
         await unitOfWork.SaveChangesAsync();
 
         await cache.RemoveByPrefixAsync(MentorCachePrefix);
+        await cache.RemoveByPrefixAsync("users:");
 
         await auditLogService.LogAsync(
             null,

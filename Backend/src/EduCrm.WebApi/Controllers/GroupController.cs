@@ -10,9 +10,9 @@ namespace EduCrm.WebApi.Controllers;
 public class GroupController(IGroupService groupService) : BaseController
 {
     [HttpGet]
-    public async Task<IActionResult> GetAll()
+    public async Task<IActionResult> GetAll([FromQuery] GroupQueryRequest query)
     {
-        var result = await groupService.GetAllAsync();
+        var result = await groupService.GetAllAsync(query);
         if (!result.IsSuccess)
             return HandleError(result);
 

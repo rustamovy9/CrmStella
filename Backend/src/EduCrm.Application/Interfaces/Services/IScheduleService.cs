@@ -6,7 +6,10 @@ namespace EduCrm.Application.Interfaces.Services;
 
 public interface IScheduleService
 {
-    Task<Result<List<ScheduleResponse>>> GetAllAsync(CancellationToken cancellationToken = default);
+    public Task<Result<PagedResult<ScheduleResponse>>> GetAllAsync(
+        GetSchedulesQuery query,
+        CancellationToken cancellationToken = default);
+
     Task<Result<List<ScheduleResponse>>> GetByGroupIdAsync(int groupId, CancellationToken cancellationToken = default);
     Task<Result<ScheduleResponse>> GetByIdAsync(int id, CancellationToken cancellationToken = default);
 

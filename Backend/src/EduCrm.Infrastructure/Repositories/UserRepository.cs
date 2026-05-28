@@ -32,12 +32,14 @@ public class UserRepository(AppDbContext context) : IUserRepository
             .ToListAsync(cancellationToken);
     }
 
-    
+
     public async Task<User?> GetByIdAsync(int id, CancellationToken cancellationToken = default)
-        => await context.Users
+    {
+        return await context.Users
             .Include(u => u.Role)
             .Include(u => u.Profile)
-            .FirstOrDefaultAsync(u => u.Id == id, cancellationToken); 
+            .FirstOrDefaultAsync(u => u.Id == id, cancellationToken);
+    }
 
     public async Task<User?> GetByEmailAsync(
         string email,

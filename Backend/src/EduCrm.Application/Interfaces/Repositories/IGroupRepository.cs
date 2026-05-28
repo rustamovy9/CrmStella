@@ -1,10 +1,15 @@
+using EduCrm.Application.Common;
+using EduCrm.Application.DTOs.Group.Request;
 using EduCrm.Domain.Entities;
 
 namespace EduCrm.Application.Interfaces.Repositories;
 
 public interface IGroupRepository
 {
-    Task<List<Group>> GetAllAsync(CancellationToken cancellationToken = default);
+    Task<PagedResult<Group>> GetAllAsync(
+        GroupQueryRequest query,
+        CancellationToken cancellationToken = default);
+
     Task<Group?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
     Task<bool> ExistsByNameAsync(string name, CancellationToken cancellationToken = default);
 

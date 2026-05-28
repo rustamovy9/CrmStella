@@ -1,28 +1,28 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/routes/ProtectedRoute';
-import PublicRoute from './components/routes/PublicRoute'; 
+import PublicRoute from './components/routes/PublicRoute';
 
-// Импорт обертки для сайдбара
-import MainLayout from './components/MainLayout'; 
+import MainLayout from './components/MainLayout';
 
-// Импорт страниц авторизации
 import Login from './pages/auth/Login';
 import ForgotPassword from './pages/auth/ForgotPassword';
 
-// Импорт панелей ролей
 import AdminDashboard from './pages/admin/dashboard/AdminDashboard';
 import MentorDashboard from './pages/mentor/MentorDashboard';
 import StudentDashboard from './pages/student/StudentDashboard';
 import LeadsPage from './pages/admin/users/LeadsPage';
 import StudentsPage from './pages/admin/users/StudentsPage';
 import MentorsPage from './pages/admin/users/MentorsPage';
+import UserInfoPage from './pages/admin/users/UserInfoPage';
 
-// Импорт страниц блока "Пользователи" из твоего Сайдбара
+import CoursesPage from './pages/admin/education/CoursesPage';
+import CourseInfoPage from './pages/admin/education/CourseInfoPage';
 
-// Импорт остальных страниц (добавь по мере готовности)
-// import CoursesPage from './pages/admin/CoursesPage';
-// import PaymentsPage from './pages/admin/PaymentsPage';
+import GroupsPage from './pages/admin/education/GroupsPage';
+import SchedulePage from './pages/admin/education/SchedulePage';
+import GroupDetailsPage from './pages/admin/education/GroupDetailsPage';
+
 
 function App() {
     return (
@@ -40,7 +40,7 @@ function App() {
                             <ForgotPassword />
                         </PublicRoute>
                     } />
-                    
+
                     {/* ================= ЗАКРЫТЫЕ МАРШРУТЫ АДМИНИСТРАТОРА ================= */}
                     <Route path="/admin/*" element={
                         <ProtectedRoute allowedRoles={['Admin']}>
@@ -48,18 +48,26 @@ function App() {
                                 <Routes>
                                     {/* Авто-редирект с базового /admin на дашборд */}
                                     <Route index element={<Navigate to="dashboard" replace />} />
-                                    
+
                                     {/* Главная панель */}
                                     <Route path="dashboard" element={<AdminDashboard />} />
-                                    
-                                    {/* БЛОК "ПОЛЬЗОВАТЕЛИ" (Сверяем пути с Sidebar.tsx) */}
+
+                                    {/* БЛОК "ПОЛЬЗОВАТЕЛИ" */}
                                     <Route path="leads" element={<LeadsPage />} />
                                     <Route path="students" element={<StudentsPage />} />
                                     <Route path="mentors" element={<MentorsPage />} />
+                                    <Route path="users/:id" element={<UserInfoPage />} />
+
+                                    {/* БЛОК "УЧЕБНЫЙ ПРОЦЕСС" */}
+                                    <Route path="courses" element={<CoursesPage />} />
+                                    <Route path="courses/:id" element={<CourseInfoPage />} />
                                     
-                                    {/* Будущие страницы для блока "Учебный процесс", "Финансы" и т.д. */}
-                                    {/* <Route path="courses" element={<CoursesPage />} /> */}
-                                    {/* <Route path="payments" element={<PaymentsPage />} /> */}
+                                    {/* 🌟 НАШИ НОВЫЕ МАРШРУТЫ ДЛЯ ГРУПП 🌟 */}
+                                    <Route path="groups" element={<GroupsPage />} />
+                                    <Route path="groups/:id" element={<GroupDetailsPage />} />
+                                    <Route path="schedules" element={<SchedulePage />} />
+                                    {/* <Route path="groups/:id" element={<GroupInfoPage />} /> */}
+                                    
                                 </Routes>
                             </MainLayout>
                         </ProtectedRoute>
