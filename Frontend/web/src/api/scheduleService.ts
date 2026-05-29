@@ -13,17 +13,21 @@ export interface ScheduleQueryParams {
 }
 
 const scheduleService = {
-    // Теперь ожидаем PagedResult и передаем параметры в строку запроса
     getAll: (params?: ScheduleQueryParams) =>
         agent.get<ApiResult<PagedResult<ScheduleResponse>>>('/schedules', {
             params: {
                 Page: params?.page ?? 1,
-                PageSize: params?.pageSize ?? 6, // Твой размер страницы
+                PageSize: params?.pageSize ?? 6,
                 Search: params?.search || undefined,
                 DayOfWeek: params?.dayOfWeek ?? undefined,
                 GroupId: params?.groupId || undefined
             }
         }),
+
+    // ─── НОВЫЙ МЕТОД ДЛЯ ПОЛУЧЕНИЯ РАСПИСАНИЯ ПО ID ГРУППЫ ───
+    // Обрати внимание: в URL добавляем /group/, как требует твой бэкенд
+    getByGroupId: (groupId: number) => 
+        agent.get<ApiResult<ScheduleResponse[]>>(`/schedules/group/${groupId}`),
 
     getById: (id: number) => agent.get<ApiResult<ScheduleResponse>>(`/schedules/${id}`),
     create: (data: CreateScheduleRequest) => agent.post<ApiResult<ScheduleResponse>>('/schedules', data),

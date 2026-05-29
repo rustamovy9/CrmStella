@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Search, Filter, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MetricCard from '../../../components/ui/MetricCard';
@@ -37,26 +37,28 @@ const GroupsPage: React.FC = () => {
 
     useEffect(() => { setCurrentPage(1); }, [debouncedSearch, statusFilter]);
 
-    // ✅ Загрузка курсов и менторов для модалки (один раз)
+    // Загрузка курсов и менторов для модалки
     useEffect(() => {
         const loadSelects = async () => {
             try {
                 const [coursesRes, mentorsRes] = await Promise.all([
-                    courseService.getAll({ pageSize: 10, isActive: true }),
-                    adminService.getMentors(1, 10, undefined, true)
+                    courseService.getAll({ pageSize: 100, isActive: true }), // Увеличили pageSize, чтобы подгрузить все активные курсы
+                    adminService.getMentors(1, 100, undefined, true)        // Увеличили pageSize для менторов
                 ]);
                 if (coursesRes.data?.isSuccess) setCourses(coursesRes.data.data?.items ?? []);
                 if (mentorsRes.data?.isSuccess) {
                     const items = mentorsRes.data.data?.items || mentorsRes.data.data || [];
-                    setMentors(items);
+                    setMentors(Array.isArray(items) ? items : []);
                 }
-            } catch { /* игнорируем */ }
+            } catch (err) {
+                console.error("Ошибка при начальной загрузке справочников:", err);
+            }
         };
         loadSelects();
     }, []);
 
-    // ✅ Загрузка групп с фильтрацией
-    const fetchGroups = async () => {
+    // Загрузка групп с фильтрацией
+    const fetchGroups = useCallback(async () => {
         try {
             setLoading(true);
             const status = statusFilter === 'active' ? 'Active' : statusFilter === 'completed' ? 'Completed' : undefined;
@@ -74,34 +76,72 @@ const GroupsPage: React.FC = () => {
             } else {
                 setError('Не удалось загрузить группы');
             }
-        } catch {
+        } catch (err) {
             setError('Ошибка при подключении к серверу');
+            console.error(err);
         } finally {
             setLoading(false);
         }
-    };
+    }, [currentPage, debouncedSearch, statusFilter]);
 
-    useEffect(() => { fetchGroups(); }, [currentPage, debouncedSearch, statusFilter]);
+    useEffect(() => { fetchGroups(); }, [fetchGroups]);
 
+    // 🔥 ИСПРАВЛЕНИЕ: Надежная валидация и отправка формы создания группы
     const handleCreateSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError(null);
-        if (!formData.courseId || !formData.mentorId) {
-            setFormError('Выберите курс и ментора');
+
+        // Клиентская валидация перед отправкой на .NET API
+        if (!formData.name.trim()) {
+            setFormError('Укажите корректное название группы');
             return;
         }
+        if (Number(formData.courseId) <= 0) {
+            setFormError('Выберите учебное направление (курс)');
+            return;
+        }
+        if (Number(formData.mentorId) <= 0) {
+            setFormError('Назначьте действующего ментора для группы');
+            return;
+        }
+        if (!formData.startDate || !formData.endDate) {
+            setFormError('Заполните даты начала и окончания обучения');
+            return;
+        }
+
         setSubmitting(true);
         try {
-            const response = await groupService.create(formData);
+            // Подготовка DTO в строгом соответствии с требованиями Swagger/C# бэкенда
+            const requestData = {
+                name: formData.name.trim(),
+                courseId: Number(formData.courseId),
+                mentorId: Number(formData.mentorId),
+                startDate: new Date(formData.startDate).toISOString(), // Форматирование даты в ISO String
+                endDate: new Date(formData.endDate).toISOString(),
+                maxStudents: Number(formData.maxStudents)
+            };
+
+            const response = await groupService.create(requestData);
+            
             if (response.data?.isSuccess) {
                 setIsModalOpen(false);
                 setFormData({ name: '', courseId: 0, mentorId: 0, startDate: '', endDate: '', maxStudents: 15 });
                 fetchGroups();
             } else {
-                setFormError(response.data?.message || 'Ошибка при создании');
+                setFormError(response.data?.message || 'Сервер отклонил запрос на создание группы');
             }
         } catch (err: any) {
-            setFormError(err.response?.data?.message || 'Ошибка сервера');
+            // Чтение структурированных ошибок валидатора .NET (FluentValidation / Identity)
+            const apiMessage = err.response?.data?.Message || err.response?.data?.message;
+            const validationErrors = err.response?.data?.errors;
+            
+            if (validationErrors) {
+                const firstErrorKey = Object.keys(validationErrors)[0];
+                const firstErrorMessage = validationErrors[firstErrorKey][0];
+                setFormError(`${firstErrorKey}: ${firstErrorMessage}`);
+            } else {
+                setFormError(apiMessage || 'Внутренняя ошибка сервера при создании группы');
+            }
         } finally {
             setSubmitting(false);
         }
@@ -120,10 +160,7 @@ const GroupsPage: React.FC = () => {
         try {
             const response = await groupService.setStatus(id, nextStatusEnum);
             if (!response.data?.isSuccess) {
-                setPagedData(prev => prev ? {
-                    ...prev,
-                    items: prev.items.map(g => g.id === id ? { ...g, status: currentStatusStr } : g)
-                } : prev);
+                throw new Error();
             }
         } catch {
             setPagedData(prev => prev ? {
@@ -136,8 +173,10 @@ const GroupsPage: React.FC = () => {
     const groups = pagedData?.items ?? [];
     const totalCount = pagedData?.totalCount ?? 0;
     const totalPages = pagedData?.totalPages ?? 1;
+    
+    // Вычисляем метрики на основе текущих данных
     const activeCount = groups.filter(g => g.status === 'Active').length;
-    const completedCount = groups.length - activeCount;
+    const completedCount = Math.max(0, groups.length - activeCount);
     const totalStudents = groups.reduce((sum, g) => sum + (g.activeStudentsCount || 0), 0);
 
     return (
@@ -234,8 +273,6 @@ const GroupsPage: React.FC = () => {
                             <ChevronRight size={16} color="#64748B" />
                         </button>
                     </div>
-
-                    
                 </>
             )}
 
@@ -301,51 +338,26 @@ const GroupsPage: React.FC = () => {
     );
 };
 
-// Стили, полностью идентичные твоей странице CoursesPage
 const styles = {
     container: { padding: '32px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", background: '#F8FAFC', minHeight: '100vh', boxSizing: 'border-box' as const },
     headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' },
     title: { fontSize: '26px', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' },
     subtitle: { fontSize: '14px', color: '#64748B', margin: '4px 0 0 0', fontWeight: 500 },
-
     metricsWrapper: { display: 'flex', flexWrap: 'wrap' as const, gap: '20px', marginBottom: '32px', width: '100%', alignItems: 'stretch' },
     metricCardGridWrapper: { flex: '1 1 240px', display: 'grid' as const },
     metricCardGridWrapperClickable: { flex: '1 1 240px', display: 'grid' as const, cursor: 'pointer' },
-
     toolbar: { marginBottom: '28px', display: 'flex', gap: '14px', flexWrap: 'wrap' as const, alignItems: 'center' },
     searchWrapper: { position: 'relative' as const, flex: 1, minWidth: '280px', maxWidth: '400px' },
     searchIcon: { position: 'absolute' as const, left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' },
     searchInput: { width: '100%', height: '44px', padding: '0 16px 0 44px', borderRadius: '12px', border: '1px solid #E2E8F0', background: '#ffffff', fontSize: '14px', outline: 'none', color: '#334155', boxSizing: 'border-box' as const },
     filterWrapper: { display: 'flex', alignItems: 'center', gap: '8px', background: '#ffffff', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '0 14px', height: '44px' },
     selectInput: { border: 'none', outline: 'none', background: 'transparent', fontSize: '14px', color: '#334155', fontWeight: 500, cursor: 'pointer' },
-
     gridContainer: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '24px', width: '100%' },
-
-    // Стили для карточки группы (в стиле CourseCard)
-    groupCard: { background: '#ffffff', borderRadius: '20px', padding: '24px', border: '1px solid #E2E8F0', display: 'flex', flexDirection: 'column' as const, justifyContent: 'space-between', transition: 'transform 0.2s ease', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' },
-    cardHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' },
-    iconContainer: { width: '44px', height: '44px', borderRadius: '12px', backgroundColor: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-    statusBadge: { padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 600 },
-    cardTitle: { fontSize: '18px', fontWeight: 700, color: '#0F172A', margin: '0 0 4px 0' },
-    cardCourseName: { fontSize: '13px', color: '#4F46E5', fontWeight: 600, margin: '0 0 16px 0', textTransform: 'uppercase' as const, letterSpacing: '0.03em' },
-    cardDetailsDivider: { height: '1px', backgroundColor: '#F1F5F9', marginBottom: '16px' },
-    infoRow: { display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '10px' },
-    infoText: { fontSize: '13px', color: '#475569' },
-
-    dateBlock: { display: 'flex', justifyContent: 'space-between', background: '#F8FAFC', borderRadius: '12px', padding: '12px 16px', marginTop: '14px', marginBottom: '20px' },
-    dateLabel: { fontSize: '10px', fontWeight: 700, color: '#94A3B8', marginBottom: '2px' },
-    dateValue: { fontSize: '13px', fontWeight: 600, color: '#334155' },
-
-    cardActions: { display: 'flex', gap: '10px', marginTop: 'auto' },
-    detailsBtn: { flex: 2, height: '40px', backgroundColor: '#4F46E5', color: '#ffffff', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' },
-    toggleBtn: { flex: 1, height: '40px', backgroundColor: '#ffffff', border: '1px solid', borderRadius: '10px', fontSize: '12px', fontWeight: 600, cursor: 'pointer' },
-
     paginationContainer: { display: 'flex', justifyContent: 'flex-end' as const, alignItems: 'center', gap: '8px', marginTop: '32px', width: '100%' },
     pageSquareBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', backgroundColor: '#ffffff', border: '1px solid #E2E8F0', borderRadius: '10px' },
     pageSquareBtnActive: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '36px', height: '36px', backgroundColor: '#4F46E5', border: 'none', borderRadius: '10px', color: '#ffffff', fontSize: '14px', fontWeight: 600 },
     centerMessage: { padding: '80px 40px', textAlign: 'center' as const, fontSize: '16px', color: '#64748B', width: '100%' },
     emptyState: { padding: '40px', textAlign: 'center' as const, color: '#94A3B8', fontSize: '15px', gridColumn: '1 / -1' },
-
     modalOverlay: { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.3)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
     modalContent: { background: '#ffffff', borderRadius: '24px', padding: '32px', width: '100%', maxWidth: '460px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.15)', position: 'relative' as const },
     closeBtn: { position: 'absolute' as const, top: '22px', right: '22px', background: '#F1F5F9', border: 'none', color: '#64748B', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%' },
