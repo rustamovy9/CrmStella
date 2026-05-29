@@ -27,7 +27,6 @@ public class GroupStudentService(
             return Result<List<GroupStudentResponse>>.Ok(cached);
 
         var items = await unitOfWork.GroupStudents.GetByGroupAsync(groupId);
-
         var result = items.Select(MapToResponse).ToList();
 
         await cache.SetAsync(cacheKey, result, TimeSpan.FromMinutes(15));
@@ -73,7 +72,11 @@ public class GroupStudentService(
         await unitOfWork.GroupStudents.CreateAsync(enrollment);
         await unitOfWork.SaveChangesAsync();
 
+        // ✅ Инвалидируем все связанные кэши
         await cache.RemoveByPrefixAsync(GroupStudentCachePrefix);
+        await cache.RemoveByPrefixAsync("groups:");
+        await cache.RemoveByPrefixAsync("students:");
+        await cache.RemoveByPrefixAsync("courses:");
 
         await auditLogService.LogAsync(
             null,
@@ -122,7 +125,11 @@ public class GroupStudentService(
         await unitOfWork.GroupStudents.UpdateAsync(enrollment);
         await unitOfWork.SaveChangesAsync();
 
+        // ✅ Инвалидируем все связанные кэши
         await cache.RemoveByPrefixAsync(GroupStudentCachePrefix);
+        await cache.RemoveByPrefixAsync("groups:");
+        await cache.RemoveByPrefixAsync("students:");
+        await cache.RemoveByPrefixAsync("courses:");
 
         await auditLogService.LogAsync(
             null,
@@ -193,7 +200,11 @@ public class GroupStudentService(
         await unitOfWork.GroupStudents.UpdateAsync(current);
         await unitOfWork.SaveChangesAsync();
 
+        // ✅ Инвалидируем все связанные кэши
         await cache.RemoveByPrefixAsync(GroupStudentCachePrefix);
+        await cache.RemoveByPrefixAsync("groups:");
+        await cache.RemoveByPrefixAsync("students:");
+        await cache.RemoveByPrefixAsync("courses:");
 
         await auditLogService.LogAsync(
             null,

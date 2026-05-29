@@ -22,7 +22,7 @@ import CourseInfoPage from './pages/admin/education/CourseInfoPage';
 import GroupsPage from './pages/admin/education/GroupsPage';
 import SchedulePage from './pages/admin/education/SchedulePage';
 import GroupDetailsPage from './pages/admin/education/GroupDetailsPage';
-
+import { JournalPage } from './pages/admin/journal/JournalPage';
 
 function App() {
     return (
@@ -62,12 +62,11 @@ function App() {
                                     <Route path="courses" element={<CoursesPage />} />
                                     <Route path="courses/:id" element={<CourseInfoPage />} />
                                     
-                                    {/* 🌟 НАШИ НОВЫЕ МАРШРУТЫ ДЛЯ ГРУПП 🌟 */}
+                                    {/* БЛОК ГРУПП И ЖУРНАЛА */}
                                     <Route path="groups" element={<GroupsPage />} />
                                     <Route path="groups/:id" element={<GroupDetailsPage />} />
+                                    <Route path="groups/:groupId/journal" element={<JournalPage />} />
                                     <Route path="schedules" element={<SchedulePage />} />
-                                    {/* <Route path="groups/:id" element={<GroupInfoPage />} /> */}
-                                    
                                 </Routes>
                             </MainLayout>
                         </ProtectedRoute>
@@ -80,6 +79,9 @@ function App() {
                                 <Routes>
                                     <Route index element={<Navigate to="dashboard" replace />} />
                                     <Route path="dashboard" element={<MentorDashboard />} />
+                                    
+                                    {/* Добавили роут сюда, чтобы ментор тоже мог зайти в журнал */}
+                                    <Route path="groups/:groupId/journal" element={<JournalPage />} />
                                 </Routes>
                             </MainLayout>
                         </ProtectedRoute>

@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search, Loader2, AlertCircle, X, UserPlus, Info, UserMinus, MessageSquare } from 'lucide-react';
+import { 
+    ArrowLeft, Search, Loader2, AlertCircle, X, 
+    UserPlus, Info, UserMinus, MessageSquare, Calendar, ArrowLeftRight 
+} from 'lucide-react';
 import type { GroupStudentResponse } from '../../../types/groupStudent';
+import type { GroupListItemResponse } from '../../../types/group'; 
 import { ActionCards, type GroupDto } from '../../../components/ui/ActionCards';
 import { groupStudentService } from '../../../api/groupStudentService';
 import groupService from '../../../api/groupService';
+import scheduleService from '../../../api/scheduleService';
 import { StudentTable } from '../../../components/ui/StudentTable';
 
 const GroupDetailsPage: React.FC = () => {
@@ -15,7 +20,8 @@ const GroupDetailsPage: React.FC = () => {
     // --- СОСТОЯНИЕ ДАННЫХ ---
     const [students, setStudents] = useState<GroupStudentResponse[]>([]);
     const [groupData, setGroupData] = useState<GroupDto | null>(null);
-    
+    const [availableGroups, setAvailableGroups] = useState<GroupListItemResponse[]>([]); 
+
     // --- UI СОСТОЯНИЯ ---
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
@@ -27,11 +33,29 @@ const GroupDetailsPage: React.FC = () => {
     const [enrollStudentId, setEnrollStudentId] = useState<string>('');
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-    // --- КРАСИВАЯ МОДАЛКА ИСКЛЮЧЕНИЯ ---
+    // --- МОДАЛКА ИСКЛЮЧЕНИЯ ---
     const [isRemoveOpen, setIsRemoveOpen] = useState<boolean>(false);
     const [studentToRemove, setStudentToRemove] = useState<{ id: number; name: string } | null>(null);
     const [removeReason, setRemoveReason] = useState<string>('');
     const [isRemoving, setIsRemoving] = useState<boolean>(false);
+
+    // --- МОДАЛКА ТРАНСФЕРА ---
+    const [isTransferOpen, setIsTransferOpen] = useState<boolean>(false);
+    const [studentToTransfer, setStudentToTransfer] = useState<{ id: number; name: string } | null>(null);
+    const [targetGroupId, setTargetGroupId] = useState<string>('');
+    const [isTransferring, setIsTransferring] = useState<boolean>(false);
+
+    // --- МОДАЛКА СОЗДАНИЯ РАСПИСАНИЯ ---
+    const [isScheduleOpen, setIsScheduleOpen] = useState<boolean>(false);
+    const [scheduleDay, setScheduleDay] = useState<string>('1');
+    const [startTime, setStartTime] = useState<string>('18:00'); 
+    const [endTime, setEndTime] = useState<string>('20:00');     
+    const [isScheduling, setIsScheduling] = useState<boolean>(false);
+
+    const daysMap: Record<string, string> = {
+        '1': 'Пн', '2': 'Вт', '3': 'Ср', '4': 'Чт', '5': 'Пт', '6': 'Сб', '7': 'Вс',
+        'Monday': 'Пн', 'Tuesday': 'Вт', 'Wednesday': 'Ср', 'Thursday': 'Чт', 'Friday': 'Пт', 'Saturday': 'Сб', 'Sunday': 'Вс'
+    };
 
     // --- БЕЗОПАСНЫЙ МЕТОД ЗАГРУЗКИ ДАННЫХ ---
     const loadPageData = useCallback(async () => {
@@ -45,12 +69,13 @@ const GroupDetailsPage: React.FC = () => {
             setLoading(true);
             setError(null);
 
-            const [fetchedStudentsRes, fetchedGroupInfoRes] = await Promise.all([
+            const [fetchedStudentsRes, fetchedGroupInfoRes, fetchedScheduleRes] = await Promise.all([
                 groupStudentService.getById(groupId),
-                groupService.getById(groupId)
+                groupService.getById(groupId),
+                scheduleService.getByGroupId(groupId).catch(() => null)
             ]);
 
-            // 🛠️ Универсальная распаковка студентов
+            // Студенты
             let finalStudents: GroupStudentResponse[] = [];
             const resStudents = fetchedStudentsRes as any;
             if (resStudents?.data?.data) {
@@ -62,7 +87,30 @@ const GroupDetailsPage: React.FC = () => {
             }
             setStudents(finalStudents);
 
-            // 🛠️ Универсальная распаковка данных группы
+            // Форматирование расписания
+            let scheduleText: string | null = null;
+            if (fetchedScheduleRes) {
+                const resSchedule = fetchedScheduleRes as any;
+                const rawScheduleArray = resSchedule?.data?.data || resSchedule?.data || resSchedule;
+
+                if (Array.isArray(rawScheduleArray) && rawScheduleArray.length > 0) {
+                    scheduleText = rawScheduleArray
+                        .map((s: any) => {
+                            const day = daysMap[String(s.dayOfWeek)] || s.dayOfWeek;
+                            const start = s.startTime ? s.startTime.substring(0, 5) : '';
+                            const end = s.endTime ? s.endTime.substring(0, 5) : '';
+
+                            if (day && start && end) {
+                                return `${day} ${start}-${end}`; 
+                            }
+                            return day;
+                        })
+                        .filter(Boolean)
+                        .join(', ');
+                }
+            }
+
+            // Данные группы
             let finalGroupData: GroupDto | null = null;
             const resGroup = fetchedGroupInfoRes as any;
             if (resGroup?.data?.data) {
@@ -74,6 +122,7 @@ const GroupDetailsPage: React.FC = () => {
             }
 
             if (finalGroupData) {
+                finalGroupData.schedule = scheduleText || null;
                 setGroupData(finalGroupData);
             } else {
                 setError("Бэкенд вернул пустые данные или неверную структуру для группы");
@@ -95,7 +144,7 @@ const GroupDetailsPage: React.FC = () => {
     const handleEnrollSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const studentIdNum = Number(enrollStudentId);
-        
+
         if (!studentIdNum || isNaN(studentIdNum)) {
             alert('Введите корректный числовой ID студента');
             return;
@@ -104,29 +153,27 @@ const GroupDetailsPage: React.FC = () => {
         try {
             setIsSubmitting(true);
             const success = await groupStudentService.enrollStudent(groupId, studentIdNum);
-            
+
             if (success) {
                 setEnrollStudentId('');
                 setIsEnrollOpen(false);
-                await loadPageData(); 
+                await loadPageData();
             } else {
                 alert('Операция зачисления отклонена бэкендом.');
             }
         } catch (err: any) {
-            alert(err.message || 'Ошибка при вызове EnrollAsync');
+            alert(err.message || 'Ошибка при зачислении');
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    // Открытие красивого модального окна вместо prompt()
     const handleRemoveClick = (groupStudentId: number, studentName: string) => {
         setStudentToRemove({ id: groupStudentId, name: studentName });
-        setRemoveReason(''); // Сбрасываем текст причины
+        setRemoveReason('');
         setIsRemoveOpen(true);
     };
 
-    // Подтверждение исключения из красивой модалки
     const handleRemoveConfirm = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!studentToRemove) return;
@@ -134,10 +181,10 @@ const GroupDetailsPage: React.FC = () => {
         try {
             setIsRemoving(true);
             const success = await groupStudentService.removeStudent(
-                studentToRemove.id, 
+                studentToRemove.id,
                 removeReason.trim() || "Исключен"
             );
-            
+
             if (success) {
                 setIsRemoveOpen(false);
                 setStudentToRemove(null);
@@ -150,13 +197,83 @@ const GroupDetailsPage: React.FC = () => {
         }
     };
 
+    const handleTransferClick = async (groupStudentId: number, studentName: string) => {
+        setStudentToTransfer({ id: groupStudentId, name: studentName });
+        setTargetGroupId('');
+        setIsTransferOpen(true);
+
+        try {
+            const res = await groupService.getAll({ page: 1, pageSize: 100 });
+            const resData = res as any;
+            const groupsList: GroupListItemResponse[] = resData?.data?.data?.items || resData?.data?.items || [];
+            
+            const filteredGroups = groupsList.filter(g => g.id !== groupId);
+            setAvailableGroups(filteredGroups);
+        } catch (err) {
+            console.error("Не удалось загрузить целевые группы:", err);
+        }
+    };
+
+    const handleTransferConfirm = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!studentToTransfer || !targetGroupId) return;
+
+        try {
+            setIsTransferring(true);
+            const success = await groupStudentService.transferStudent(
+                studentToTransfer.id,
+                Number(targetGroupId)
+            );
+
+            if (success) {
+                setIsTransferOpen(false);
+                setStudentToTransfer(null);
+                setTargetGroupId('');
+                await loadPageData();
+            } else {
+                alert('Трансфер отклонен сервером. Возможно, в целевой группе нет мест.');
+            }
+        } catch (err: any) {
+            alert(err.message || "Ошибка при переводе студента");
+        } finally {
+            setIsTransferring(false);
+        }
+    };
+
+    const handleScheduleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            setIsScheduling(true);
+            const parsedDay = Number(scheduleDay);
+            const defaultDate = new Date().toISOString().split('T')[0];
+            const formattedRecurringFrom = groupData?.startDate
+                ? groupData.startDate.split('T')[0]
+                : defaultDate;
+
+            await scheduleService.create({
+                groupId: groupId,
+                dayOfWeek: parsedDay,
+                startTime: startTime,        
+                endTime: endTime,            
+                recurringFrom: formattedRecurringFrom 
+            });
+
+            setIsScheduleOpen(false);
+            await loadPageData();
+        } catch (err: any) {
+            alert(err.message || "Не удалось создать конфигурацию расписания");
+        } finally {
+            setIsScheduling(false);
+        }
+    };
+
     // --- ФИЛЬТРАЦИЯ И СЧЕТЧИКИ ---
     const filteredStudents = students.filter(s => {
         const name = s.studentName?.toLowerCase() || '';
         const email = s.studentEmail?.toLowerCase() || '';
         const query = searchTerm.toLowerCase();
         const matchesSearch = name.includes(query) || email.includes(query);
-        
+
         if (filterTab === 'active') return matchesSearch && s.isActive;
         if (filterTab === 'left') return matchesSearch && !s.isActive;
         return matchesSearch;
@@ -178,7 +295,6 @@ const GroupDetailsPage: React.FC = () => {
 
     return (
         <div style={st.container}>
-            {/* Навигационная панель */}
             <div style={st.navBar}>
                 <button style={st.backButton} onClick={() => navigate('/admin/groups')}>
                     <ArrowLeft size={16} /> Назад к списку групп
@@ -195,7 +311,6 @@ const GroupDetailsPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Блок заголовка */}
             <div style={st.headerBlock}>
                 <div>
                     <h2 style={st.title}>
@@ -206,21 +321,20 @@ const GroupDetailsPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Карточки действий */}
             {groupData && (
-                <ActionCards 
-                    group={groupData} 
-                    onNavigate={navigate} 
-                    onEnrollClick={() => setIsEnrollOpen(true)} 
+                <ActionCards
+                    group={groupData}
+                    onNavigate={navigate}
+                    onEnrollClick={() => setIsEnrollOpen(true)}
+                    onAddScheduleClick={() => setIsScheduleOpen(true)}
                 />
             )}
 
             <hr style={st.divider} />
 
-            {/* Фильтры и поиск */}
             <div style={st.workspaceHeader}>
                 <h3 style={st.sectionTitle}>Состав учебной группы</h3>
-                
+
                 <div style={st.controlsRow}>
                     <div style={st.tabsGroup}>
                         <button style={filterTab === 'active' ? st.tabActive : st.tab} onClick={() => setFilterTab('active')}>
@@ -236,26 +350,28 @@ const GroupDetailsPage: React.FC = () => {
 
                     <div style={st.searchContainer}>
                         <Search size={16} style={st.searchIcon} />
-                        <input 
-                            type="text" 
-                            placeholder="Поиск студента по ФИО..." 
-                            value={searchTerm} 
-                            onChange={e => setSearchTerm(e.target.value)} 
-                            style={st.searchInput} 
+                        <input
+                            type="text"
+                            placeholder="Поиск студента по ФИО..."
+                            value={searchTerm}
+                            onChange={e => setSearchTerm(e.target.value)}
+                            style={st.searchInput}
                         />
                     </div>
                 </div>
             </div>
 
-            {/* Таблица */}
             {filteredStudents.length > 0 ? (
-                <StudentTable 
-                    students={filteredStudents} 
+                <StudentTable
+                    students={filteredStudents}
                     onRemove={(id) => {
                         const target = students.find(x => x.id === id);
                         handleRemoveClick(id, target?.studentName || `Студента с ID #${id}`);
-                    }} 
-                    onTransfer={(studentId) => navigate(`/admin/groups/${groupId}/transfer/${studentId}`)} 
+                    }}
+                    onTransfer={(id) => {
+                        const target = students.find(x => x.id === id);
+                        handleTransferClick(id, target?.studentName || `Студента с ID #${id}`);
+                    }}
                 />
             ) : (
                 <div style={st.emptyState}>
@@ -281,9 +397,9 @@ const GroupDetailsPage: React.FC = () => {
                         </div>
                         <form onSubmit={handleEnrollSubmit} style={st.modalBody}>
                             <label style={st.modalLabel}>Укажите ID Студента (ID из базы EduCrm)</label>
-                            <input 
-                                type="number" 
-                                placeholder="Например: 15" 
+                            <input
+                                type="number"
+                                placeholder="Например: 15"
                                 value={enrollStudentId}
                                 onChange={(e) => setEnrollStudentId(e.target.value)}
                                 style={st.modalInput}
@@ -292,12 +408,7 @@ const GroupDetailsPage: React.FC = () => {
                                 autoFocus
                             />
                             <div style={st.modalActions}>
-                                <button 
-                                    type="button" 
-                                    onClick={() => setIsEnrollOpen(false)} 
-                                    style={st.modalCancelBtn} 
-                                    disabled={isSubmitting}
-                                >
+                                <button type="button" onClick={() => setIsEnrollOpen(false)} style={st.modalCancelBtn} disabled={isSubmitting}>
                                     Отмена
                                 </button>
                                 <button type="submit" style={st.modalSubmitBtn} disabled={isSubmitting}>
@@ -309,7 +420,7 @@ const GroupDetailsPage: React.FC = () => {
                 </div>
             )}
 
-            {/* ── НОВАЯ КРАСИВАЯ МОДАЛКА ИСКЛЮЧЕНИЯ ── */}
+            {/* Модалка исключения */}
             {isRemoveOpen && (
                 <div style={st.modalOverlay} onClick={e => e.target === e.currentTarget && setIsRemoveOpen(false)}>
                     <div style={{ ...st.modalContent, maxWidth: '440px' }}>
@@ -322,7 +433,7 @@ const GroupDetailsPage: React.FC = () => {
                                 <X size={18} />
                             </button>
                         </div>
-                        
+
                         <form onSubmit={handleRemoveConfirm} style={st.modalBody}>
                             <div style={st.removeWarningBox}>
                                 Вы собираетесь исключить студента: <br />
@@ -331,12 +442,12 @@ const GroupDetailsPage: React.FC = () => {
 
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '4px' }}>
                                 <label style={{ ...st.modalLabel, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                    <MessageSquare size={14} color="#64748B" /> 
+                                    <MessageSquare size={14} color="#64748B" />
                                     ОФИЦИАЛЬНАЯ ПРИЧИНА ИСКЛЮЧЕНИЯ
                                 </label>
-                                <input 
-                                    type="text" 
-                                    placeholder="Например: По собственному желанию / Академ" 
+                                <input
+                                    type="text"
+                                    placeholder="Например: По собственному желанию / Академ"
                                     value={removeReason}
                                     onChange={(e) => setRemoveReason(e.target.value)}
                                     style={st.modalInput}
@@ -347,20 +458,128 @@ const GroupDetailsPage: React.FC = () => {
                             </div>
 
                             <div style={st.modalActions}>
-                                <button 
-                                    type="button" 
-                                    onClick={() => setIsRemoveOpen(false)} 
-                                    style={st.modalCancelBtn} 
-                                    disabled={isRemoving}
-                                >
+                                <button type="button" onClick={() => setIsRemoveOpen(false)} style={st.modalCancelBtn} disabled={isRemoving}>
                                     Отмена
                                 </button>
-                                <button 
-                                    type="submit" 
-                                    style={{ ...st.modalSubmitBtn, background: '#EF4444' }} 
-                                    disabled={isRemoving || !removeReason.trim()}
-                                >
+                                <button type="submit" style={{ ...st.modalSubmitBtn, background: '#EF4444' }} disabled={isRemoving || !removeReason.trim()}>
                                     {isRemoving ? 'Исключение...' : 'Исключить студента'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Модалка трансфера (перевода) */}
+            {isTransferOpen && (
+                <div style={st.modalOverlay} onClick={e => e.target === e.currentTarget && setIsTransferOpen(false)}>
+                    <div style={st.modalContent}>
+                        <div style={{ ...st.modalHeader, borderBottom: '1px solid #D1FAE5', backgroundColor: '#F0FDF4' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <ArrowLeftRight size={18} color="#10B981" />
+                                <h3 style={{ ...st.modalTitle, color: '#065F46' }}>Перевод в другую группу</h3>
+                            </div>
+                            <button onClick={() => setIsTransferOpen(false)} style={{ ...st.closeModalBtn, color: '#065F46' }} disabled={isTransferring}>
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleTransferConfirm} style={st.modalBody}>
+                            <div style={{ ...st.removeWarningBox, backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' }}>
+                                Вы переводите студента: <br />
+                                <strong style={{ color: '#0F172A', fontSize: '15px' }}>{studentToTransfer?.name}</strong>
+                            </div>
+
+                            <label style={st.modalLabel}>ВЫБЕРИТЕ ЦЕЛЕВУЮ ГРУППУ</label>
+                            <select
+                                value={targetGroupId}
+                                onChange={(e) => setTargetGroupId(e.target.value)}
+                                style={st.modalInput}
+                                disabled={isTransferring || availableGroups.length === 0}
+                                required
+                            >
+                                <option value="">-- Выберите группу --</option>
+                                {availableGroups.map(g => (
+                                    <option key={g.id} value={g.id}>
+                                        {g.name} ({g.courseName || 'Без курса'})
+                                    </option>
+                                ))}
+                            </select>
+
+                            {availableGroups.length === 0 && (
+                                <p style={{ fontSize: '12px', color: '#64748B', margin: 0 }}>
+                                    Загрузка доступных групп или список пуст...
+                                </p>
+                            )}
+
+                            <div style={st.modalActions}>
+                                <button type="button" onClick={() => setIsTransferOpen(false)} style={st.modalCancelBtn} disabled={isTransferring}>
+                                    Отмена
+                                </button>
+                                <button type="submit" style={{ ...st.modalSubmitBtn, background: '#10B981' }} disabled={isTransferring || !targetGroupId}>
+                                    {isTransferring ? 'Перевод...' : 'Подтвердить перевод'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Модалка добавления расписания */}
+            {isScheduleOpen && (
+                <div style={st.modalOverlay} onClick={e => e.target === e.currentTarget && setIsScheduleOpen(false)}>
+                    <div style={st.modalContent}>
+                        <div style={st.modalHeader}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                <Calendar size={18} color="#EA580C" />
+                                <h3 style={st.modalTitle}>Добавить день в расписание</h3>
+                            </div>
+                            <button onClick={() => setIsScheduleOpen(false)} style={st.closeModalBtn} disabled={isScheduling}>
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <form onSubmit={handleScheduleSubmit} style={st.modalBody}>
+                            <label style={st.modalLabel}>ВЫБЕРИТЕ ДЕНЬ НЕДЕЛИ</label>
+                            <select
+                                value={scheduleDay}
+                                onChange={(e) => setScheduleDay(e.target.value)}
+                                style={st.modalInput}
+                                disabled={isScheduling}
+                            >
+                                <option value="1">Понедельник</option>
+                                <option value="2">Вторник</option>
+                                <option value="3">Среда</option>
+                                <option value="4">Четверг</option>
+                                <option value="5">Пятница</option>
+                                <option value="6">Суббота</option>
+                                <option value="7">Воскресенье</option>
+                            </select>
+
+                            <label style={st.modalLabel}>ВРЕМЯ НАЧАЛА</label>
+                            <input
+                                type="time"
+                                value={startTime}
+                                onChange={(e) => setStartTime(e.target.value)}
+                                style={st.modalInput}
+                                disabled={isScheduling}
+                                required
+                            />
+
+                            <label style={st.modalLabel}>ВРЕМЯ ОКОНЧАНИЯ</label>
+                            <input
+                                type="time"
+                                value={endTime}
+                                onChange={(e) => setEndTime(e.target.value)}
+                                style={st.modalInput}
+                                disabled={isScheduling}
+                                required
+                            />
+
+                            <div style={st.modalActions}>
+                                <button type="button" onClick={() => setIsScheduleOpen(false)} style={st.modalCancelBtn} disabled={isScheduling}>
+                                    Отмена
+                                </button>
+                                <button type="submit" style={{ ...st.modalSubmitBtn, background: '#EA580C' }} disabled={isScheduling}>
+                                    {isScheduling ? 'Создание...' : 'Добавить день'}
                                 </button>
                             </div>
                         </form>
@@ -371,7 +590,9 @@ const GroupDetailsPage: React.FC = () => {
     );
 };
 
-// --- СТИЛИ ---
+export default GroupDetailsPage;
+
+// --- ПОЛНОСТЬЮ ИСПРАВЛЕННЫЕ И СТИЛИЗОВАННЫЕ СТИЛИ ---
 const st = {
     container: { padding: '24px 40px', backgroundColor: '#F8FAFC', minHeight: '100vh', fontFamily: '"Inter", sans-serif' },
     navBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: '12px 20px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '24px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' },
@@ -395,28 +616,30 @@ const st = {
     centerState: { display: 'flex', flexDirection: 'column' as const, justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#F8FAFC' },
     spinner: { color: '#4F46E5' },
     errorBanner: { display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#FEF2F2', border: '1px solid #FEE2E2', color: '#EF4444', padding: '12px 16px', borderRadius: '10px', marginBottom: '24px', fontSize: '14px', fontWeight: 500 },
-    modalOverlay: { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+    
+    // --- ИСПРАВЛЕННЫЕ СТИЛИ ДЛЯ ЦЕНТРИРОВАНИЯ МОДАЛОК ---
+    modalOverlay: { 
+        position: 'fixed' as const, 
+        top: 0, 
+        left: 0, 
+        right: 0, 
+        bottom: 0, 
+        backgroundColor: 'rgba(15, 23, 42, 0.4)', 
+        backdropFilter: 'blur(4px)', 
+        display: 'flex', 
+        alignItems: 'center', 
+        justifyContent: 'center', // Исправлено с justifycenter
+        zIndex: 1000 
+    },
     modalContent: { backgroundColor: '#FFFFFF', borderRadius: '16px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden', border: '1px solid #E2E8F0' },
     modalHeader: { padding: '16px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     modalTitle: { margin: 0, fontSize: '16px', fontWeight: 600, color: '#0F172A' },
-    closeModalBtn: { border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8' },
+    closeModalBtn: { border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex', alignItems: 'center' },
     modalBody: { padding: '20px', display: 'flex', flexDirection: 'column' as const, gap: '16px' },
-    modalLabel: { fontSize: '12px', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em' },
-    modalInput: { padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', outline: 'none', fontSize: '14px', transition: 'all 0.15s' },
-    modalActions: { display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '4px' },
-    modalCancelBtn: { padding: '8px 14px', borderRadius: '8px', border: '1px solid #E2E8F0', background: '#FFFFFF', color: '#64748B', cursor: 'pointer', fontSize: '13px', fontWeight: 500 },
-    modalSubmitBtn: { padding: '8px 14px', borderRadius: '8px', border: 'none', background: '#4F46E5', color: '#FFFFFF', cursor: 'pointer', fontSize: '13px', fontWeight: 500 },
-    
-    // Стили плашки предупреждения внутри новой модалки
-    removeWarningBox: {
-        padding: '12px 14px',
-        backgroundColor: '#F8FAFC',
-        border: '1px solid #E2E8F0',
-        borderRadius: '10px',
-        fontSize: '13px',
-        color: '#64748B',
-        lineHeight: '1.5'
-    }
+    modalLabel: { fontSize: '12px', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', textTransform: 'uppercase' as const },
+    modalInput: { padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', outline: 'none', fontSize: '14px', color: '#0F172A', width: '100%', boxSizing: 'border-box' as const },
+    removeWarningBox: { padding: '12px 14px', borderRadius: '8px', border: '1px solid #FEE2E2', backgroundColor: '#FEF2F2', fontSize: '13px', color: '#991B1B', lineHeight: '1.5' },
+    modalActions: { display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' },
+    modalCancelBtn: { border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', padding: '9px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 },
+    modalSubmitBtn: { border: 'none', background: '#4F46E5', color: '#FFFFFF', padding: '9px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }
 };
-
-export default GroupDetailsPage;

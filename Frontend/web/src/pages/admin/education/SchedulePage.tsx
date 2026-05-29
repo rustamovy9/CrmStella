@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Search, Filter, X, Clock, MapPin, Users, Edit3, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Search, Filter, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import MetricCard from '../../../components/ui/MetricCard';
 import scheduleService from '../../../api/scheduleService';
 import groupService from '../../../api/groupService';
 import DeleteConfirmModal from '../../../components/modals/DeleteConfirmModal';
 import type { ScheduleResponse, CreateScheduleRequest, UpdateScheduleRequest } from '../../../types/schedule';
+import ScheduleTable from '../../../components/ui/ScheduleTable';
 
 // ─── Константы ────────────────────────────────────────────────────────────────
 
@@ -57,7 +58,7 @@ const SchedulesPage: React.FC = () => {
     const [dayFilter, setDayFilter] = useState('all');
     const [groupFilter, setGroupFilter] = useState('all');
     const [currentPage, setCurrentPage] = useState(1);
-    const pageSize = 50; // Берём побольше — отображаем в таблице
+    const pageSize = 30; // Берём побольше — отображаем в таблице
 
     // Modal
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -78,7 +79,6 @@ const SchedulesPage: React.FC = () => {
         recurringTo: ''
     });
 
-    // ─── Load ─────────────────────────────────────────────────────────────────
 
     const loadGroups = async () => {
         try {
@@ -91,16 +91,16 @@ const SchedulesPage: React.FC = () => {
         } catch { /* молча */ }
     };
 
-    const loadSchedules = async () => {
+    const loadSchedules = useCallback(async (page: number) => {
         try {
             setLoading(true);
             setError(null);
             const dayNum = dayFilter !== 'all' ? CSHARP_DAY_OF_WEEK[dayFilter] : undefined;
             const res = await scheduleService.getAll({
-                page: currentPage, pageSize,
+                page, pageSize,
                 search: searchTerm || undefined,
                 dayOfWeek: dayNum,
-                groupId: groupFilter !== 'all' ? Number(groupFilter) : undefined
+                groupId: groupFilter !== 'all' ? Number(groupFilter) : undefined,
             });
             if (res.data?.isSuccess) {
                 const d = res.data.data as any;
@@ -114,16 +114,24 @@ const SchedulesPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [searchTerm, dayFilter, groupFilter]);
 
     useEffect(() => { loadGroups(); }, []);
 
+    // Фильтры изменились → сброс страницы + запрос сразу с page=1 (один проход)
     useEffect(() => {
-        const t = setTimeout(loadSchedules, 400);
+        setCurrentPage(1);
+        const t = setTimeout(() => loadSchedules(1), 300);
         return () => clearTimeout(t);
-    }, [searchTerm, dayFilter, groupFilter, currentPage]);
+    }, [searchTerm, dayFilter, groupFilter]);
 
-    useEffect(() => { setCurrentPage(1); }, [searchTerm, dayFilter, groupFilter]);
+    // Пагинация → запрос с новой страницей (не срабатывает при сбросе на 1 выше,
+    // т.к. setCurrentPage(1) когда уже 1 не вызывает ре-рендер)
+    useEffect(() => {
+        if (currentPage === 1) return; // сброс фильтром уже обработан выше
+        const t = setTimeout(() => loadSchedules(currentPage), 300);
+        return () => clearTimeout(t);
+    }, [currentPage]);
 
     // ─── Группируем по дням для таблицы ──────────────────────────────────────
     const byDay: Record<string, ScheduleResponse[]> = {};
@@ -188,7 +196,7 @@ const SchedulesPage: React.FC = () => {
             if (res.data?.isSuccess) {
                 setIsDeleteOpen(false);
                 setItemToDelete(null);
-                loadSchedules();
+                loadSchedules(currentPage);
             }
         } catch { /* ignore */ }
     };
@@ -210,7 +218,7 @@ const SchedulesPage: React.FC = () => {
                     recurringTo: formData.recurringTo || undefined
                 };
                 const res = await scheduleService.create(payload);
-                if (res.data?.isSuccess) { setIsModalOpen(false); loadSchedules(); }
+                if (res.data?.isSuccess) { setIsModalOpen(false); loadSchedules(currentPage); }
                 else setFormError(res.data?.message || 'Ошибка при создании');
             } else if (selectedItemId) {
                 const payload: UpdateScheduleRequest = {
@@ -221,7 +229,7 @@ const SchedulesPage: React.FC = () => {
                     recurringTo: formData.recurringTo || undefined
                 };
                 const res = await scheduleService.update(selectedItemId, payload);
-                if (res.data?.isSuccess) { setIsModalOpen(false); loadSchedules(); }
+                if (res.data?.isSuccess) { setIsModalOpen(false); loadSchedules(currentPage); }
                 else setFormError(res.data?.message || 'Ошибка при обновлении');
             }
         } catch (err: any) {
@@ -293,10 +301,12 @@ const SchedulesPage: React.FC = () => {
             {loading ? (
                 <div style={s.center}>
                     <div style={s.spinner} className="spin" />
-                    <p style={{ color: '#64748B', fontSize: '14px', margin: 0 }}>Загрузка расписания...</p>
+                    <p style={{ color: '#64748B', fontSize: '14px', margin: 0, marginTop: '12px' }}>Загрузка расписания...</p>
                 </div>
             ) : error ? (
-                <div style={{ ...s.center, color: '#EF4444' }}>{error}</div>
+                <div style={{ ...s.center, color: '#EF4444', background: '#FEE2E2', borderRadius: '16px', padding: '24px' }}>
+                    {error}
+                </div>
             ) : schedules.length === 0 ? (
                 <div style={s.emptyState}>
                     <div style={s.emptyIcon}>📅</div>
@@ -304,101 +314,56 @@ const SchedulesPage: React.FC = () => {
                     <p style={s.emptySub}>Нажмите на карточку «Всего занятий» выше, чтобы создать первую запись</p>
                 </div>
             ) : (
-                <div style={s.tableWrap}>
-                    {/* ── Заголовки колонок ── */}
-                    <div style={{ ...s.tableGrid, gridTemplateColumns: `repeat(${visibleDays.length}, 1fr)` }}>
-                        {visibleDays.map(d => {
-                            const count = byDay[d.key].length;
-                            const isToday = d.key === todayKey;
-                            return (
-                                <div key={d.key} style={{
-                                    ...s.colHeader,
-                                    background: isToday ? '#4F46E5' : '#fff',
-                                    color: isToday ? '#fff' : '#0F172A',
-                                    border: isToday ? '1px solid #4F46E5' : '1px solid #E5E7EB',
-                                }}>
-                                    <span style={s.colDay}>{d.label}</span>
-                                    {count > 0 && (
-                                        <span style={{
-                                            ...s.colCount,
-                                            background: isToday ? 'rgba(255,255,255,0.25)' : '#EEF2FF',
-                                            color: isToday ? '#fff' : '#4F46E5',
-                                        }}>
-                                            {count}
-                                        </span>
-                                    )}
-                                </div>
-                            );
-                        })}
+                <ScheduleTable
+                    visibleDays={visibleDays}
+                    byDay={byDay}
+                    maxRows={maxRows}
+                    todayKey={todayKey}
+                    getGroupColor={getGroupColor}
+                    formatTime={formatTime}
+                    formatDate={formatDate}
+                    onNavigate={(groupId) => navigate(`/admin/groups/${groupId}`)}
+                    onEdit={openEdit}
+                    onDelete={handleDeleteClick}
+                    styles={s}
+                />
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+                <div style={s.paginationWrap}>
+                    <span style={s.pageInfo}>Всего записей: <strong>{totalCount}</strong></span>
+                    <div style={s.paginationControls}>
+                        <button
+                            style={{ ...s.pageBtn, opacity: currentPage === 1 ? 0.4 : 1 }}
+                            disabled={currentPage === 1}
+                            onClick={() => setCurrentPage(p => p - 1)}
+                        >
+                            <ChevronLeft size={16} color="#475569" />
+                        </button>
+
+                        {Array.from({ length: totalPages }, (_, i) => i + 1)
+                            .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                            .map((p, idx, arr) => (
+                                <React.Fragment key={p}>
+                                    {idx > 0 && arr[idx - 1] !== p - 1 && <span style={s.pageDots}>…</span>}
+                                    <button
+                                        onClick={() => setCurrentPage(p)}
+                                        style={p === currentPage ? s.pageBtnActive : s.pageBtn}
+                                    >
+                                        {p}
+                                    </button>
+                                </React.Fragment>
+                            ))}
+
+                        <button
+                            style={{ ...s.pageBtn, opacity: currentPage === totalPages ? 0.4 : 1 }}
+                            disabled={currentPage === totalPages}
+                            onClick={() => setCurrentPage(p => p + 1)}
+                        >
+                            <ChevronRight size={16} color="#475569" />
+                        </button>
                     </div>
-
-                    {/* ── Строки ── */}
-                    {Array.from({ length: maxRows }, (_, rowIdx) => (
-                        <div key={rowIdx} style={{ ...s.tableGrid, gridTemplateColumns: `repeat(${visibleDays.length}, 1fr)` }}>
-                            {visibleDays.map(d => {
-                                const slot = byDay[d.key][rowIdx];
-                                if (!slot) return <div key={d.key} style={s.emptyCell} />;
-                                const color = getGroupColor(slot.groupId);
-                                return (
-                                    <div key={d.key} style={{ ...s.slotCard, background: color.bg, borderLeft: `3px solid ${color.dot}` }}>
-                                        {/* Время */}
-                                        <div style={s.slotTime}>
-                                            <div style={{ ...s.timeDot, background: color.dot }} />
-                                            <span style={{ ...s.timeLabel, color: color.text }}>
-                                                {formatTime(slot.startTime)} — {formatTime(slot.endTime)}
-                                            </span>
-                                        </div>
-
-                                        {/* Название группы */}
-                                        <p style={{ ...s.slotGroup, color: color.text }}>
-                                            {slot.groupName || `Группа #${slot.groupId}`}
-                                        </p>
-
-                                        {/* Мета */}
-                                        <div style={s.slotMeta}>
-                                            {slot.room && (
-                                                <span style={s.metaChip}>
-                                                    <MapPin size={10} />{slot.room}
-                                                </span>
-                                            )}
-                                            {(slot.recurringFrom || slot.recurringTo) && (
-                                                <span style={s.metaChip}>
-                                                    <Clock size={10} />
-                                                    {formatDate(slot.recurringFrom)}
-                                                    {slot.recurringTo ? ` — ${formatDate(slot.recurringTo)}` : ''}
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        {/* Действия */}
-                                        <div style={s.slotActions}>
-                                            <button
-                                                style={s.slotBtn}
-                                                onClick={() => navigate(`/admin/groups/${slot.groupId}`)}
-                                                title="Перейти к группе"
-                                            >
-                                                <Users size={11} color="#64748B" />
-                                            </button>
-                                            <button
-                                                style={s.slotBtn}
-                                                onClick={() => openEdit(slot)}
-                                                title="Редактировать"
-                                            >
-                                                <Edit3 size={11} color="#64748B" />
-                                            </button>
-                                            <button
-                                                style={{ ...s.slotBtn, background: '#FEF2F2' }}
-                                                onClick={() => handleDeleteClick(slot.id, slot.groupName)}
-                                                title="Удалить"
-                                            >
-                                                <Trash2 size={11} color="#EF4444" />
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    ))}
                 </div>
             )}
 
@@ -569,31 +534,38 @@ const s: Record<string, React.CSSProperties> = {
     emptyTitle: { margin: 0, fontSize: '18px', fontWeight: 700, color: '#0F172A' },
     emptySub: { margin: 0, fontSize: '14px', color: '#64748B' },
 
-    // Timetable
-    tableWrap: { background: '#fff', border: '1px solid #E5E7EB', borderRadius: '20px', overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.05)' },
+    tableWrap: { background: '#fff', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)' },
     tableGrid: { display: 'grid', gap: 0, borderBottom: '1px solid #F1F5F9' },
-    colHeader: { padding: '14px 16px', borderRight: '1px solid #F1F5F9', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' },
-    colDay: { fontSize: '13px', fontWeight: 700, letterSpacing: '0.01em' },
-    colCount: { padding: '2px 8px', borderRadius: '20px', fontSize: '11px', fontWeight: 700 },
+    colHeader: { padding: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' },
+    colDay: { fontSize: '14px', fontWeight: 700, letterSpacing: '0.02em' },
+    colCount: { padding: '4px 10px', borderRadius: '20px', fontSize: '12px', fontWeight: 700, boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.05)' },
 
-    // Slot card inside cell
-    slotCard: { margin: '10px', borderRadius: '12px', padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: '6px', minHeight: '110px', borderRight: '1px solid transparent' },
-    slotTime: { display: 'flex', alignItems: 'center', gap: '6px' },
-    timeDot: { width: '6px', height: '6px', borderRadius: '50%', flexShrink: 0 },
-    timeLabel: { fontSize: '12px', fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
-    slotGroup: { margin: 0, fontSize: '13px', fontWeight: 700, lineHeight: 1.3 },
-    slotMeta: { display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' },
-    metaChip: { display: 'inline-flex', alignItems: 'center', gap: '3px', fontSize: '10px', fontWeight: 500, color: '#64748B', background: 'rgba(255,255,255,0.7)', border: '1px solid rgba(0,0,0,0.06)', borderRadius: '5px', padding: '2px 6px' },
-    slotActions: { display: 'flex', gap: '4px', marginTop: 'auto', paddingTop: '6px', borderTop: '1px solid rgba(0,0,0,0.06)' },
-    slotBtn: { width: '24px', height: '24px', borderRadius: '6px', border: '1px solid rgba(0,0,0,0.08)', background: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 },
-    emptyCell: { margin: '10px', borderRadius: '12px', minHeight: '110px', background: '#FAFAFA', border: '1px dashed #E5E7EB' },
+    // Пустые ячейки (красивый пунктир)
+    emptyCellWrap: { padding: '10px', borderRight: '1px solid #F8FAFC' },
+    emptyCellDashed: { width: '100%', height: '100%', minHeight: '100px', border: '2px dashed #F1F5F9', borderRadius: '12px', background: '#FAFAFA' },
 
-    // Pagination
-    pagination: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px' },
-    pageInfo: { fontSize: '13px', color: '#64748B', fontWeight: 500 },
-    pageBtn: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600, color: '#374151' },
-    pageBtnActive: { display: 'flex', alignItems: 'center', justifyContent: 'center', width: '34px', height: '34px', background: '#4F46E5', border: 'none', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 700, color: '#fff' },
+    // Карточка слота
+    slotCard: { margin: '10px', borderRadius: '12px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px', minHeight: '110px', position: 'relative' as const },
+    slotTime: { display: 'flex', alignItems: 'center', gap: '8px' },
+    timeDot: { width: '8px', height: '8px', borderRadius: '50%', flexShrink: 0 },
+    timeLabel: { fontSize: '13px', fontWeight: 700, fontVariantNumeric: 'tabular-nums' },
+    slotGroup: { margin: '2px 0 0 0', fontSize: '14px', fontWeight: 700, lineHeight: 1.4 },
 
+    // Мета-теги
+    slotMeta: { display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' },
+    metaChip: { display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: 600, color: '#475569', background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(0,0,0,0.08)', borderRadius: '6px', padding: '4px 8px' },
+
+    // Кнопки действий
+    slotActions: { display: 'flex', gap: '6px', marginTop: 'auto', paddingTop: '10px', borderTop: '1px solid rgba(0,0,0,0.05)' },
+    slotBtn: { border: 'none', background: '#F1F5F9', borderRadius: '6px', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flex: 1 },
+
+    // Пагинация
+    paginationWrap: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '24px', padding: '16px 20px', background: '#fff', borderRadius: '12px', border: '1px solid #E2E8F0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' },
+    pageInfo: { fontSize: '14px', color: '#64748B' },
+    paginationControls: { display: 'flex', gap: '8px', alignItems: 'center' },
+    pageBtn: { width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #E2E8F0', background: '#fff', borderRadius: '8px', fontSize: '14px', fontWeight: 600, color: '#475569', cursor: 'pointer', transition: 'all 0.2s ease' },
+    pageBtnActive: { width: '36px', height: '36px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', background: '#4F46E5', borderRadius: '8px', fontSize: '14px', fontWeight: 700, color: '#fff', cursor: 'pointer', boxShadow: '0 4px 6px rgba(79, 70, 229, 0.25)' },
+    pageDots: { color: '#94A3B8', padding: '0 4px', fontWeight: 700 },
     // Modal
     overlay: { position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.35)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
     modal: { background: '#fff', borderRadius: '20px', padding: '28px 32px', width: '100%', maxWidth: '480px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', position: 'relative', maxHeight: '90vh', overflowY: 'auto' },

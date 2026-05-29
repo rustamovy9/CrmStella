@@ -8,6 +8,7 @@ public class GroupResponse
     public int CourseId { get; set; }
     public string CourseName { get; set; } = string.Empty;
 
+    public int MentorUserId { get; set; } 
     public int MentorId { get; set; }
     public string MentorName { get; set; } = string.Empty;
 
