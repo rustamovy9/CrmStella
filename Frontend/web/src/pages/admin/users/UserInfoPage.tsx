@@ -3,6 +3,10 @@ import { useParams, useNavigate } from 'react-router-dom';
 import type { UserDetailResponse, UpdateUserRequest, UpdateStudentRequest, UpdateMentorRequest } from '../../../types/admin';
 import { ArrowLeft, Mail, Phone, Briefcase, Wallet, Edit3, Trash2, X, Check, BookOpen, Star, Clock, Calendar, User, Shield, AlertTriangle } from 'lucide-react';
 import adminService from '../../../api/adminService';
+import { financeService } from '../../../api/paymentService';
+import StudentPaymentModal from '../../../components/modals/StudentPaymentModal';
+
+
 
 type ModalType = 'editUser' | 'editBusiness' | 'confirmDelete' | null;
 const BACKEND_URL = 'http://localhost:5046';
@@ -18,6 +22,7 @@ const UserInfoPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [modal, setModal] = useState<ModalType>(null);
     const [saveSuccess, setSaveSuccess] = useState(false);
+    const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
 
     const [userForm, setUserForm] = useState<UpdateUserRequest>({ firstName: '', lastName: '', phoneNumber: '' });
     const [studentForm, setStudentForm] = useState<UpdateStudentRequest>({ balance: 0 });
@@ -88,13 +93,13 @@ const UserInfoPage: React.FC = () => {
     const handleDelete = async () => {
         if (!user) return;
         try {
+            setSubmitting(true);
             const res = await adminService.deleteUser(user.id);
             if (res.data.isSuccess) navigate(-1);
         } catch { alert('Ошибка удаления.'); }
-        finally { setModal(null); }
+        finally { setModal(null); setSubmitting(false); }
     };
 
-    // ─── Loading ──────────────────────────────────────────────────────────────
     if (loading) return (
         <div style={s.center}>
             <div style={s.spinner} />
@@ -198,7 +203,7 @@ const UserInfoPage: React.FC = () => {
                     {/* Dates */}
                     <div style={s.card}>
                         <p style={s.sectionTitle}>Временные метки</p>
-                        <div style={{ display: 'flex', flexDirection: 'column' as const, gap: '12px', marginTop: '14px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '14px' }}>
                             <DateRow icon={<Calendar size={13} color="#94A3B8" />} label="Регистрация" value={user.createdAt ? new Date(user.createdAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'} />
                             <DateRow icon={<Clock size={13} color="#94A3B8" />} label="Обновление" value={user.updatedAt ? new Date(user.updatedAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }) : 'Не обновлялся'} />
                         </div>
@@ -208,7 +213,6 @@ const UserInfoPage: React.FC = () => {
                 {/* RIGHT */}
                 <div style={s.right}>
 
-                    {/* Business Card */}
                     {isStudent ? (
                         <div style={{ ...s.card, borderLeft: '4px solid #10B981' }}>
                             <div style={s.bizHeader}>
@@ -219,15 +223,26 @@ const UserInfoPage: React.FC = () => {
                                     <p style={s.sectionTitle}>Финансы студента</p>
                                     <p style={s.bizSub}>Баланс учётного счёта</p>
                                 </div>
-                                <button onClick={() => setModal('editBusiness')} style={{ ...s.chipBtn, color: '#10B981', background: '#F0FDF4', border: '1px solid #BBF7D0' }}>
-                                    <Edit3 size={11} /> Изменить
+                                <button
+                                    onClick={() => setIsPaymentModalOpen(true)}
+                                    style={{ ...s.chipBtn, color: '#10B981', background: '#F0FDF4', border: '1px solid #BBF7D0' }}
+                                >
+                                    <Edit3 size={11} /> Пополнить
                                 </button>
                             </div>
                             <div style={s.balanceRow}>
-                                <span style={{ ...s.bigNumber, color: '#10B981' }}>{(user.balance ?? 0).toLocaleString('ru-RU')}</span>
+                                <span style={{ ...s.bigNumber, color: '#10B981' }}>
+                                    {(user.balance ?? 0).toLocaleString('ru-RU')}
+                                </span>
                                 <span style={s.currency}>TJS</span>
                             </div>
-                            {user.enrolledAt && <p style={s.subText}>Зачислен: {new Date(user.enrolledAt).toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' })}</p>}
+                            {user.enrolledAt && (
+                                <p style={s.subText}>
+                                    Зачислен: {new Date(user.enrolledAt).toLocaleDateString('ru-RU', {
+                                        day: 'numeric', month: 'long', year: 'numeric'
+                                    })}
+                                </p>
+                            )}
                         </div>
                     ) : isMentor ? (
                         <div style={{ ...s.card, borderLeft: '4px solid #3B82F6' }}>
@@ -279,6 +294,36 @@ const UserInfoPage: React.FC = () => {
 
             {/* ══ MODALS ══════════════════════════════════════════════════════ */}
 
+            <StudentPaymentModal
+                isOpen={isPaymentModalOpen}
+                onClose={() => setIsPaymentModalOpen(false)}
+                studentName={displayName}
+                onSubmit={async (paymentData) => {
+                    try {
+                        if (!user?.studentId) {
+                            alert('Критическая ошибка: studentId не найден!');
+                            return;
+                        }
+
+                        await financeService.create({
+                            studentId: user.studentId,
+                            amount: paymentData.amount,
+                            type: paymentData.type,
+                            method: paymentData.method,
+                            dueDate: paymentData.dueDate,
+                            note: paymentData.note,
+                            // Если groupId не выбран, передаем 0 (или null, если тип позволяет)
+                            groupId: paymentData.groupId ?? 0
+                        });
+
+                        setIsPaymentModalOpen(false);
+                        showSuccess();
+                        await fetchFullData();
+                    } catch (err: any) {
+                        alert(err.response?.data?.message || 'Ошибка создания платежа.');
+                    }
+                }}
+            />
             {/* Edit User */}
             {modal === 'editUser' && (
                 <ModalOverlay onClose={() => setModal(null)}>
@@ -334,7 +379,7 @@ const UserInfoPage: React.FC = () => {
                 </ModalOverlay>
             )}
 
-            {/* ✅ Confirm Delete Modal */}
+            {/* Confirm Delete Modal */}
             {modal === 'confirmDelete' && (
                 <div style={ms.overlay}>
                     <div style={ms.content}>
@@ -364,7 +409,7 @@ const UserInfoPage: React.FC = () => {
 const ContactRow: React.FC<{ icon: React.ReactNode; value: string; muted?: boolean }> = ({ icon, value, muted }) => (
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         {icon}
-        <span style={{ fontSize: '13px', color: muted ? '#94A3B8' : '#475569', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>{value}</span>
+        <span style={{ fontSize: '13px', color: muted ? '#94A3B8' : '#475569', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value}</span>
     </div>
 );
 
@@ -372,7 +417,7 @@ const DateRow: React.FC<{ icon: React.ReactNode; label: string; value: string }>
     <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
         {icon}
         <div>
-            <p style={{ margin: 0, fontSize: '11px', color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>{label}</p>
+            <p style={{ margin: 0, fontSize: '11px', color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</p>
             <p style={{ margin: 0, fontSize: '13px', color: '#475569', fontWeight: 600 }}>{value}</p>
         </div>
     </div>
@@ -380,7 +425,7 @@ const DateRow: React.FC<{ icon: React.ReactNode; label: string; value: string }>
 
 const SysItem: React.FC<{ label: string; value: string; warn?: boolean }> = ({ label, value, warn }) => (
     <div style={{ padding: '12px', borderBottom: '1px solid #F1F5F9', borderRight: '1px solid #F1F5F9' }}>
-        <p style={{ margin: '0 0 3px 0', fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '0.5px' }}>{label}</p>
+        <p style={{ margin: '0 0 3px 0', fontSize: '10px', color: '#94A3B8', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.5px' }}>{label}</p>
         <p style={{ margin: 0, fontSize: '13px', color: warn ? '#EF4444' : '#334155', fontWeight: 600, fontFamily: 'monospace' }}>{value}</p>
     </div>
 );
@@ -411,10 +456,9 @@ const ModalActions: React.FC<{ onCancel: () => void; submitting: boolean; label:
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const s: Record<string, React.CSSProperties> = {
-    // В page добавлено boxSizing: 'border-box' чтобы убрать лишний скролл
     page: { padding: '32px', boxSizing: 'border-box', background: '#F8FAFC', minHeight: '100vh', fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif' },
     center: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', gap: '16px', background: '#F8FAFC', fontFamily: '"Inter", sans-serif' },
-    spinner: { width: '36px', height: '36px', border: '3px solid #E2E8F0', borderTop: '3px solid #2563EB', borderRadius: '50%', animation: 'spin 0.8s linear infinite' },
+    spinner: { width: '36px', height: '36px', border: '3px solid #E2E8F0', borderTop: '3px solid #2563EB', borderRadius: '50%' },
     loaderText: { fontSize: '14px', color: '#64748B', fontWeight: 500 },
     errorBox: { width: '56px', height: '56px', borderRadius: '50%', background: '#FEF2F2', border: '1px solid #FECACA', display: 'flex', alignItems: 'center', justifyContent: 'center' },
     errorText: { color: '#EF4444', fontWeight: 600 },
@@ -424,18 +468,13 @@ const s: Record<string, React.CSSProperties> = {
     headerRight: { display: 'flex', gap: '10px' },
     btnEdit: { display: 'flex', alignItems: 'center', gap: '7px', background: '#fff', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '10px 16px', fontSize: '13px', fontWeight: 600, color: '#334155', cursor: 'pointer', fontFamily: 'inherit' },
     btnDelete: { display: 'flex', alignItems: 'center', gap: '7px', background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '12px', padding: '10px 16px', fontSize: '13px', fontWeight: 600, color: '#EF4444', cursor: 'pointer', fontFamily: 'inherit' },
-    
-    // Сетка немного расширена слева под увеличенный аватар
     layout: { display: 'grid', gridTemplateColumns: '320px 1fr', gap: '20px', alignItems: 'start' },
     left: { display: 'flex', flexDirection: 'column', gap: '14px' },
     right: { display: 'flex', flexDirection: 'column', gap: '14px' },
     card: { background: '#fff', border: '1px solid #E2E8F0', borderRadius: '20px', padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' },
     avatarSection: { display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: '10px' },
-    
-    // Аватар увеличен с 88px до 120px
     avatar: { width: '120px', height: '120px', borderRadius: '50%', objectFit: 'cover', border: '4px solid #F1F5F9' },
     avatarFallback: { width: '120px', height: '120px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' },
-    
     name: { margin: 0, fontSize: '18px', fontWeight: 700, color: '#0F172A' },
     uidText: { fontSize: '12px', color: '#94A3B8', fontFamily: 'monospace' },
     roleBadge: { display: 'flex', alignItems: 'center', gap: '6px', padding: '5px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 600 },
@@ -464,7 +503,7 @@ const s: Record<string, React.CSSProperties> = {
     closeBtn: { background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '4px' },
     form: { display: 'flex', flexDirection: 'column', gap: '16px' },
     formRow: { display: 'flex', gap: '14px' },
-    input: { width: '100%', padding: '11px 14px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', fontSize: '14px', color: '#0F172A', boxSizing: 'border-box' as const, outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.15s' },
+    input: { width: '100%', padding: '11px 14px', background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', fontSize: '14px', color: '#0F172A', boxSizing: 'border-box', outline: 'none', fontFamily: 'inherit', transition: 'border-color 0.15s' },
 };
 
 // Modal styles

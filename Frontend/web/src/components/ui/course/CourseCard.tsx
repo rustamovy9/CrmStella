@@ -1,6 +1,6 @@
 import React from 'react';
 import { BookOpen, Clock, Layers, Users, BarChart3, GraduationCap } from 'lucide-react';
-import type { CourseListItemResponse } from '../../types/admin';
+import type { CourseListItemResponse } from '../../../types/admin';
 
 interface CourseCardProps {
     course: CourseListItemResponse;

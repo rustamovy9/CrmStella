@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
-import LogoutModal from '../modals/LogoutModal'; // Проверь правильность пути к модалке
+import { useAuth } from '../../../context/AuthContext';
+import LogoutModal from '../../modals/LogoutModal'; // Проверь правильность пути к модалке
 
-import logoFull from '../../assets/logo-light.png';
-import logoMini from '../../assets/logo.png';
+import logoFull from '../../../assets/logo-light.png';
+import logoMini from '../../../assets/logo.png';
 
 import {
     LayoutGrid,
@@ -135,7 +135,7 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
                     { path: '/admin/schedules', label: 'Расписание', icon: <Calendar size={18} /> }
                 ]
             },
-            { path: '/admin/payments', label: 'Финансы и счета', icon: <CreditCard size={24} /> },
+            { path: '/admin/finance', label: 'Финансы и счета', icon: <CreditCard size={24} /> },
             { path: '/admin/reports', label: 'Аналитика и отчеты', icon: <PieChart size={24} /> },
         ],
         Mentor: [

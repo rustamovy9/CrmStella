@@ -20,6 +20,7 @@ public class PaymentService(
 {
     private const string PaymentCachePrefix = "payments:";
     private const string PaymentListCacheKey = "payments:list";
+    private const string StudentCachePrefix = "students:";
 
     public async Task<Result<List<PaymentListItemResponse>>> GetAllAsync()
     {
@@ -147,34 +148,49 @@ public class PaymentService(
         await unitOfWork.Payments.CreateAsync(payment);
         await unitOfWork.SaveChangesAsync();
 
+        // загружаем квитанцию если есть
+        if (request.Receipt is not null && request.Receipt.Length > 0)
+        {
+            try
+            {
+                var fileRecord = await fileStorage.UploadAsync(
+                    request.Receipt,
+                    FileOwnerType.PaymentReceipt,
+                    payment.Id,
+                    createdByUserId);
+
+                payment.ReceiptUrl = fileRecord.Url;
+                await unitOfWork.Payments.UpdateAsync(payment);
+                await unitOfWork.SaveChangesAsync();
+
+                logger.LogInformation("Payment receipt uploaded: {PaymentId}", payment.Id);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to upload receipt: {PaymentId}", payment.Id);
+            }
+        }
+
+        // пересчитываем баланс напрямую через UpdateStudentAsync
+        await RecalculateStudentBalanceAsync(request.StudentId);
+
         await auditLogService.LogAsync(
             createdByUserId,
             AuditActions.CreatePayment,
             nameof(Payment),
             payment.Id,
-            newValues: request
+            newValues: new { request.Amount, request.Type, request.Method, request.GroupId }
         );
 
-        if (request.Receipt is not null && request.Receipt.Length > 0)
-        {
-            var fileRecord = await fileStorage.UploadAsync(
-                request.Receipt,
-                FileOwnerType.PaymentReceipt,
-                payment.Id,
-                createdByUserId);
-
-            payment.ReceiptUrl = fileRecord.Url;
-            await unitOfWork.Payments.UpdateAsync(payment);
-            await unitOfWork.SaveChangesAsync();
-        }
-
-        student.Balance = await unitOfWork.Payments.GetStudentBalanceAsync(student.Id);
-        await unitOfWork.Students.UpdateAsync(student);
-        await unitOfWork.SaveChangesAsync();
-
         await cache.RemoveByPrefixAsync(PaymentCachePrefix);
+        await cache.RemoveByPrefixAsync(StudentCachePrefix);
 
-        return Result<PaymentResponse>.Ok(MapToResponse(payment));
+        logger.LogInformation(
+            "Payment created: {PaymentId} Student: {StudentId} Amount: {Amount}",
+            payment.Id, payment.StudentId, payment.Amount);
+
+        var created = await unitOfWork.Payments.GetByIdAsync(payment.Id);
+        return Result<PaymentResponse>.Ok(MapToResponse(created!));
     }
 
     public async Task<Result<PaymentResponse>> UpdateAsync(int id, UpdatePaymentRequest request)
@@ -195,14 +211,21 @@ public class PaymentService(
             payment.Note
         };
 
+        var amountChanged = request.Amount is not null && request.Amount != payment.Amount;
+        var studentId = payment.StudentId;
+
         if (request.Amount is not null) payment.Amount = request.Amount.Value;
-        if (request.Type is not null) payment.Type = request.Type.Value;
+        if (request.Type is not null)   payment.Type   = request.Type.Value;
         if (request.Method is not null) payment.Method = request.Method.Value;
         if (request.DueDate is not null) payment.DueDate = request.DueDate;
-        if (request.Note is not null) payment.Note = request.Note.Trim();
+        if (request.Note is not null)   payment.Note   = request.Note.Trim();
 
         await unitOfWork.Payments.UpdateAsync(payment);
         await unitOfWork.SaveChangesAsync();
+
+        // пересчитываем баланс если изменилась сумма
+        if (amountChanged)
+            await RecalculateStudentBalanceAsync(studentId);
 
         await auditLogService.LogAsync(
             null,
@@ -214,8 +237,12 @@ public class PaymentService(
         );
 
         await cache.RemoveByPrefixAsync(PaymentCachePrefix);
+        await cache.RemoveByPrefixAsync(StudentCachePrefix);
 
-        return Result<PaymentResponse>.Ok(MapToResponse(payment));
+        logger.LogInformation("Payment updated: {PaymentId}", id);
+
+        var updated = await unitOfWork.Payments.GetByIdAsync(id);
+        return Result<PaymentResponse>.Ok(MapToResponse(updated!));
     }
 
     public async Task<Result<bool>> ConfirmAsync(int id, ConfirmPaymentRequest request)
@@ -242,6 +269,10 @@ public class PaymentService(
 
         await cache.RemoveByPrefixAsync(PaymentCachePrefix);
 
+        logger.LogInformation(
+            "Payment confirmed: {PaymentId} IsConfirmed: {IsConfirmed}",
+            id, request.IsConfirmed);
+
         return Result<bool>.Ok(true);
     }
 
@@ -254,18 +285,26 @@ public class PaymentService(
         if (payment.IsConfirmed)
             return Result<bool>.Fail("Cannot delete confirmed payment", ErrorType.BadRequest);
 
+        var studentId = payment.StudentId;
+
         await unitOfWork.Payments.DeleteAsync(payment);
         await unitOfWork.SaveChangesAsync();
+
+        // пересчитываем баланс после удаления
+        await RecalculateStudentBalanceAsync(studentId);
 
         await auditLogService.LogAsync(
             null,
             AuditActions.DeletePayment,
             nameof(Payment),
             id,
-            payment
+            oldValues: new { payment.Amount, payment.Type, payment.StudentId }
         );
 
         await cache.RemoveByPrefixAsync(PaymentCachePrefix);
+        await cache.RemoveByPrefixAsync(StudentCachePrefix);
+
+        logger.LogInformation("Payment deleted: {PaymentId}", id);
 
         return Result<bool>.Ok(true);
     }
@@ -300,48 +339,65 @@ public class PaymentService(
 
         await cache.RemoveByPrefixAsync(PaymentCachePrefix);
 
-        return Result<PaymentResponse>.Ok(MapToResponse(payment));
+        logger.LogInformation("Receipt set: {PaymentId}", paymentId);
+
+        var updated = await unitOfWork.Payments.GetByIdAsync(paymentId);
+        return Result<PaymentResponse>.Ok(MapToResponse(updated!));
     }
 
+    // ─── PRIVATE ──────────────────────────────────────────────────────────
 
-    private static PaymentResponse MapToResponse(Payment p)
+    private async Task RecalculateStudentBalanceAsync(int studentId)
     {
-        return new PaymentResponse
-        {
-            Id = p.Id,
-            StudentId = p.StudentId,
-            StudentFullName = p.Student?.User?.FullName ?? "",
-            GroupId = p.GroupId,
-            GroupName = p.Group?.Name ?? "",
-            Amount = p.Amount,
-            Type = p.Type.ToString(),
-            Method = p.Method.ToString(),
-            Date = p.Date,
-            DueDate = p.DueDate,
-            IsConfirmed = p.IsConfirmed,
-            Note = p.Note,
-            ReceiptUrl = p.ReceiptUrl,
-            CreatedByUserId = p.CreatedByUserId,
-            CreatedByFullName = p.CreatedByUser?.FullName,
-            CreatedAt = p.CreatedAt
-        };
+        // пересчитываем сумму всех платежей студента
+        var newBalance = await unitOfWork.Payments.GetStudentBalanceAsync(studentId);
+
+        // получаем студента для обновления
+        var student = await unitOfWork.Students.GetByIdAsync(studentId);
+        if (student is null) return;
+
+        // используем твой существующий UpdateAsync
+        student.Balance = newBalance;
+        await unitOfWork.Students.UpdateAsync(student);
+        await unitOfWork.SaveChangesAsync();
+
+        logger.LogInformation(
+            "Student balance recalculated: StudentId {StudentId} Balance {Balance}",
+            studentId, newBalance);
     }
 
-    private static PaymentListItemResponse MapToListItem(Payment p)
+    private static PaymentResponse MapToResponse(Payment p) => new()
     {
-        return new PaymentListItemResponse
-        {
-            Id = p.Id,
-            StudentId = p.StudentId,
-            StudentFullName = p.Student?.User?.FullName ?? "",
-            GroupId = p.GroupId,
-            GroupName = p.Group?.Name ?? "",
-            Amount = p.Amount,
-            Type = p.Type.ToString(),
-            Method = p.Method.ToString(),
-            Date = p.Date,
-            IsConfirmed = p.IsConfirmed,
-            CreatedAt = p.CreatedAt
-        };
-    }
+        Id = p.Id,
+        StudentId = p.StudentId,
+        StudentFullName = p.Student?.User?.FullName ?? "",
+        GroupId = p.GroupId,
+        GroupName = p.Group?.Name ?? "",
+        Amount = p.Amount,
+        Type = p.Type.ToString(),
+        Method = p.Method.ToString(),
+        Date = p.Date,
+        DueDate = p.DueDate,
+        IsConfirmed = p.IsConfirmed,
+        Note = p.Note,
+        ReceiptUrl = p.ReceiptUrl,
+        CreatedByUserId = p.CreatedByUserId,
+        CreatedByFullName = p.CreatedByUser?.FullName,
+        CreatedAt = p.CreatedAt
+    };
+
+    private static PaymentListItemResponse MapToListItem(Payment p) => new()
+    {
+        Id = p.Id,
+        StudentId = p.StudentId,
+        StudentFullName = p.Student?.User?.FullName ?? "",
+        GroupId = p.GroupId,
+        GroupName = p.Group?.Name ?? "",
+        Amount = p.Amount,
+        Type = p.Type.ToString(),
+        Method = p.Method.ToString(),
+        Date = p.Date,
+        IsConfirmed = p.IsConfirmed,
+        CreatedAt = p.CreatedAt
+    };
 }

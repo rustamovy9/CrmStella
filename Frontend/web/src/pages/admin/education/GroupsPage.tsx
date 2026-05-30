@@ -7,7 +7,7 @@ import courseService from '../../../api/courseService';
 import adminService from '../../../api/adminService';
 import type { GroupListItemResponse } from '../../../types/group';
 import type { CourseListItemResponse, PagedResult } from '../../../types/admin';
-import GroupCard from '../../../components/ui/GroupCard';
+import GroupCard from '../../../components/ui/group/GroupCard';
 
 const GroupsPage: React.FC = () => {
     const [pagedData, setPagedData] = useState<PagedResult<GroupListItemResponse> | null>(null);

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { MapPin, Clock, Users, Edit3, Trash2 } from 'lucide-react';
-import type { ScheduleResponse } from '../../types/schedule';
+import type { ScheduleResponse } from '../../../types/schedule';
 
 interface ScheduleTableProps {
     visibleDays: { key: string; label: string; short: string }[];

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import Sidebar from './ui/Sidebar';
+import Sidebar from './Sidebar';
 
 interface MainLayoutProps {
     role: 'Admin' | 'Mentor' | 'Student';

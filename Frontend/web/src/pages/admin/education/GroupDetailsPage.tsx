@@ -1,17 +1,128 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-    ArrowLeft, Search, Loader2, AlertCircle, X, 
-    UserPlus, Info, UserMinus, MessageSquare, Calendar, ArrowLeftRight 
+import {
+    ArrowLeft, Search, Loader2, AlertCircle, X,
+    UserPlus, Info, UserMinus, MessageSquare, Calendar, ArrowLeftRight, ChevronDown
 } from 'lucide-react';
 import type { GroupStudentResponse } from '../../../types/groupStudent';
-import type { GroupListItemResponse } from '../../../types/group'; 
-import { ActionCards, type GroupDto } from '../../../components/ui/ActionCards';
+import type { GroupListItemResponse } from '../../../types/group';
+import type { PagedResult, StudentListItemResponse } from '../../../types/admin';
+import { ActionCards, type GroupDto } from '../../../components/ui/group/ActionCards';
 import { groupStudentService } from '../../../api/groupStudentService';
 import groupService from '../../../api/groupService';
 import scheduleService from '../../../api/scheduleService';
-import { StudentTable } from '../../../components/ui/StudentTable';
+import adminService from '../../../api/adminService'; // Импортируем админ-сервис для получения студентов
+import { StudentTable } from '../../../components/ui/group/StudentTable';
+import type { ApiResult } from '../../../types/auth';
+import type { AxiosResponse } from 'axios';
 
+// --- КАСТOМНЫЙ СЕЛЕКТ С ЖИВЫМ ПОИСКОМ СТУДЕНТОВ ---
+interface StudentAsyncSelectProps {
+    onSelect: (id: number) => void;
+    disabled?: boolean;
+}
+
+const StudentAsyncSelect: React.FC<StudentAsyncSelectProps> = ({ onSelect, disabled }) => {
+    const [search, setSearch] = useState('');
+    const [isOpen, setIsOpen] = useState(false);
+    const [students, setStudents] = useState<StudentListItemResponse[]>([]);
+    const [loading, setLoading] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    // Закрытие списка при клике вне компонента
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, []);
+
+    useEffect(() => {
+        const delayDebounceFn = setTimeout(async () => {
+            setLoading(true);
+            try {
+                // 1. Type it as the full AxiosResponse wrapper
+                const response: AxiosResponse<ApiResult<PagedResult<StudentListItemResponse>>> =
+                    await adminService.getStudents(1, 20, search || undefined, true);
+
+                // 2. Extract your backend's custom envelope from Axios (.data)
+                const apiResult = response.data;
+
+                // 3. Drill down into your PagedResult structure
+                if (apiResult?.data?.items) {
+                    // Передаем конкретно массив из data.items
+                    setStudents(apiResult.data.items);
+                } else {
+                    // Если данных нет, сбрасываем в пустой массив
+                    setStudents([]);
+                }
+            } catch (err) {
+                console.error('Ошибка поиска студентов:', err);
+            } finally {
+                setLoading(false);
+            }
+        }, 300);
+
+        return () => clearTimeout(delayDebounceFn);
+    }, [search]);
+
+    return (
+        <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                    type="text"
+                    placeholder="Начните вводить имя или email..."
+                    value={search}
+                    onChange={(e) => {
+                        setSearch(e.target.value);
+                        setIsOpen(true);
+                    }}
+                    onFocus={() => setIsOpen(true)}
+                    disabled={disabled}
+                    style={st.modalInput}
+                />
+                <ChevronDown size={16} style={{ position: 'absolute', right: '12px', color: '#94A3B8', pointerEvents: 'none' }} />
+            </div>
+
+            {isOpen && (
+                <div style={st.dropdownList}>
+                    {loading && (
+                        <div style={{ padding: '10px', textAlign: 'center', color: '#64748B', display: 'flex', justifyContent: 'center', gap: '8px' }}>
+                            <Loader2 size={16} style={st.spinner} /> Загрузка...
+                        </div>
+                    )}
+                    {!loading && students.length === 0 && (
+                        <div style={{ padding: '10px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
+                            Студенты не найдены
+                        </div>
+                    )}
+                    {!loading && students.map((student) => (
+                        <div
+                            key={student.id}
+                            onClick={() => {
+                                setSearch(`${student.fullName} (${student.email})`);
+                                onSelect(student.id);
+                                setIsOpen(false);
+                            }}
+                            style={st.dropdownItem}
+                            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#F1F5F9')}
+                            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#FFFFFF')}
+                        >
+                            <div style={{ fontWeight: 600, color: '#0F172A', fontSize: '13px' }}>{student.fullName}</div>
+                            <div style={{ color: '#64748B', fontSize: '11px' }}>{student.email}</div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+};
+
+
+// --- ОСНОВНОЙ КОМПОНЕНТ СТРАНИЦЫ ---
 const GroupDetailsPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const groupId = Number(id);
@@ -20,7 +131,7 @@ const GroupDetailsPage: React.FC = () => {
     // --- СОСТОЯНИЕ ДАННЫХ ---
     const [students, setStudents] = useState<GroupStudentResponse[]>([]);
     const [groupData, setGroupData] = useState<GroupDto | null>(null);
-    const [availableGroups, setAvailableGroups] = useState<GroupListItemResponse[]>([]); 
+    const [availableGroups, setAvailableGroups] = useState<GroupListItemResponse[]>([]);
 
     // --- UI СОСТОЯНИЯ ---
     const [loading, setLoading] = useState<boolean>(true);
@@ -30,7 +141,7 @@ const GroupDetailsPage: React.FC = () => {
 
     // --- МОДАЛКА ЗАЧИСЛЕНИЯ ---
     const [isEnrollOpen, setIsEnrollOpen] = useState<boolean>(false);
-    const [enrollStudentId, setEnrollStudentId] = useState<string>('');
+    const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null); // Храним выбранный ID (число)
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
     // --- МОДАЛКА ИСКЛЮЧЕНИЯ ---
@@ -48,8 +159,8 @@ const GroupDetailsPage: React.FC = () => {
     // --- МОДАЛКА СОЗДАНИЯ РАСПИСАНИЯ ---
     const [isScheduleOpen, setIsScheduleOpen] = useState<boolean>(false);
     const [scheduleDay, setScheduleDay] = useState<string>('1');
-    const [startTime, setStartTime] = useState<string>('18:00'); 
-    const [endTime, setEndTime] = useState<string>('20:00');     
+    const [startTime, setStartTime] = useState<string>('18:00');
+    const [endTime, setEndTime] = useState<string>('20:00');
     const [isScheduling, setIsScheduling] = useState<boolean>(false);
 
     const daysMap: Record<string, string> = {
@@ -101,7 +212,7 @@ const GroupDetailsPage: React.FC = () => {
                             const end = s.endTime ? s.endTime.substring(0, 5) : '';
 
                             if (day && start && end) {
-                                return `${day} ${start}-${end}`; 
+                                return `${day} ${start}-${end}`;
                             }
                             return day;
                         })
@@ -131,7 +242,7 @@ const GroupDetailsPage: React.FC = () => {
         } catch (err: any) {
             console.error("EduCrm API Sync Error:", err);
             setError(err.message || "Не удалось синхронизировать данные с сервером API");
-        } finally {
+        } finalStudents: {
             setLoading(false);
         }
     }, [groupId]);
@@ -143,19 +254,18 @@ const GroupDetailsPage: React.FC = () => {
     // --- ХЕНДЛЕРЫ ДЕЙСТВИЙ ---
     const handleEnrollSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const studentIdNum = Number(enrollStudentId);
 
-        if (!studentIdNum || isNaN(studentIdNum)) {
-            alert('Введите корректный числовой ID студента');
+        if (!selectedStudentId) {
+            alert('Пожалуйста, выберите студента из выпадающего списка');
             return;
         }
 
         try {
             setIsSubmitting(true);
-            const success = await groupStudentService.enrollStudent(groupId, studentIdNum);
+            const success = await groupStudentService.enrollStudent(groupId, selectedStudentId);
 
             if (success) {
-                setEnrollStudentId('');
+                setSelectedStudentId(null);
                 setIsEnrollOpen(false);
                 await loadPageData();
             } else {
@@ -206,7 +316,7 @@ const GroupDetailsPage: React.FC = () => {
             const res = await groupService.getAll({ page: 1, pageSize: 100 });
             const resData = res as any;
             const groupsList: GroupListItemResponse[] = resData?.data?.data?.items || resData?.data?.items || [];
-            
+
             const filteredGroups = groupsList.filter(g => g.id !== groupId);
             setAvailableGroups(filteredGroups);
         } catch (err) {
@@ -253,9 +363,9 @@ const GroupDetailsPage: React.FC = () => {
             await scheduleService.create({
                 groupId: groupId,
                 dayOfWeek: parsedDay,
-                startTime: startTime,        
-                endTime: endTime,            
-                recurringFrom: formattedRecurringFrom 
+                startTime: startTime,
+                endTime: endTime,
+                recurringFrom: formattedRecurringFrom
             });
 
             setIsScheduleOpen(false);
@@ -396,22 +506,19 @@ const GroupDetailsPage: React.FC = () => {
                             </button>
                         </div>
                         <form onSubmit={handleEnrollSubmit} style={st.modalBody}>
-                            <label style={st.modalLabel}>Укажите ID Студента (ID из базы EduCrm)</label>
-                            <input
-                                type="number"
-                                placeholder="Например: 15"
-                                value={enrollStudentId}
-                                onChange={(e) => setEnrollStudentId(e.target.value)}
-                                style={st.modalInput}
-                                required
+                            <label style={st.modalLabel}>ВЫБЕРИТЕ СТУДЕНТА (ЖИВОЙ ПОИСК)</label>
+
+                            {/* Наш новый асинхронный селект вместо инпута с числовым ID */}
+                            <StudentAsyncSelect
+                                onSelect={(id) => setSelectedStudentId(id)}
                                 disabled={isSubmitting}
-                                autoFocus
                             />
+
                             <div style={st.modalActions}>
                                 <button type="button" onClick={() => setIsEnrollOpen(false)} style={st.modalCancelBtn} disabled={isSubmitting}>
                                     Отмена
                                 </button>
-                                <button type="submit" style={st.modalSubmitBtn} disabled={isSubmitting}>
+                                <button type="submit" style={st.modalSubmitBtn} disabled={isSubmitting || !selectedStudentId}>
                                     {isSubmitting ? 'Сохранение...' : 'Подтвердить'}
                                 </button>
                             </div>
@@ -592,7 +699,8 @@ const GroupDetailsPage: React.FC = () => {
 
 export default GroupDetailsPage;
 
-// --- ПОЛНОСТЬЮ ИСПРАВЛЕННЫЕ И СТИЛИЗОВАННЫЕ СТИЛИ ---
+
+// --- ПОЛНОСТЬЮ ИСПРАВЛЕННЫЕ СТИЛИ (БЕЗ ОБРЫВОВ И ОШИБОК) ---
 const st = {
     container: { padding: '24px 40px', backgroundColor: '#F8FAFC', minHeight: '100vh', fontFamily: '"Inter", sans-serif' },
     navBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: '12px 20px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '24px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' },
@@ -614,32 +722,24 @@ const st = {
     searchInput: { padding: '9px 14px 9px 38px', borderRadius: '8px', border: '1px solid #CBD5E1', outline: 'none', fontSize: '14px', width: '280px', backgroundColor: '#FFFFFF', transition: 'border-color 0.15s' },
     emptyState: { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', padding: '40px', backgroundColor: '#FFFFFF', borderRadius: '12px', border: '1px dashed #E2E8F0', textAlign: 'center' as const },
     centerState: { display: 'flex', flexDirection: 'column' as const, justifyContent: 'center', alignItems: 'center', minHeight: '100vh', backgroundColor: '#F8FAFC' },
-    spinner: { color: '#4F46E5' },
+    spinner: { color: '#4F46E5', animation: 'spin 1s linear infinite' },
     errorBanner: { display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#FEF2F2', border: '1px solid #FEE2E2', color: '#EF4444', padding: '12px 16px', borderRadius: '10px', marginBottom: '24px', fontSize: '14px', fontWeight: 500 },
-    
-    // --- ИСПРАВЛЕННЫЕ СТИЛИ ДЛЯ ЦЕНТРИРОВАНИЯ МОДАЛОК ---
-    modalOverlay: { 
-        position: 'fixed' as const, 
-        top: 0, 
-        left: 0, 
-        right: 0, 
-        bottom: 0, 
-        backgroundColor: 'rgba(15, 23, 42, 0.4)', 
-        backdropFilter: 'blur(4px)', 
-        display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center', // Исправлено с justifycenter
-        zIndex: 1000 
-    },
-    modalContent: { backgroundColor: '#FFFFFF', borderRadius: '16px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'hidden', border: '1px solid #E2E8F0' },
+    removeWarningBox: { padding: '12px', backgroundColor: '#FEF2F2', border: '1px solid #FEE2E2', borderRadius: '8px', color: '#64748B', fontSize: '13px', lineHeight: '1.5' },
+
+    // Модальные окна
+    modalOverlay: { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+    modalContent: { backgroundColor: '#FFFFFF', borderRadius: '16px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'visible' as const, border: '1px solid #E2E8F0' },
     modalHeader: { padding: '16px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     modalTitle: { margin: 0, fontSize: '16px', fontWeight: 600, color: '#0F172A' },
     closeModalBtn: { border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex', alignItems: 'center' },
     modalBody: { padding: '20px', display: 'flex', flexDirection: 'column' as const, gap: '16px' },
-    modalLabel: { fontSize: '12px', fontWeight: 700, color: '#64748B', letterSpacing: '0.03em', textTransform: 'uppercase' as const },
-    modalInput: { padding: '10px 12px', borderRadius: '8px', border: '1px solid #CBD5E1', outline: 'none', fontSize: '14px', color: '#0F172A', width: '100%', boxSizing: 'border-box' as const },
-    removeWarningBox: { padding: '12px 14px', borderRadius: '8px', border: '1px solid #FEE2E2', backgroundColor: '#FEF2F2', fontSize: '13px', color: '#991B1B', lineHeight: '1.5' },
+    modalLabel: { fontSize: '11px', fontWeight: 700, color: '#475569', letterSpacing: '0.05em' },
+    modalInput: { padding: '10px 14px', borderRadius: '8px', border: '1px solid #CBD5E1', outline: 'none', fontSize: '14px', width: '100%', boxSizing: 'border-box' as const },
     modalActions: { display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '8px' },
-    modalCancelBtn: { border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#475569', padding: '9px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 },
-    modalSubmitBtn: { border: 'none', background: '#4F46E5', color: '#FFFFFF', padding: '9px 16px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }
+    modalCancelBtn: { border: 'none', background: '#F1F5F9', color: '#475569', padding: '9px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px' },
+    modalSubmitBtn: { border: 'none', background: '#4F46E5', color: '#FFFFFF', padding: '9px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px' },
+
+    // Асинхронный выпадающий список
+    dropdownList: { position: 'absolute' as const, top: '105%', left: 0, right: 0, backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', maxHeight: '200px', overflowY: 'auto' as const, zIndex: 1100, padding: '4px' },
+    dropdownItem: { padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', flexDirection: 'column' as const, gap: '2px', transition: 'background-color 0.1s' }
 };

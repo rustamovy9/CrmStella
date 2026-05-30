@@ -1,7 +1,7 @@
 // components/ui/GroupCard.tsx
 import React from 'react';
 import { Users, Calendar, Clock, CheckCircle2, BookOpen, GraduationCap } from 'lucide-react';
-import type { GroupListItemResponse } from '../../types/group';
+import type { GroupListItemResponse } from '../../../types/group';
 
 interface GroupCardProps {
     group: GroupListItemResponse;

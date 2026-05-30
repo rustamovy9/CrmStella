@@ -15,6 +15,7 @@ export interface AuthResponse {
 }
 
 export interface ApiResult<T> {
+    items: ApiResult<import("./admin").PagedResult<import("./admin").StudentListItemResponse>>;
     iconUrl: any;
     isSuccess: boolean;
     data: T;         

@@ -1,283 +1,640 @@
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ChevronLeft, Plus, Calendar, Award, CheckCircle2, TrendingUp } from 'lucide-react';
-import { lessonService, type LessonResponse } from '../../../api/lessonService';
-import { attendanceService, type AttendanceListItemResponse } from '../../../api/attendanceService';
-import { scoreService, type LessonScoreResponse } from '../../../api/scoreService';
-import { weekResultService, type WeekResultResponse } from '../../../api/weekResultService';
+import { ArrowLeft, ChevronDown, ChevronUp, Plus, X } from 'lucide-react';
+import { journalService } from '../../../api/journalService';
 import { groupStudentService } from '../../../api/groupStudentService';
-import { JournalTable } from '../../../components/ui/JournalTable';
+
+import type {
+    LessonResponse,
+    AttendanceResponse,
+    LessonScoreResponse,
+    WeekResultResponse,
+} from '../../../types/journal';
+import JournalChart from '../../../components/ui/journal/JournalChart';
+import JournalWeekTable from '../../../components/ui/journal/JournalWeekTable';
 import { AddLessonModal } from '../../../components/modals/AddLessonModal';
 
-export const JournalPage: React.FC = () => {
+const STATUS = { Present: 1, Absent: 2, Late: 3, Excused: 4 } as const;
+
+const JournalPage: React.FC = () => {
     const { groupId } = useParams<{ groupId: string }>();
     const navigate = useNavigate();
-    const parsedGroupId = Number(groupId);
+    const gid = Number(groupId);
 
-    // Стейты фильтрации
-    const [selectedWeek, setSelectedWeek] = useState<number>(1);
-    const [availableWeeks, setAvailableWeeks] = useState<number[]>([1, 2, 3, 4, 5, 6, 7, 8]);
-
-    // Стейты данных
-    const [students, setStudents] = useState<{ id: number; fullName: string }[]>([]);
-    const [allGroupLessons, setAllGroupLessons] = useState<LessonResponse[]>([]);
-    const [attendances, setAttendances] = useState<Record<number, AttendanceListItemResponse[]>>({});
-    const [scores, setScores] = useState<Record<number, LessonScoreResponse[]>>({});
-    const [weekResults, setWeekResults] = useState<WeekResultResponse[]>([]);
-
-    // Интерфейсные стейты
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [lessons, setLessons] = useState<LessonResponse[]>([]);
+    const [attMap, setAttMap] = useState<Record<number, AttendanceResponse[]>>({});
+    const [scoreMap, setScoreMap] = useState<Record<number, LessonScoreResponse[]>>({});
+    const [weekResults, setWeekResults] = useState<Record<number, WeekResultResponse[]>>({});
+    const [groupStudents, setGroupStudents] = useState<{ id: number; name: string }[]>([]);
     const [loading, setLoading] = useState(true);
+    const [openWeeks, setOpenWeeks] = useState<Set<number>>(new Set());
+    const [saving, setSaving] = useState<string | null>(null);
+    const [showAddLesson, setShowAddLesson] = useState(false);
+    const [currentWeek, setCurrentWeek] = useState(1);
 
-    // ОПТИМИЗАЦИЯ: Фильтруем уроки только с проверкой на массив, исключая ошибку "filter is not a function"
-    const currentWeekLessons = useMemo(() => {
-        if (!Array.isArray(allGroupLessons)) return [];
-        return allGroupLessons
-            .filter(l => l && l.weekNumber === selectedWeek)
-            .sort((a, b) => a.orderIndex - b.orderIndex);
-    }, [allGroupLessons, selectedWeek]);
+    const [commentModal, setCommentModal] = useState<{
+        open: boolean;
+        att?: AttendanceResponse;
+        lessonId: number;
+        studentId: number;
+        text: string;
+    }>({ open: false, lessonId: 0, studentId: 0, text: '' });
 
-    // Универсальный хелпер для извлечения массива из ответов API (разруливает вложенные объекты бэкенда)
-    const extractArray = (res: any): any[] => {
-        if (!res) return [];
-        // Проверяем все возможные варианты вложенности структур данных
-        const target = res.data?.data ?? res.data?.items ?? res.data ?? res.items ?? res;
-        return Array.isArray(target) ? target : [];
+    // ─── ЗАГРУЗКА ─────────────────────────────────────────────────────────
+
+    const loadAttScores = async (allLessons: LessonResponse[]) => {
+        if (allLessons.length === 0) return;
+        const [attRes, scoreRes] = await Promise.all([
+            Promise.all(allLessons.map(l =>
+                journalService.getAttendanceByLesson(l.id)
+                    .then(r => ({ id: l.id, data: r.data.data ?? [] }))
+                    .catch(() => ({ id: l.id, data: [] as AttendanceResponse[] }))
+            )),
+            Promise.all(allLessons.map(l =>
+                journalService.getScoresByLesson(l.id)
+                    .then(r => ({ id: l.id, data: r.data.data ?? [] }))
+                    .catch(() => ({ id: l.id, data: [] as LessonScoreResponse[] }))
+            )),
+        ]);
+        const aMap: Record<number, AttendanceResponse[]> = {};
+        const sMap: Record<number, LessonScoreResponse[]> = {};
+        attRes.forEach(r => { aMap[r.id] = r.data; });
+        scoreRes.forEach(r => { sMap[r.id] = r.data; });
+        setAttMap(aMap);
+        setScoreMap(sMap);
     };
 
-    // Загрузка первичных списков (Студенты и все Уроки группы)
-    const loadBaseData = useCallback(async () => {
-        if (!parsedGroupId || isNaN(parsedGroupId)) return;
+    const loadWeekResults = async (weeks: number[]) => {
+        if (weeks.length === 0) return;
+        const results = await Promise.all(
+            weeks.map(wn =>
+                journalService.getWeekResults(gid, wn)
+                    .then(r => ({ wn, data: r.data.data ?? [] }))
+                    .catch(() => ({ wn, data: [] as WeekResultResponse[] }))
+            )
+        );
+        const map: Record<number, WeekResultResponse[]> = {};
+        results.forEach(r => { map[r.wn] = r.data; });
+        setWeekResults(map);
+    };
+
+    const loadAll = async () => {
+        setLoading(true);
         try {
-            setLoading(true);
-            const [studentsRes, lessonsRes] = await Promise.all([
-                groupStudentService.getById(parsedGroupId).catch(() => null),
-                lessonService.getByGroupId(parsedGroupId).catch(() => null)
+            // загружаем студентов группы
+            const gsData = await groupStudentService.getById(gid);
+            const studentList = gsData
+                .filter(gs => gs.isActive)
+                .map(gs => ({
+                    id: gs.studentId,
+                    name: gs.studentName  // правильное поле
+                }))
+                .sort((a, b) => a.name.localeCompare(b.name));
+            setGroupStudents(studentList);
+
+            // загружаем уроки
+            const res = await journalService.getLessonsByGroup(gid);
+            const data = res.data.data ?? [];
+            setLessons(data);
+
+            const weeks = Array.from(new Set(data.map(l => l.weekNumber))) as number[];
+
+            await Promise.all([
+                loadAttScores(data),
+                loadWeekResults(weeks),
             ]);
 
-            // Безопасно парсим студентов
-            const rawStudents = extractArray(studentsRes);
-            const formattedStudents = rawStudents.map((s: any) => ({
-                id: s.studentId || s.id,
-                fullName: s.studentFullName || s.user?.fullName || `Студент #${s.id}`
-            }));
-            setStudents(formattedStudents);
-
-            // Безопасно парсим уроки (Решает проблему строки 66 "lessonsData.map is not a function")
-            const lessonsData = extractArray(lessonsRes);
-            setAllGroupLessons(lessonsData);
-
-            // Динамически вычисляем доступные недели
-            if (lessonsData.length > 0) {
-                const weeks = Array.from(
-                    new Set(lessonsData.map((l: any) => l?.weekNumber).filter(Boolean))
-                ) as number[];
-                
-                if (weeks.length > 0) {
-                    setAvailableWeeks(weeks.sort((a, b) => a - b));
-                }
+            if (weeks.length > 0) {
+                const last = Math.max(...weeks);
+                setOpenWeeks(new Set([last]));
+                setCurrentWeek(last);
             }
         } catch (err) {
-            console.error("Ошибка загрузки базовых данных журнала:", err);
+            console.error('Journal load error:', err);
         } finally {
             setLoading(false);
         }
-    }, [parsedGroupId]);
+    };
 
-    // Загрузка деталей недели (Посещаемость, Оценки и Итоги недели)
-    const loadWeekDetails = useCallback(async () => {
-        if (!Array.isArray(currentWeekLessons) || currentWeekLessons.length === 0) {
-            setAttendances({});
-            setScores({});
-            setWeekResults([]);
-            return;
-        }
+    useEffect(() => {
+        if (gid) loadAll();
+    }, [gid]);
 
+    // ─── ГРУППИРОВКА ──────────────────────────────────────────────────────
+
+    const lessonsByWeek = useMemo(() => {
+        const map: Record<number, LessonResponse[]> = {};
+        lessons.forEach(l => {
+            if (!map[l.weekNumber]) map[l.weekNumber] = [];
+            map[l.weekNumber].push(l);
+        });
+        Object.values(map).forEach(arr =>
+            arr.sort((a, b) =>
+                new Date(a.lessonDate).getTime() - new Date(b.lessonDate).getTime()
+            )
+        );
+        return map;
+    }, [lessons]);
+
+    const sortedWeeks = useMemo(() =>
+        Object.keys(lessonsByWeek).map(Number).sort((a, b) => b - a),
+        [lessonsByWeek]
+    );
+
+    const allWeekNumbers = useMemo(() =>
+        Object.keys(lessonsByWeek).map(Number),
+        [lessonsByWeek]
+    );
+
+    // ─── LOOKUPS ──────────────────────────────────────────────────────────
+
+    const attLookup = useMemo(() => {
+        const m: Record<string, AttendanceResponse> = {};
+        Object.values(attMap).flat().forEach(a => {
+            m[`${a.lessonId}-${a.studentId}`] = a;
+        });
+        return m;
+    }, [attMap]);
+
+    const scoreLookup = useMemo(() => {
+        const m: Record<string, LessonScoreResponse> = {};
+        Object.values(scoreMap).flat().forEach(sc => {
+            m[`${sc.lessonId}-${sc.studentId}`] = sc;
+        });
+        return m;
+    }, [scoreMap]);
+
+    // студенты — берём из groupStudents (всегда актуально)
+    // fallback на attMap/scoreMap если groupStudents пустой
+    const students = useMemo(() => {
+        if (groupStudents.length > 0) return groupStudents;
+
+        const map = new Map<number, string>();
+        Object.values(attMap).flat().forEach(a =>
+            map.set(a.studentId, a.studentFullName)
+        );
+        Object.values(scoreMap).flat().forEach(sc =>
+            map.set(sc.studentId, sc.studentName)
+        );
+        Object.values(weekResults).flat().forEach(wr =>
+            map.set(wr.studentId, wr.studentName)
+        );
+        return Array.from(map.entries())
+            .map(([id, name]) => ({ id, name }))
+            .sort((a, b) => a.name.localeCompare(b.name));
+    }, [groupStudents, attMap, scoreMap, weekResults]);
+
+    // ─── ДЕЙСТВИЯ ─────────────────────────────────────────────────────────
+
+    const handleAttToggle = async (lessonId: number, studentId: number) => {
+        const key = `${lessonId}-${studentId}`;
+        const existing = attLookup[key];
+        setSaving(`att-${key}`);
         try {
-            const lessonIds = currentWeekLessons.map(l => l.id);
-            
-            const attPromises = lessonIds.map(id => attendanceService.getByLessonId(id).catch(() => ({ data: { data: [] } })));
-            const scorePromises = lessonIds.map(id => scoreService.getByLessonId(id).catch(() => ({ data: { data: [] } })));
-            const weekResPromise = weekResultService.getByGroupAndWeek(parsedGroupId, selectedWeek).catch(() => ({ data: { data: [] } }));
+            if (!existing) {
+                // первый раз — создаём
+                await journalService.createAttendance({
+                    lessonId, studentId, status: STATUS.Present
+                });
+            } else {
+                // уже есть — только обновляем статус
+                const newStatus = existing.status === 'Present'
+                    ? STATUS.Absent
+                    : STATUS.Present;
+                await journalService.updateAttendance(existing.id, { status: newStatus });
+            }
+            await loadAttScores(lessons);
+        } catch (err: any) {
+            // если всё же Conflict — просто обновляем
+            if (err?.response?.data?.errorType === 3) {
+                await loadAttScores(lessons); // перезагружаем чтобы получить id
+            }
+            console.error('Attendance error:', err);
+        } finally {
+            setSaving(null);
+        }
+    };
 
-            const settledResults = await Promise.all([
-                ...attPromises,
-                ...scorePromises,
-                weekResPromise
+    const handleScoreChange = async (
+        lessonId: number, studentId: number, weekNumber: number, score: number
+    ) => {
+        const key = `${lessonId}-${studentId}`;
+        const existing = scoreLookup[key];
+        setSaving(`score-${key}`);
+        try {
+            if (!existing) {
+                await journalService.createLessonScore({ lessonId, studentId, score });
+            } else {
+                await journalService.updateLessonScore(existing.id, { score });
+            }
+            await journalService.recalculateWeekResult({
+                studentId, groupId: gid, weekNumber
+            });
+            await Promise.all([
+                loadAttScores(lessons),
+                loadWeekResults([weekNumber]),
             ]);
-
-            const attResponses = settledResults.slice(0, lessonIds.length);
-            const scoreResponses = settledResults.slice(lessonIds.length, lessonIds.length * 2);
-            const weekResultsRes = settledResults[settledResults.length - 1];
-
-            const newAttendances: Record<number, AttendanceListItemResponse[]> = {};
-            lessonIds.forEach((id, index) => {
-                newAttendances[id] = extractArray(attResponses[index]);
-            });
-            setAttendances(newAttendances);
-
-            const newScores: Record<number, LessonScoreResponse[]> = {};
-            lessonIds.forEach((id, index) => {
-                newScores[id] = extractArray(scoreResponses[index]);
-            });
-            setScores(newScores);
-
-            setWeekResults(extractArray(weekResultsRes));
-
         } catch (err) {
-            console.error("Ошибка загрузки деталей недели:", err);
+            console.error('Score error:', err);
+        } finally {
+            setSaving(null);
         }
-    }, [currentWeekLessons, parsedGroupId, selectedWeek]);
+    };
 
-    useEffect(() => {
-        loadBaseData();
-    }, [loadBaseData]);
-
-    useEffect(() => {
-        loadWeekDetails();
-    }, [loadWeekDetails]);
-
-    const handleAttendanceChange = async (lessonId: number, studentId: number, present: boolean) => {
+    const handleSaveComment = async () => {
+        const { att, lessonId, studentId, text } = commentModal;
+        setSaving('comment');
         try {
-            await attendanceService.createOrUpdate({
-                lessonId,
-                studentId,
-                status: present ? 1 : 2
-            });
-            
-            await weekResultService.recalculate({ studentId, groupId: parsedGroupId, weekNumber: selectedWeek }).catch(() => {});
-            await loadWeekDetails();
+            if (!att) {
+                await journalService.createAttendance({
+                    lessonId, studentId,
+                    status: STATUS.Absent,
+                    absenceReason: text,
+                });
+            } else {
+                const statusNum = att.status === 'Present' ? STATUS.Present
+                    : att.status === 'Late' ? STATUS.Late
+                        : att.status === 'Excused' ? STATUS.Excused
+                            : STATUS.Absent;
+                await journalService.updateAttendance(att.id, {
+                    status: statusNum,
+                    absenceReason: text,
+                });
+            }
+            await loadAttScores(lessons);
         } catch (err) {
-            console.error("Не удалось сохранить посещаемость:", err);
+            console.error('Comment error:', err);
+        } finally {
+            setSaving(null);
+            setCommentModal({ open: false, lessonId: 0, studentId: 0, text: '' });
         }
     };
 
-    const handleScoreChange = async (lessonId: number, studentId: number, score: number) => {
-        try {
-            await scoreService.saveScore({ lessonId, studentId, score });
-            
-            await weekResultService.recalculate({ studentId, groupId: parsedGroupId, weekNumber: selectedWeek }).catch(() => {});
-            await loadWeekDetails();
-        } catch (err) {
-            console.error("Не удалось сохранить оценку:", err);
-        }
-    };
+    const toggleWeek = (wn: number) =>
+        setOpenWeeks(prev => {
+            const next = new Set(prev);
+            next.has(wn) ? next.delete(wn) : next.add(wn);
+            return next;
+        });
 
-    const calculateStats = () => {
-        if (!Array.isArray(weekResults) || weekResults.length === 0) return { avgScore: 0, avgAttendance: 0 };
-        const totalScore = weekResults.reduce((acc, curr) => acc + (curr?.totalScore || 0), 0);
-        const totalAtt = weekResults.reduce((acc, curr) => acc + (curr?.attendanceScore || 0), 0);
-        return {
-            avgScore: Math.round(totalScore / weekResults.length),
-            avgAttendance: Math.round(totalAtt / weekResults.length)
-        };
-    };
+    // ─── RENDER ───────────────────────────────────────────────────────────
 
-    const stats = calculateStats();
-
-    if (loading) {
-        return <div style={{ padding: '40px', textAlign: 'center', color: '#64748B', fontFamily: 'Inter' }}>Синхронизация данных журнала...</div>;
-    }
+    if (loading) return (
+        <div style={s.center}>
+            <style>{`
+                @keyframes jspin { to { transform: rotate(360deg); } }
+                .jspinner { animation: jspin 0.7s linear infinite; }
+            `}</style>
+            <div className="jspinner" style={s.spinner} />
+            <span style={{ color: '#64748B', fontSize: '14px' }}>Загрузка журнала...</span>
+        </div>
+    );
 
     return (
-        <div style={{ padding: '30px', background: '#F8FAFC', minHeight: '100vh', fontFamily: 'Inter, sans-serif' }}>
-            
-            {/* Хедер журнала */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <button onClick={() => navigate(-1)} style={{ padding: '8px', border: '1px solid #E2E8F0', borderRadius: '10px', background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', color: '#64748B' }}>
-                        <ChevronLeft size={16} />
-                    </button>
-                    <div>
-                        <h1 style={{ fontSize: '20px', fontWeight: 700, color: '#0F172A', margin: 0 }}>Управление журналом</h1>
-                        <p style={{ fontSize: '12px', color: '#64748B', margin: '2px 0 0 0' }}>Посещаемость, успеваемость и аналитика по неделям</p>
-                    </div>
-                </div>
+        <div style={s.page}>
+            <style>{`
+                .jback:hover { color: #0F172A !important; }
+                .jaddbtn:hover { background: #4338CA !important; }
+                .jweekhdr:hover { background: #F8FAFC !important; }
+                .jcancelm:hover { background: #F1F5F9 !important; }
+                .jsavem:hover { background: #4338CA !important; }
+            `}</style>
 
-                <button onClick={() => setIsModalOpen(true)} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: '#4F46E5', color: '#fff', border: 'none', padding: '10px 16px', borderRadius: '10px', fontWeight: 600, fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(79, 70, 229, 0.15)' }}>
-                    <Plus size={16} /> Добавить урок
+            <div style={s.header}>
+                <button className="jback" style={s.backBtn} onClick={() => navigate(-1)}>
+                    <ArrowLeft size={16} />
+                    <span style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A' }}>
+                        Journal
+                    </span>
+                </button>
+                <button
+                    className="jaddbtn"
+                    style={s.addBtn}
+                    onClick={() => setShowAddLesson(true)}
+                >
+                    <Plus size={15} />
+                    Добавить урок
                 </button>
             </div>
 
-            {/* Аналитические карточки */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '26px' }}>
-                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#EEF2FF', color: '#4F46E5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Award size={20} /></div>
-                    <div>
-                        <div style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A' }}>{stats.avgScore} %</div>
-                        <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Средняя успеваемость недели</div>
+            {lessons.length === 0 ? (
+                <div style={s.emptyWrap}>
+                    <div style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', marginBottom: '6px' }}>
+                        Уроки ещё не созданы
                     </div>
-                </div>
-                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#ECFDF5', color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><CheckCircle2 size={20} /></div>
-                    <div>
-                        <div style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A' }}>{stats.avgAttendance} %</div>
-                        <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Посещаемость студентов</div>
+                    <div style={{ fontSize: '13px', color: '#64748B', marginBottom: '20px' }}>
+                        Добавьте первый урок чтобы начать заполнять журнал
                     </div>
-                </div>
-                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '18px', display: 'flex', alignItems: 'center', gap: '14px' }}>
-                    <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#FFF7ED', color: '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Calendar size={20} /></div>
-                    <div>
-                        <div style={{ fontSize: '22px', fontWeight: 800, color: '#0F172A' }}>{currentWeekLessons.length}</div>
-                        <div style={{ fontSize: '12px', color: '#64748B', fontWeight: 500 }}>Всего уроков проведено</div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Панель фильтрации недель */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', background: '#fff', padding: '12px 16px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '20px', overflowX: 'auto' }}>
-                <span style={{ fontSize: '12px', fontWeight: 700, color: '#475569', textTransform: 'uppercase', marginRight: '6px', whiteSpace: 'nowrap' }}>Неделя потока:</span>
-                {availableWeeks.map((week) => (
                     <button
-                        key={week}
-                        onClick={() => setSelectedWeek(week)}
-                        style={{
-                            padding: '6px 14px',
-                            borderRadius: '8px',
-                            border: '1px solid',
-                            borderColor: selectedWeek === week ? '#4F46E5' : '#E2E8F0',
-                            background: selectedWeek === week ? '#4F46E5' : '#fff',
-                            color: selectedWeek === week ? '#fff' : '#475569',
-                            fontWeight: 600,
-                            fontSize: '12px',
-                            cursor: 'pointer',
-                            transition: 'all 0.15s ease',
-                            whiteSpace: 'nowrap'
-                        }}
+                        className="jaddbtn"
+                        style={s.addBtn}
+                        onClick={() => setShowAddLesson(true)}
                     >
-                        Неделя {week}
+                        <Plus size={15} />
+                        Добавить первый урок
                     </button>
-                ))}
-            </div>
-
-            {/* Таблица */}
-            {currentWeekLessons.length > 0 ? (
-                <JournalTable
-                    students={students}
-                    lessons={currentWeekLessons}
-                    attendances={attendances}
-                    scores={scores}
-                    onAttendanceChange={handleAttendanceChange}
-                    onScoreChange={handleScoreChange}
-                />
-            ) : (
-                <div style={{ background: '#fff', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '40px', textAlign: 'center', color: '#64748B' }}>
-                    <TrendingUp size={24} style={{ color: '#94A3B8', marginBottom: '10px' }} />
-                    <div style={{ fontWeight: 600, color: '#1E293B' }}>На этой неделе еще нет занятий</div>
-                    <div style={{ fontSize: '12px', color: '#64748B', marginTop: '2px' }}>Нажмите кнопку "Добавить урок", чтобы сформировать расписание.</div>
                 </div>
+            ) : (
+                <>
+                    <JournalChart
+                        weekResults={weekResults}
+                        weeks={allWeekNumbers}
+                    />
+
+                    <div style={s.weekList}>
+                        {sortedWeeks.map(wn => {
+                            const weekLessons = lessonsByWeek[wn] ?? [];
+                            const isOpen = openWeeks.has(wn);
+
+                            return (
+                                <div key={wn} style={s.weekCard}>
+                                    <button
+                                        className="jweekhdr"
+                                        style={s.weekHeader}
+                                        onClick={() => toggleWeek(wn)}
+                                    >
+                                        <span style={s.weekTitle}>Week {wn}</span>
+                                        {isOpen
+                                            ? <ChevronUp size={18} color="#64748B" />
+                                            : <ChevronDown size={18} color="#64748B" />
+                                        }
+                                    </button>
+
+                                    {isOpen && (
+                                        <JournalWeekTable
+                                            weekNumber={wn}
+                                            lessons={weekLessons}
+                                            students={students}
+                                            attLookup={attLookup}
+                                            scoreLookup={scoreLookup}
+                                            weekResults={weekResults[wn] ?? []}
+                                            saving={saving}
+                                            onAttToggle={handleAttToggle}
+                                            onScoreChange={handleScoreChange}
+                                            onCommentOpen={(lessonId, studentId, att) =>
+                                                setCommentModal({
+                                                    open: true,
+                                                    att,
+                                                    lessonId,
+                                                    studentId,
+                                                    text: att?.absenceReason ?? '',
+                                                })
+                                            }
+                                        />
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </>
             )}
 
-            {/* Модалка создания уроков */}
-            <AddLessonModal
-                isOpen={isModalOpen}
-                onClose={() => setIsModalOpen(false)}
-                groupId={parsedGroupId}
-                currentWeek={selectedWeek}
-                onLessonCreated={() => {
-                    loadBaseData();
-                }}
-            />
+            {showAddLesson && (
+                <AddLessonModal
+                    isOpen={showAddLesson}
+                    groupId={gid}
+                    currentWeek={currentWeek}
+                    onClose={() => setShowAddLesson(false)}
+                    onLessonCreated={() => {
+                        setShowAddLesson(false);
+                        loadAll();
+                    }}
+                />
+            )}
+
+            {commentModal.open && (
+                <div style={s.overlay}>
+                    <div style={s.modal}>
+                        <div style={s.modalHeader}>
+                            <span style={s.modalTitle}>Комментарий к посещаемости</span>
+                            <button
+                                style={s.modalClose}
+                                onClick={() => setCommentModal({
+                                    open: false, lessonId: 0, studentId: 0, text: ''
+                                })}
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <textarea
+                            style={s.textarea}
+                            placeholder="Причина отсутствия или опоздания..."
+                            value={commentModal.text}
+                            rows={4}
+                            onChange={e => setCommentModal(prev => ({
+                                ...prev, text: e.target.value
+                            }))}
+                        />
+                        <div style={s.modalFooter}>
+                            <button
+                                className="jcancelm"
+                                style={s.cancelBtn}
+                                onClick={() => setCommentModal({
+                                    open: false, lessonId: 0, studentId: 0, text: ''
+                                })}
+                            >
+                                Отмена
+                            </button>
+                            <button
+                                className="jsavem"
+                                style={s.saveBtn}
+                                onClick={handleSaveComment}
+                                disabled={saving === 'comment'}
+                            >
+                                {saving === 'comment' ? 'Сохранение...' : 'Сохранить'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
+
+const s = {
+    page: {
+        padding: '24px 32px',
+        background: '#F8FAFC',
+        minHeight: '100vh',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+    } as React.CSSProperties,
+
+    center: {
+        display: 'flex',
+        flexDirection: 'column' as const,
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '12px',
+        height: '60vh',
+    } as React.CSSProperties,
+
+    spinner: {
+        width: '28px',
+        height: '28px',
+        border: '3px solid #E2E8F0',
+        borderTopColor: '#6366F1',
+        borderRadius: '50%',
+    } as React.CSSProperties,
+
+    header: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '24px',
+    } as React.CSSProperties,
+
+    backBtn: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        padding: 0,
+        color: '#0F172A',
+        transition: 'color 0.15s',
+    } as React.CSSProperties,
+
+    addBtn: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        background: '#4F46E5',
+        color: '#FFFFFF',
+        border: 'none',
+        borderRadius: '10px',
+        padding: '10px 18px',
+        fontSize: '13px',
+        fontWeight: 600,
+        cursor: 'pointer',
+        transition: 'background 0.15s',
+    } as React.CSSProperties,
+
+    emptyWrap: {
+        display: 'flex',
+        flexDirection: 'column' as const,
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '64px 24px',
+        background: '#FFFFFF',
+        borderRadius: '20px',
+        border: '1px solid #E2E8F0',
+        textAlign: 'center' as const,
+    } as React.CSSProperties,
+
+    weekList: {
+        display: 'flex',
+        flexDirection: 'column' as const,
+        gap: '12px',
+    } as React.CSSProperties,
+
+    weekCard: {
+        background: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: '16px',
+        overflow: 'hidden',
+        boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
+    } as React.CSSProperties,
+
+    weekHeader: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '18px 24px',
+        background: 'none',
+        border: 'none',
+        width: '100%',
+        textAlign: 'left' as const,
+        cursor: 'pointer',
+        transition: 'background 0.15s',
+    } as React.CSSProperties,
+
+    weekTitle: {
+        fontSize: '17px',
+        fontWeight: 700,
+        color: '#0F172A',
+    } as React.CSSProperties,
+
+    overlay: {
+        position: 'fixed' as const,
+        inset: 0,
+        background: 'rgba(15,23,42,0.45)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 1000,
+    } as React.CSSProperties,
+
+    modal: {
+        background: '#FFFFFF',
+        borderRadius: '20px',
+        width: '420px',
+        padding: '24px',
+        boxShadow: '0 20px 40px rgba(15,23,42,0.15)',
+    } as React.CSSProperties,
+
+    modalHeader: {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '16px',
+    } as React.CSSProperties,
+
+    modalTitle: {
+        fontSize: '16px',
+        fontWeight: 700,
+        color: '#0F172A',
+    } as React.CSSProperties,
+
+    modalClose: {
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        color: '#94A3B8',
+        padding: '4px',
+        borderRadius: '6px',
+    } as React.CSSProperties,
+
+    textarea: {
+        width: '100%',
+        padding: '12px',
+        border: '1px solid #E2E8F0',
+        borderRadius: '10px',
+        fontSize: '13px',
+        color: '#0F172A',
+        resize: 'vertical' as const,
+        fontFamily: 'inherit',
+        boxSizing: 'border-box' as const,
+        marginBottom: '16px',
+    } as React.CSSProperties,
+
+    modalFooter: {
+        display: 'flex',
+        justifyContent: 'flex-end',
+        gap: '10px',
+    } as React.CSSProperties,
+
+    cancelBtn: {
+        padding: '9px 18px',
+        border: '1px solid #E2E8F0',
+        borderRadius: '10px',
+        background: '#FFFFFF',
+        color: '#64748B',
+        fontSize: '13px',
+        fontWeight: 600,
+        cursor: 'pointer',
+    } as React.CSSProperties,
+
+    saveBtn: {
+        padding: '9px 18px',
+        border: 'none',
+        borderRadius: '10px',
+        background: '#4F46E5',
+        color: '#FFFFFF',
+        fontSize: '13px',
+        fontWeight: 600,
+        cursor: 'pointer',
+    } as React.CSSProperties,
+};
+
+export default JournalPage;

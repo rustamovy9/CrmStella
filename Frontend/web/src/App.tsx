@@ -3,7 +3,7 @@ import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/routes/ProtectedRoute';
 import PublicRoute from './components/routes/PublicRoute';
 
-import MainLayout from './components/MainLayout';
+import MainLayout from './components/ui/bar/MainLayout';
 
 import Login from './pages/auth/Login';
 import ForgotPassword from './pages/auth/ForgotPassword';
@@ -22,7 +22,8 @@ import CourseInfoPage from './pages/admin/education/CourseInfoPage';
 import GroupsPage from './pages/admin/education/GroupsPage';
 import SchedulePage from './pages/admin/education/SchedulePage';
 import GroupDetailsPage from './pages/admin/education/GroupDetailsPage';
-import { JournalPage } from './pages/admin/journal/JournalPage';
+import JournalPage from './pages/admin/journal/JournalPage';
+import FinanceDashboard from './pages/admin/finance/FinanceDashboard';
 
 function App() {
     return (
@@ -67,6 +68,7 @@ function App() {
                                     <Route path="groups/:id" element={<GroupDetailsPage />} />
                                     <Route path="groups/:groupId/journal" element={<JournalPage />} />
                                     <Route path="schedules" element={<SchedulePage />} />
+                                    <Route path="finance" element={<FinanceDashboard />} />
                                 </Routes>
                             </MainLayout>
                         </ProtectedRoute>

@@ -243,6 +243,7 @@ public class GroupStudentService(
             JoinedAt = gs.JoinedAt,
             LeftAt = gs.LeftAt,
             IsActive = gs.IsActive,
+            IsTransferred = gs.TransferredTo is not null,
             RemoveReason = gs.RemoveReason
         };
     }

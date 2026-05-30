@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import agent from '../../api/agent';
-import Logo from '../../components/ui/Logo';
+import Logo from '../../components/ui/logo/Logo';
 
 type Step = 1 | 2 | 3 | 4;
 
