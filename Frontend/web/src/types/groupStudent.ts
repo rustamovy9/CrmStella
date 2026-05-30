@@ -8,5 +8,6 @@ export interface GroupStudentResponse {
     joinedAt: string;
     leftAt: string | null;
     isActive: boolean;
+    isTransferred: boolean;
     removeReason: string | null;
 }

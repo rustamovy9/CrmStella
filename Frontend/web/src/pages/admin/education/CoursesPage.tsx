@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Filter, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import MetricCard from '../../../components/ui/MetricCard';
-import CourseCard from '../../../components/ui/CourseCard'; // ← Наш новый импорт
+import CourseCard from '../../../components/ui/course/CourseCard'; // ← Наш новый импорт
 import { useNavigate } from 'react-router-dom';
 import type { CourseListItemResponse, PagedResult } from '../../../types/admin';
 import courseService from '../../../api/courseService';

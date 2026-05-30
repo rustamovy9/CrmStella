@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import agent from '../../api/agent';
 import { useAuth } from '../../context/AuthContext';
 import type { ApiResult, AuthResponse } from '../../types/auth';
-import Logo from '../../components/ui/Logo';
+import Logo from '../../components/ui/logo/Logo';
 
 const Login: React.FC = () => {
     const { login } = useAuth();

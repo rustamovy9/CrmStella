@@ -6,7 +6,7 @@ import scheduleService from '../../../api/scheduleService';
 import groupService from '../../../api/groupService';
 import DeleteConfirmModal from '../../../components/modals/DeleteConfirmModal';
 import type { ScheduleResponse, CreateScheduleRequest, UpdateScheduleRequest } from '../../../types/schedule';
-import ScheduleTable from '../../../components/ui/ScheduleTable';
+import ScheduleTable from '../../../components/ui/schedule/ScheduleTable';
 
 // ─── Константы ────────────────────────────────────────────────────────────────
 

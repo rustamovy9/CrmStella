@@ -13,5 +13,6 @@ public class GroupStudentResponse
     public DateTime JoinedAt { get; set; }
     public DateTime? LeftAt { get; set; }
     public bool IsActive { get; set; }
+    public bool IsTransferred { get; set; } 
     public string? RemoveReason { get; set; }
 }

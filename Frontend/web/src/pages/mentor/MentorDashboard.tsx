@@ -1,5 +1,5 @@
 import React from 'react';
-import Sidebar from '../../components/ui/Sidebar';
+import Sidebar from '../../components/ui/bar/Sidebar';
 
 const MentorDashboard: React.FC = () => {
     return (

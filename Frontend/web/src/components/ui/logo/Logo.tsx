@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 // Твой оригинальный логотип
-import logoLight from '../../assets/logo-light.png';
-
+import logoLight from '../../../assets/logo-light.png';
 interface LogoProps {
     width?: string;
     height?: string;

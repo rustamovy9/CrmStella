@@ -3,7 +3,7 @@ import adminService from '../../../api/adminService';
 import type { MentorListItemResponse } from '../../../types/admin';
 import { Search, Filter, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import MetricCard from '../../../components/ui/MetricCard';
-import UserCard from '../../../components/ui/UserCard'; // 🌟 Перешли на единый компонент карточки
+import UserCard from '../../../components/ui/users/UserCard'; // 🌟 Перешли на единый компонент карточки
 import { useNavigate } from 'react-router-dom';
 
 const MentorsPage: React.FC = () => {

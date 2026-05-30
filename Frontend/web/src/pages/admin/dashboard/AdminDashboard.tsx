@@ -1,13 +1,19 @@
+// pages/Admin/AdminDashboard.tsx
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom'; // Импортируем хук для навигации
 import adminService from '../../../api/adminService';
+import { financeService } from '../../../api/paymentService';
 import type { StudentListItemResponse, MentorListItemResponse, UserResponse } from '../../../types/admin';
+import type { PaymentListItem } from '../../../types/finance';
 import MetricCard from '../../../components/ui/MetricCard';
 import { Activity, ArrowRight, DollarSign } from 'lucide-react';
 
 const AdminDashboard: React.FC = () => {
+    const navigate = useNavigate(); // Инициализируем навигацию
     const [students, setStudents] = useState<StudentListItemResponse[]>([]);
     const [mentors, setMentors] = useState<MentorListItemResponse[]>([]);
     const [users, setUsers] = useState<UserResponse[]>([]);
+    const [payments, setPayments] = useState<PaymentListItem[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -15,27 +21,26 @@ const AdminDashboard: React.FC = () => {
         const fetchDashboardData = async () => {
             try {
                 setLoading(true);
-                const [studentsRes, mentorsRes, usersRes] = await Promise.all([
+                
+                const [studentsRes, mentorsRes, usersRes, paymentsRes] = await Promise.all([
                     adminService.getStudents(),
                     adminService.getMentors(),
-                    adminService.getUsers()
+                    adminService.getUsers(),
+                    financeService.getAll().catch(() => ({ isSuccess: false, data: [] }))
                 ]);
 
-                // 🔹 ИСПРАВЛЕНО: Достаем массив студентов из PagedResult (.items)
                 if (studentsRes.data && studentsRes.data.isSuccess) {
                     const pagedData = studentsRes.data.data;
                     const studentsArray = pagedData && 'items' in pagedData ? pagedData.items : [];
                     setStudents(Array.isArray(studentsArray) ? studentsArray : []);
                 }
                 
-                // 🔹 ИСПРАВЛЕНО: Достаем массив менторов из PagedResult (.items)
                 if (mentorsRes.data && mentorsRes.data.isSuccess) {
                     const pagedData = mentorsRes.data.data;
                     const mentorsArray = pagedData && 'items' in pagedData ? pagedData.items : [];
                     setMentors(Array.isArray(mentorsArray) ? mentorsArray : []);
                 }
                 
-                // 🔹 ИСПРАВЛЕНО: Безопасное извлечение для пользователей (на случай, если там тоже пагинация)
                 if (usersRes.data && usersRes.data.isSuccess) {
                     const userData = usersRes.data.data;
                     const usersArray = userData && typeof userData === 'object' && 'items' in userData 
@@ -43,6 +48,11 @@ const AdminDashboard: React.FC = () => {
                         : userData;
                     setUsers(Array.isArray(usersArray) ? usersArray : []);
                 }
+
+                if (paymentsRes.isSuccess && paymentsRes.data) {
+                    setPayments(paymentsRes.data);
+                }
+
             } catch (err) {
                 console.error("Ошибка при загрузке дашборда:", err);
                 setError("Не удалось синхронизировать данные");
@@ -56,7 +66,16 @@ const AdminDashboard: React.FC = () => {
     if (loading) return <div style={styles.centeredState}>Загрузка аналитических данных...</div>;
     if (error) return <div style={{...styles.centeredState, color: '#ef4444'}}>{error}</div>;
 
-    const totalSchoolBalance = students.reduce((sum, current) => sum + (current.balance || 0), 0);
+    // ВЫЧИСЛЕНИЕ КАССЫ: Считаем сумму только подтвержденных доходов
+    const totalPaymentsVolume = payments.reduce((sum, p) => {
+        if (!p.isConfirmed) return sum;
+
+        const typeStr = String(p.type || '').toLowerCase();
+        const isIncome = typeStr === 'income' || typeStr === 'payment' || typeStr === '0' || typeStr === '1' || typeStr === 'доход' || !p.type;
+        
+        return isIncome ? sum + (Number(p.amount) || 0) : sum;
+    }, 0);
+
     const activeStudentsCount = students.filter(s => s.isActive).length;
 
     return (
@@ -70,12 +89,20 @@ const AdminDashboard: React.FC = () => {
 
             {/* Сетка аналитических карточек */}
             <div style={styles.statsGrid}>
-                <MetricCard 
-                    value={`${totalSchoolBalance.toLocaleString()} TJS`} 
-                    label="Общий баланс" 
-                    subLabel="Суммарный объем средств учащихся"
-                    isMain={true} 
-                />
+                {/* Обернули в div для обработки клика и перехода к способам оплаты */}
+                <div 
+                    onClick={() => navigate('/admin/finance')} 
+                    style={{ cursor: 'pointer', flex: '1 1 240px', minWidth: '240px' }}
+                    title="Перейти к управлению способами оплаты"
+                >
+                    <MetricCard 
+                        value={`${totalPaymentsVolume.toLocaleString()} TJS`} 
+                        label="Общая выручка" 
+                        subLabel="Сумма всех подтвержденных оплат"
+                        isMain={true} 
+                    />
+                </div>
+                
                 <MetricCard 
                     value={students.length} 
                     label="Студенты" 
@@ -168,7 +195,7 @@ const AdminDashboard: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Блок балансов */}
+                {/* Блок балансов студентов */}
                 <div style={styles.tableSection}>
                     <div style={styles.tableHeaderSection}>
                         <div style={styles.titleWithIcon}>
@@ -206,6 +233,8 @@ const AdminDashboard: React.FC = () => {
                                         <td style={{...styles.td, textAlign: 'right'}}>
                                             <button 
                                                 style={styles.actionBtn}
+                                                // ВНИМАНИЕ: Изменили student.id на student.userId для корректного перехода в профиль
+                                                onClick={() => navigate(`/admin/users/${student.userId || student.id}`)} 
                                                 onMouseEnter={(e) => {
                                                     e.currentTarget.style.backgroundColor = '#EEF2FF';
                                                     e.currentTarget.style.color = '#6366F1';
@@ -232,189 +261,34 @@ const AdminDashboard: React.FC = () => {
 };
 
 const styles = {
-    dashboardContainer: {
-        padding: '32px',
-        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-        backgroundColor: '#F8FAFC',
-        minHeight: '100vh',
-        boxSizing: 'border-box' as const,
-    },
-    header: {
-        marginBottom: '32px',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    pageTitle: {
-        fontSize: '26px',
-        fontWeight: 700,
-        color: '#0F172A',
-        margin: 0,
-        letterSpacing: '-0.02em',
-    },
-    pageSubtitle: {
-        fontSize: '14px',
-        color: '#64748B',
-        margin: '4px 0 0 0',
-        fontWeight: 500,
-    },
-    statsGrid: {
-        display: 'flex',
-        flexWrap: 'wrap' as const,
-        gap: '20px',
-        marginBottom: '32px',
-        width: '100%',
-    },
-    contentLayout: {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 540px), 1fr))',
-        gap: '24px',
-        width: '100%',
-    },
-    tableSection: {
-        backgroundColor: '#ffffff',
-        borderRadius: '24px',
-        padding: '24px',
-        boxShadow: '0 4px 16px -4px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.06)',
-        minWidth: 0,
-    },
-    tableHeaderSection: {
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: '20px',
-    },
-    titleWithIcon: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-    },
-    iconBadge: {
-        width: '36px',
-        height: '36px',
-        borderRadius: '10px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-    },
-    sectionTitle: {
-        fontSize: '16px',
-        fontWeight: 700,
-        color: '#0F172A',
-        letterSpacing: '-0.01em',
-        margin: 0,
-    },
-    countBadge: {
-        fontSize: '12px',
-        fontWeight: 700,
-        padding: '4px 10px',
-        backgroundColor: '#F1F5F9',
-        color: '#475569',
-        borderRadius: '8px',
-    },
-    tableWrapper: {
-        width: '100%',
-        overflowX: 'auto' as const,
-    },
-    table: {
-        width: '100%',
-        borderCollapse: 'collapse' as const,
-    },
-    thRow: {
-        borderBottom: '1px solid #F1F5F9',
-    },
-    th: {
-        padding: '0 12px 12px 12px',
-        fontSize: '11px',
-        fontWeight: 700,
-        color: '#94A3B8',
-        textTransform: 'uppercase' as const,
-        letterSpacing: '0.05em',
-        textAlign: 'left' as const,
-    },
-    tr: {
-        borderBottom: '1px solid #F8FAFC',
-    },
-    td: {
-        padding: '14px 12px',
-        fontSize: '14px',
-        color: '#334155',
-        whiteSpace: 'nowrap' as const,
-        verticalAlign: 'middle',
-    },
-    userMeta: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-    },
-    avatarPlaceholder: {
-        width: '40px',
-        height: '40px',
-        borderRadius: '12px',
-        color: '#ffffff',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontWeight: 700,
-        fontSize: '14px',
-        boxShadow: '0 4px 10px rgba(15, 23, 42, 0.1)',
-    },
-    userName: {
-        fontWeight: 700,
-        color: '#0F172A',
-    },
-    userEmail: {
-        fontSize: '12px',
-        color: '#64748B',
-        marginTop: '1px',
-    },
-    roleBadge: {
-        padding: '4px 10px',
-        borderRadius: '8px',
-        fontSize: '11px',
-        fontWeight: 700,
-        letterSpacing: '0.02em',
-    },
-    statusRow: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-    },
-    pulseDot: {
-        width: '8px',
-        height: '8px',
-        borderRadius: '50%',
-    },
-    balanceText: {
-        fontWeight: 700,
-        fontSize: '13px',
-        padding: '6px 12px',
-        borderRadius: '10px',
-        display: 'inline-block',
-    },
-    actionBtn: {
-        padding: '8px 14px',
-        border: 'none',
-        backgroundColor: '#F8FAFC',
-        borderRadius: '10px',
-        fontSize: '12px',
-        fontWeight: 600,
-        color: '#334155',
-        cursor: 'pointer',
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        transition: 'all 0.2s ease',
-    },
-    centeredState: {
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        height: '80vh',
-        fontSize: '15px',
-        fontWeight: 600,
-        color: '#64748B',
-    }
+    dashboardContainer: { padding: '32px', fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", backgroundColor: '#F8FAFC', minHeight: '100vh', boxSizing: 'border-box' as const },
+    header: { marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    pageTitle: { fontSize: '26px', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' },
+    pageSubtitle: { fontSize: '14px', color: '#64748B', margin: '4px 0 0 0', fontWeight: 500 },
+    statsGrid: { display: 'flex', flexWrap: 'wrap' as const, gap: '20px', marginBottom: '32px', width: '100%' },
+    contentLayout: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 540px), 1fr))', gap: '24px', width: '100%' },
+    tableSection: { backgroundColor: '#ffffff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 16px -4px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.06)', minWidth: 0 },
+    tableHeaderSection: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
+    titleWithIcon: { display: 'flex', alignItems: 'center', gap: '12px' },
+    iconBadge: { width: '36px', height: '36px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
+    sectionTitle: { fontSize: '16px', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.01em', margin: 0 },
+    countBadge: { fontSize: '12px', fontWeight: 700, padding: '4px 10px', backgroundColor: '#F1F5F9', color: '#475569', borderRadius: '8px' },
+    tableWrapper: { width: '100%', overflowX: 'auto' as const },
+    table: { width: '100%', borderCollapse: 'collapse' as const },
+    thRow: { borderBottom: '1px solid #F1F5F9' },
+    th: { padding: '0 12px 12px 12px', fontSize: '11px', fontWeight: 700, color: '#94A3B8', textTransform: 'uppercase' as const, letterSpacing: '0.05em', textAlign: 'left' as const },
+    tr: { borderBottom: '1px solid #F8FAFC' },
+    td: { padding: '14px 12px', fontSize: '14px', color: '#334155', whiteSpace: 'nowrap' as const, verticalAlign: 'middle' },
+    userMeta: { display: 'flex', alignItems: 'center', gap: '12px' },
+    avatarPlaceholder: { width: '40px', height: '40px', borderRadius: '12px', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '14px', boxShadow: '0 4px 10px rgba(15, 23, 42, 0.1)' },
+    userName: { fontWeight: 700, color: '#0F172A' },
+    userEmail: { fontSize: '12px', color: '#64748B', marginTop: '1px' },
+    roleBadge: { padding: '4px 10px', borderRadius: '8px', fontSize: '11px', fontWeight: 700, letterSpacing: '0.02em' },
+    statusRow: { display: 'flex', alignItems: 'center', gap: '8px' },
+    pulseDot: { width: '8px', height: '8px', borderRadius: '50%' },
+    balanceText: { fontWeight: 700, fontSize: '13px', padding: '6px 12px', borderRadius: '10px', display: 'inline-block' },
+    actionBtn: { padding: '8px 14px', border: 'none', backgroundColor: '#F8FAFC', borderRadius: '10px', fontSize: '12px', fontWeight: 600, color: '#334155', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', transition: 'all 0.2s ease' },
+    centeredState: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh', fontSize: '15px', fontWeight: 600, color: '#64748B' }
 };
 
 export default AdminDashboard;

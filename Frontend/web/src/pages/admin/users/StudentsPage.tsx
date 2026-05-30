@@ -3,7 +3,7 @@ import adminService from '../../../api/adminService';
 import type { StudentListItemResponse } from '../../../types/admin';
 import { Search, Filter, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import MetricCard from '../../../components/ui/MetricCard';
-import UserCard from '../../../components/ui/UserCard';
+import UserCard from '../../../components/ui/users/UserCard';
 import { useNavigate } from 'react-router-dom';
 
 const StudentsPage: React.FC = () => {

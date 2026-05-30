@@ -15,6 +15,7 @@ public class GroupStudentRepository(AppDbContext context) : IGroupStudentReposit
             .Include(gs => gs.Group)
             .Include(gs => gs.Student)
             .ThenInclude(s => s.User)
+            .Include(gs => gs.TransferredTo)
             .Where(gs => gs.GroupId == groupId)
             .OrderByDescending(gs => gs.JoinedAt)
             .ToListAsync(cancellationToken);
