@@ -59,6 +59,12 @@ public class AttendanceRepository(AppDbContext context) : IAttendanceRepository
                 x => x.LessonId == lessonId && x.StudentId == studentId,
                 cancellationToken);
     }
+    
+    public async Task<List<Attendance>> GetByStudentAndLessonsAsync(
+        int studentId, List<int> lessonIds)
+        => await context.Attendances
+            .Where(a => a.StudentId == studentId && lessonIds.Contains(a.LessonId))
+            .ToListAsync();
 
     public async Task<bool> ExistsAsync(
         int lessonId,

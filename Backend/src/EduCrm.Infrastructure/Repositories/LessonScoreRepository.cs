@@ -45,6 +45,12 @@ public class LessonScoreRepository(AppDbContext context) : ILessonScoreRepositor
             .Where(ls => ls.StudentId == studentId)
             .ToListAsync(cancellationToken);
     }
+    
+    public async Task<List<LessonScore>> GetByStudentAndLessonsAsync(
+        int studentId, List<int> lessonIds)
+        => await context.LessonScores
+            .Where(ls => ls.StudentId == studentId && lessonIds.Contains(ls.LessonId))
+            .ToListAsync();
 
     public async Task<LessonScore?> GetByHomeworkSubmissionIdAsync(int homeworkSubmissionId,
         CancellationToken cancellationToken = default)

@@ -14,6 +14,8 @@ public interface ILessonScoreRepository
 
     Task<bool> ExistsByLessonAndStudentAsync(int lessonId, int studentId,
         CancellationToken cancellationToken = default);
+    
+    Task<List<LessonScore>> GetByStudentAndLessonsAsync(int studentId, List<int> lessonIds);
 
     Task CreateAsync(LessonScore lessonScore, CancellationToken cancellationToken = default);
     Task UpdateAsync(LessonScore lessonScore, CancellationToken cancellationToken = default);

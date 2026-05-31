@@ -23,231 +23,467 @@ interface Props {
     onAttToggle: (lessonId: number, studentId: number) => void;
     onScoreChange: (lessonId: number, studentId: number, weekNumber: number, score: number) => void;
     onCommentOpen: (lessonId: number, studentId: number, att?: AttendanceResponse) => void;
+    onWeekFieldUpdate: (
+        studentId: number,
+        weekNumber: number,
+        field: 'bonusScore' | 'examScore',
+        value: number
+    ) => void;
 }
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────
 
 const fmtDate = (d: string) => {
     const date = new Date(d);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    return `${day}.${month}`;
+    return date.toLocaleDateString('ru-RU', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
 };
 
-// Фирменные цвета порогов успеваемости из Omuz CRM
-const sumStyle = (score: number) => {
-    if (score >= 86) return { bg: '#E2F5EA', color: '#10B981' }; // Отлично
-    if (score >= 60) return { bg: '#FFF1E6', color: '#F2994A' }; // Хорошо/Удовл
-    return { bg: '#FCEBEB', color: '#EB5757' }; // Неуд
+const isPresent = (status: any) => {
+    if (!status) return false;
+    const s = String(status).toLowerCase();
+    return s === 'present' || s === '1';
 };
 
-// Стили чекбоксов посещаемости из Omuz CRM
-const attStyle = (status: string) => {
-    switch (status) {
-        case 'Present': return { bg: '#3B82F6', border: '#3B82F6', icon: '#fff' };
-        case 'Late':    return { bg: '#F2994A', border: '#F2994A', icon: '#fff' };
-        case 'Excused': return { bg: '#10B981', border: '#10B981', icon: '#fff' };
-        default:        return { bg: '#fff',    border: '#CBD5E1', icon: 'transparent' };
-    }
+const sumPillStyle = (score: number) => {
+    if (score >= 86) return { bg: '#12B76A', color: '#FFFFFF' };
+    if (score >= 70) return { bg: '#F79009', color: '#FFFFFF' };
+    return { bg: '#F04438', color: '#FFFFFF' };
 };
+
+// ─── КОМПОНЕНТ ВЕРХНЕГО ЧЕКБОКСА С ПРАВИЛЬНОЙ ЛОГИКОЙ ─────────────────────
+
+const HeaderCheckbox: React.FC<{ checked: boolean; indeterminate: boolean }> = ({ checked, indeterminate }) => {
+    const ref = React.useRef<HTMLInputElement>(null);
+
+    React.useEffect(() => {
+        if (ref.current) {
+            ref.current.indeterminate = indeterminate;
+        }
+    }, [indeterminate]);
+
+    return (
+        <input
+            ref={ref}
+            type="checkbox"
+            className="omz-native-checkbox"
+            checked={checked}
+            disabled
+            style={{ cursor: 'default', opacity: checked || indeterminate ? 1 : 0.7 }}
+            onChange={() => {}}
+        />
+    );
+};
+
+// ─── EDITABLE NUM ─────────────────────────────────────────────────────────
+
+interface EditableNumProps {
+    value: number;
+    studentId: number;
+    weekNumber: number;
+    field: 'bonusScore' | 'examScore';
+    saving: string | null;
+    onSave: (
+        studentId: number,
+        weekNumber: number,
+        field: 'bonusScore' | 'examScore',
+        value: number
+    ) => void;
+}
+
+const EditableNum: React.FC<EditableNumProps> = ({
+    value, studentId, weekNumber, field, saving, onSave
+}) => {
+    const [local, setLocal] = React.useState<string>(
+        value ? String(Math.round(value)) : ''
+    );
+    const savingKey = `wr-${field}-${studentId}-${weekNumber}`;
+    const isSavingThis = saving === savingKey;
+
+    React.useEffect(() => {
+        setLocal(value ? String(Math.round(value)) : '');
+    }, [value]);
+
+    const commit = () => {
+        const num = Number(local) || 0;
+        if (num !== Math.round(value)) {
+            onSave(studentId, weekNumber, field, num);
+        }
+    };
+
+    return (
+        <input
+            className="omz-num"
+            type="text"
+            placeholder="0"
+            value={local}
+            disabled={!!saving}
+            style={{ opacity: isSavingThis ? 0.5 : 1 }}
+            onChange={e => {
+                const v = e.target.value.replace(/[^\d]/g, '');
+                setLocal(v);
+            }}
+            onBlur={commit}
+            onKeyDown={e => {
+                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                if (e.key === 'Escape') {
+                    setLocal(value ? String(Math.round(value)) : '');
+                    (e.target as HTMLInputElement).blur();
+                }
+            }}
+        />
+    );
+};
+
+// ─── ГЛАВНЫЙ КОМПОНЕНТ ТАБЛИЦЫ ───────────────────────────────────────────
 
 const JournalWeekTable: React.FC<Props> = ({
     weekNumber, lessons, students, attLookup, scoreLookup, weekResults,
-    saving, onAttToggle, onScoreChange, onCommentOpen,
+    saving, onAttToggle, onScoreChange, onCommentOpen, onWeekFieldUpdate,
 }) => {
     return (
-        <div style={{ overflowX: 'auto', background: '#fff', borderRadius: '16px', border: '1px solid #E2E8F0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-            {/* Дополнительная стилизация для CRM-эффекта */}
+        <div className="w-full" style={s.container}>
             <style>{`
-                .jt-table th, .jt-table td {
-                    border: 1px solid #EFF2F5 !important;
+                .omz-table-wrapper {
+                    overflow-x: hidden; /* Убираем агрессивный скролл */
+                    width: 100%;
+                    position: relative;
                 }
-                .jt-row:hover td { 
-                    background: #F8FAFC !important; 
+
+                .omz-table {
+                    border-collapse: separate;
+                    border-spacing: 0;
+                    width: 100%;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 }
-                .jt-select {
+
+                .omz-table .sticky-col {
+                    position: sticky;
+                    left: 0;
+                    z-index: 10;
+                    border-right: 2px solid #F2F4F7 !important;
+                }
+
+                .omz-table th.sticky-col {
+                    z-index: 20;
+                    background-color: #FCFCFD !important;
+                }
+
+                .omz-table td.sticky-col {
+                    background-color: #FFFFFF !important;
+                }
+
+                .omz-row:hover td.sticky-col {
+                    background-color: #F9FAFB !important;
+                }
+
+                .omz-table th {
+                    background-color: #FCFCFD;
+                    color: #101828;
+                    font-weight: 600;
+                    border-bottom: 1px solid #EAECF0;
+                    border-top: 1px solid #EAECF0;
+                }
+
+                .omz-table td {
+                    border-bottom: 1px solid #EAECF0;
+                    padding: 6px 8px; /* Сжатые отступы для предотвращения скролла */
+                    vertical-align: middle;
+                    background: #FFFFFF;
+                }
+
+                .omz-row:hover td {
+                    background: #F9FAFB;
+                }
+
+                .col-divider {
+                    border-right: 1px solid #EAECF0;
+                }
+
+                .crm-cell-combo {
+                    display: inline-flex;
+                    align-items: center;
+                    border: 1px solid #D0D5DD;
+                    border-radius: 8px;
+                    background: #FFFFFF;
+                    overflow: hidden;
+                    box-shadow: 0 1px 2px rgba(16,24,40,0.05);
+                    transition: all 0.15s ease;
+                    height: 32px; /* Чуть компактнее по высоте */
+                }
+
+                .crm-cell-combo.active {
+                    border-color: #2F60E6;
+                    box-shadow: 0 0 0 1px #2F60E6, 0 1px 2px rgba(16,24,40,0.05);
+                }
+
+                .crm-att-side {
+                    display: flex;
+                    align-items: center;
+                    gap: 6px;
+                    padding: 0 8px;
+                    background: #F9FAFB;
+                    border-right: 1px solid #EAECF0;
+                    height: 100%;
+                    flex-shrink: 0;
+                }
+
+                .crm-score-side {
+                    display: flex;
+                    align-items: center;
+                    height: 100%;
+                }
+
+                .omz-cmt {
+                    background: transparent;
+                    border: none;
+                    cursor: pointer;
+                    padding: 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: #D0D5DD;
+                    transition: color 0.2s;
+                    flex-shrink: 0;
+                }
+                .omz-cmt:hover, .omz-cmt.active {
+                    color: #2F60E6;
+                }
+
+                /* Единый стиль чекбоксов */
+                .omz-native-checkbox {
+                    width: 18px;
+                    height: 18px;
+                    cursor: pointer;
+                    accent-color: #2F60E6;
+                    margin: 0;
+                }
+                .omz-native-checkbox:disabled {
+                    cursor: not-allowed;
+                }
+
+                .omz-score {
                     appearance: none;
                     -webkit-appearance: none;
-                    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+                    background-color: transparent;
+                    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
                     background-repeat: no-repeat;
-                    background-position: right 10px center;
-                    background-size: 11px;
-                    padding-right: 24px !important;
-                }
-                .jt-select:focus {
-                    border-color: #6366F1 !important;
-                    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+                    background-position: right 6px center;
+                    width: 48px;
+                    height: 100%;
+                    padding: 0 16px 0 6px;
+                    border: none;
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #101828;
+                    cursor: pointer;
                     outline: none;
+                    text-align: center;
                 }
-                .jt-checkbox-btn:hover {
-                    transform: scale(1.05);
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+
+                .omz-score:disabled {
+                    color: #98A2B3;
+                    cursor: not-allowed;
+                    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23D0D5DD' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
                 }
-                .jt-comment-btn:hover {
-                    color: #4F46E5 !important;
-                    background: #EEF2FF !important;
+
+                .omz-num {
+                    width: 44px;
+                    height: 30px;
+                    padding: 0;
+                    border: 1px solid #D0D5DD;
+                    border-radius: 6px;
+                    font-size: 14px;
+                    font-weight: 500;
+                    color: #475467;
+                    background: #FFFFFF;
+                    text-align: center;
+                    box-shadow: 0 1px 2px rgba(16,24,40,0.05);
+                    outline: none;
+                    transition: all 0.15s ease;
+                }
+                .omz-num:focus {
+                    border-color: #2F60E6;
+                    box-shadow: 0 0 0 3px rgba(47, 96, 230, 0.1);
+                }
+
+                .omz-head-label {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 6px;
+                    color: #667085;
+                    font-weight: 600;
+                    font-size: 12px;
                 }
             `}</style>
 
-            <table className="jt-table" style={s.table}>
-                <thead>
-                    <tr style={{ background: '#F8FAFC' }}>
-                        <th style={s.thStudent}>Студенты</th>
-                        {lessons.map(l => (
-                            <th key={l.id} colSpan={2} style={s.thLesson}>
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center' }}>
-                                    {/* Дата проведения */}
-                                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#4F46E5', background: '#EEF2FF', padding: '2px 8px', borderRadius: '6px' }}>
-                                        {fmtDate(l.lessonDate)}
-                                    </span>
-                                    {/* Название/Тема урока */}
-                                    <span style={{ fontSize: '13px', fontWeight: 600, color: '#1E293B', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap', maxWidth: '150px' }} title={(l as any).title || 'Без темы'}>
-                                        {(l as any).title || 'Урок ' + l.id}
-                                    </span>
-                                    {/* Время урока */}
-                                    <span style={{ fontSize: '11px', fontWeight: 500, color: '#94A3B8' }}>
-                                        {(l as any).time || '18:00-20:00'}
-                                    </span>
+            <div className="omz-table-wrapper">
+                <table className="omz-table">
+                    <thead>
+                        <tr>
+                            <th rowSpan={2} className="col-divider sticky-col" style={s.thStudent}>
+                                STUDENTS
+                            </th>
+                            {lessons.map(l => (
+                                <th key={l.id} colSpan={1} className="col-divider" style={s.thDate}>
+                                    {fmtDate(l.lessonDate)}
+                                </th>
+                            ))}
+                            <th colSpan={4} style={s.thEnd}>
+                                END OF WEEK
+                            </th>
+                        </tr>
+                        <tr>
+                            {lessons.map(l => {
+                                const total = students.length;
+                                const presentCount = students.filter(st =>
+                                    isPresent(attLookup[`${l.id}-${st.id}`]?.status)
+                                ).length;
+
+                                // Умная логика состояний верхнего чекбокса
+                                const allPresent = total > 0 && presentCount === total;
+                                const isIndeterminate = presentCount > 0 && presentCount < total;
+
+                                return (
+                                    <th key={l.id} className="col-divider" style={s.thSub}>
+                                        <div className="omz-head-label" style={{ justifyContent: 'center' }}>
+                                            <HeaderCheckbox checked={allPresent} indeterminate={isIndeterminate} />
+                                            <span>Att / Score</span>
+                                        </div>
+                                    </th>
+                                );
+                            })}
+                            <th style={s.thSub}>
+                                <div className="omz-head-label" style={{ justifyContent: 'center' }}>
+                                    {/* Общая посещаемость за неделю */}
+                                    <HeaderCheckbox 
+                                        checked={students.length > 0 && students.every(st => lessons.every(l => isPresent(attLookup[`${l.id}-${st.id}`]?.status)))} 
+                                        indeterminate={students.length > 0 && !students.every(st => lessons.every(l => isPresent(attLookup[`${l.id}-${st.id}`]?.status))) && students.some(st => lessons.some(l => isPresent(attLookup[`${l.id}-${st.id}`]?.status)))} 
+                                    />
+                                    <span>Att</span>
                                 </div>
                             </th>
-                        ))}
-                        <th colSpan={4} style={s.thEnd}>Итоги недели</th>
-                    </tr>
-                    <tr style={{ background: '#F8FAFC' }}>
-                        <th style={s.thSubStudent} />
-                        {lessons.map(l => (
-                            <React.Fragment key={l.id}>
-                                <th style={s.thSubLesson}>Пос.</th>
-                                <th style={s.thSubLesson}>Балл</th>
-                            </React.Fragment>
-                        ))}
-                        <th style={s.thSubEnd}>Пос. %</th>
-                        <th style={s.thSubEnd}>Бонус</th>
-                        <th style={s.thSubEnd}>Экз.</th>
-                        <th style={s.thSubEnd}>Итог</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {students.length === 0 ? (
-                        <tr>
-                            <td colSpan={2 + lessons.length * 2 + 4} style={s.empty}>
-                                <div style={{ fontSize: '15px', fontWeight: 600, color: '#94A3B8' }}>Студенты не найдены</div>
-                                <div style={{ fontSize: '13px', color: '#CBD5E1', marginTop: '4px' }}>Добавьте учащихся в эту группу</div>
-                            </td>
+                            <th style={s.thSub}>Bonus</th>
+                            <th style={s.thSub}>Exam</th>
+                            <th style={s.thSub}>Sum</th>
                         </tr>
-                    ) : students.map((student, idx) => {
-                        const wr = weekResults.find(w => w.studentId === student.id);
-                        const sum = wr ? Math.round(wr.totalScore) : null;
-                        const sumSt = sum !== null ? sumStyle(sum) : null;
+                    </thead>
 
-                        const presentCount = lessons.filter(l => {
-                            const att = attLookup[`${l.id}-${student.id}`];
-                            return att?.status === 'Present';
-                        }).length;
-                        
-                        const attPct = lessons.length > 0
-                            ? Math.round((presentCount / lessons.length) * 100)
-                            : 0;
-
-                        return (
-                            <tr key={student.id} className="jt-row">
-                                {/* Имя студента */}
-                                <td style={s.tdStudent}>
-                                    <span style={{ color: '#0F172A', fontWeight: 600, fontSize: '14.5px' }}>
-                                        {idx + 1}. {student.name}
-                                    </span>
+                    <tbody>
+                        {students.length === 0 ? (
+                            <tr>
+                                <td colSpan={1 + lessons.length + 4} style={s.empty}>
+                                    Студенты не найдены
                                 </td>
+                            </tr>
+                        ) : students.map((student, idx) => {
+                            const wr = weekResults.find(w => w.studentId === student.id);
+                            const sum = wr ? Math.round(wr.totalScore) : 0;
+                            const sumSt = sumPillStyle(sum);
 
-                                {/* Ячейки посещаемости и оценок */}
-                                {lessons.map(lesson => {
-                                    const aKey = `${lesson.id}-${student.id}`;
-                                    const att = attLookup[aKey];
-                                    const sc = scoreLookup[aKey];
-                                    const isSavingAtt = saving === `att-${aKey}`;
-                                    const isSavingScore = saving === `score-${aKey}`;
-                                    const hasComment = !!att?.absenceReason;
-                                    const attSt = attStyle(att?.status ?? '');
+                            const presentCount = lessons.filter(l =>
+                                isPresent(attLookup[`${l.id}-${student.id}`]?.status)
+                            ).length;
+                            const allPresent = lessons.length > 0 && presentCount === lessons.length;
 
-                                    return (
-                                        <React.Fragment key={lesson.id}>
-                                            {/* Чекбокс Посещаемости (Крупный, удобный) */}
-                                            <td style={s.td}>
-                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
-                                                    <button
-                                                        className="jt-comment-btn"
-                                                        style={{
-                                                            ...s.commentBtn,
-                                                            color: hasComment ? '#4F46E5' : '#94A3B8',
-                                                            background: hasComment ? '#EEF2FF' : 'transparent',
-                                                        }}
-                                                        title={att?.absenceReason ?? 'Добавить комментарий'}
-                                                        onClick={() => onCommentOpen(lesson.id, student.id, att)}
-                                                    >
-                                                        <MessageSquare size={15} />
-                                                    </button>
-                                                    <button
-                                                        className="jt-checkbox-btn"
-                                                        style={{
-                                                            ...s.checkbox,
-                                                            background: attSt.bg,
-                                                            borderColor: attSt.border,
-                                                            opacity: isSavingAtt ? 0.5 : 1,
-                                                        }}
-                                                        onClick={() => !saving && onAttToggle(lesson.id, student.id)}
-                                                        disabled={!!saving}
-                                                    >
-                                                        {att && (
-                                                            <svg width="14" height="12" viewBox="0 0 10 8" fill="none">
-                                                                <path d="M1 4L3.5 6.5L9 1" stroke={attSt.icon} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                                            </svg>
-                                                        )}
-                                                    </button>
+                            return (
+                                <tr key={student.id} className="omz-row">
+                                    <td className="col-divider sticky-col" style={s.tdStudent}>
+                                        {/* Полностью одинаковые шрифты номеров и имен */}
+                                        <span style={{ color: '#98A2B3', marginRight: '8px', fontWeight: 500, fontSize: '14px', fontVariantNumeric: 'tabular-nums' }}>
+                                            {idx + 1}.
+                                        </span>
+                                        {student.name}
+                                    </td>
+
+                                    {lessons.map(lesson => {
+                                        const aKey = `${lesson.id}-${student.id}`;
+                                        const att = attLookup[aKey];
+                                        const sc = scoreLookup[aKey];
+                                        const isSavingAtt = saving === `att-${aKey}`;
+                                        const isSavingScore = saving === `score-${aKey}`;
+                                        const present = isPresent(att?.status);
+                                        const hasComment = !!att?.absenceReason;
+                                        const currentScore = (sc && sc.score !== undefined) ? sc.score : 0;
+
+                                        return (
+                                            <td key={lesson.id} className="col-divider" style={s.tdCenter}>
+                                                <div className={`crm-cell-combo ${present ? 'active' : ''}`} style={{ opacity: (isSavingAtt || isSavingScore) ? 0.6 : 1 }}>
+                                                    <div className="crm-att-side">
+                                                        <button
+                                                            type="button"
+                                                            className={`omz-cmt ${hasComment ? 'active' : ''}`}
+                                                            title={att?.absenceReason ?? 'Добавить комментарий'}
+                                                            onClick={() => onCommentOpen(lesson.id, student.id, att)}
+                                                        >
+                                                            <MessageSquare size={14} fill={hasComment ? "currentColor" : "none"} />
+                                                        </button>
+
+                                                        <input
+                                                            type="checkbox"
+                                                            className="omz-native-checkbox"
+                                                            checked={present}
+                                                            disabled={!!saving}
+                                                            onChange={() => onAttToggle(lesson.id, student.id)}
+                                                        />
+                                                    </div>
+
+                                                    <div className="crm-score-side">
+                                                        <select
+                                                            className="omz-score"
+                                                            value={currentScore}
+                                                            disabled={!!saving}
+                                                            onChange={e => {
+                                                                const v = Number(e.target.value);
+                                                                onScoreChange(lesson.id, student.id, weekNumber, v);
+                                                            }}
+                                                        >
+                                                            <option value={0}>0</option>
+                                                            {[1, 2, 3, 4, 5].map(v => (
+                                                                <option key={v} value={v}>{v}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
                                                 </div>
                                             </td>
+                                        );
+                                    })}
 
-                                            {/* Оценка (Увеличенный селект) */}
-                                            <td style={s.td}>
-                                                <select
-                                                    className="jt-select"
-                                                    style={{
-                                                        ...s.scoreSelect,
-                                                        opacity: isSavingScore ? 0.5 : 1,
-                                                        color: sc?.score ? '#0F172A' : '#94A3B8',
-                                                        fontWeight: sc?.score ? 700 : 500,
-                                                    }}
-                                                    value={sc?.score ?? ''}
-                                                    disabled={!!saving}
-                                                    onChange={e => {
-                                                        const v = Number(e.target.value);
-                                                        if (v > 0) onScoreChange(lesson.id, student.id, weekNumber, v);
-                                                    }}
-                                                >
-                                                    <option value="">—</option>
-                                                    {[1, 2, 3, 4, 5].map(v => (
-                                                        <option key={v} value={v}>{v}</option>
-                                                    ))}
-                                                </select>
-                                            </td>
-                                        </React.Fragment>
-                                    );
-                                })}
+                                    {/* END OF WEEK */}
+                                    <td style={s.tdCenter}>
+                                        <div className="crm-cell-combo" style={{ opacity: 0.6, background: '#F9FAFB' }}>
+                                            <div className="crm-att-side" style={{ borderRight: 'none', padding: '0 10px' }}>
+                                                <HeaderCheckbox checked={allPresent} indeterminate={!allPresent && presentCount > 0} />
+                                            </div>
+                                        </div>
+                                    </td>
 
-                                {/* Блок итогов */}
-                                <td style={s.td}>
-                                    <span style={{ fontSize: '14px', fontWeight: 600, color: attPct < 50 ? '#EF4444' : '#334155' }}>
-                                        {lessons.length > 0 ? `${attPct}%` : '—'}
-                                    </span>
-                                </td>
-                                <td style={s.td}>
-                                    <span style={{ fontSize: '14px', fontWeight: 600, color: '#334155' }}>
-                                        {wr?.bonusScore ? Math.round(wr.bonusScore) : '0'}
-                                    </span>
-                                </td>
-                                <td style={s.td}>
-                                    <span style={{ fontSize: '14px', fontWeight: 600, color: '#334155' }}>
-                                        {wr?.examScore ? Math.round(wr.examScore) : '0'}
-                                    </span>
-                                </td>
-                                <td style={s.td}>
-                                    {sum !== null && sumSt ? (
+                                    <td style={s.tdCenter}>
+                                        <EditableNum
+                                            value={wr?.bonusScore ?? 0}
+                                            studentId={student.id}
+                                            weekNumber={weekNumber}
+                                            field="bonusScore"
+                                            saving={saving}
+                                            onSave={onWeekFieldUpdate}
+                                        />
+                                    </td>
+
+                                    <td style={s.tdCenter}>
+                                        <EditableNum
+                                            value={wr?.examScore ?? 0}
+                                            studentId={student.id}
+                                            weekNumber={weekNumber}
+                                            field="examScore"
+                                            saving={saving}
+                                            onSave={onWeekFieldUpdate}
+                                        />
+                                    </td>
+
+                                    <td style={s.tdCenter}>
                                         <span style={{
                                             ...s.sumPill,
                                             background: sumSt.bg,
@@ -255,130 +491,95 @@ const JournalWeekTable: React.FC<Props> = ({
                                         }}>
                                             {sum}
                                         </span>
-                                    ) : (
-                                        <span style={{ ...s.sumPill, background: '#F1F5F9', color: '#94A3B8' }}>—</span>
-                                    )}
-                                </td>
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 };
 
+// ─── ОПТИМИЗИРОВАННЫЕ КОМПАКТНЫЕ СТИЛИ ────────────────────────────────────
+
 const s = {
-    table: {
-        width: '100%',
-        borderCollapse: 'collapse' as const,
-        fontSize: '14px',
-        fontFamily: '"Inter", system-ui, -apple-system, sans-serif',
-    },
+    container: {
+        background: '#FFFFFF',
+        border: '1px solid #EAECF0',
+        borderRadius: '12px',
+        boxShadow: '0px 1px 3px rgba(16, 24, 40, 0.05)',
+        overflow: 'hidden',
+    } as React.CSSProperties,
+
     thStudent: {
-        padding: '16px 20px',
+        padding: '10px 12px',
         textAlign: 'left' as const,
-        fontSize: '13px',
-        fontWeight: 700,
-        color: '#1E293B',
+        fontSize: '12px',
         textTransform: 'uppercase' as const,
-        background: '#F8FAFC',
-        minWidth: '260px',
+        letterSpacing: '0.04em',
+        minWidth: '160px',
+        maxWidth: '180px',
     } as React.CSSProperties,
-    thLesson: {
-        padding: '14px 10px',
+
+    thDate: {
+        padding: '10px 8px',
         textAlign: 'center' as const,
-        background: '#F8FAFC',
-        minWidth: '150px',
+        fontSize: '14px',
+        fontWeight: 700,
+        color: '#101828',
+        minWidth: '105px',
     } as React.CSSProperties,
+
     thEnd: {
-        padding: '16px',
+        padding: '8px 10px',
         textAlign: 'center' as const,
-        fontSize: '13px',
-        fontWeight: 700,
-        color: '#1E293B',
+        fontSize: '11px',
         textTransform: 'uppercase' as const,
-        background: '#F8FAFC',
-        minWidth: '260px',
+        letterSpacing: '0.04em',
     } as React.CSSProperties,
-    thSubStudent: {
-        padding: '10px 20px',
-        background: '#F8FAFC',
-    } as React.CSSProperties,
-    thSubLesson: {
-        padding: '8px',
-        fontSize: '12px',
-        fontWeight: 700,
-        color: '#64748B',
+
+    thSub: {
+        padding: '6px 8px',
+        fontSize: '11px',
+        fontWeight: 500,
+        color: '#667085',
         textAlign: 'center' as const,
-        background: '#F8FAFC',
     } as React.CSSProperties,
-    thSubEnd: {
-        padding: '8px',
-        fontSize: '12px',
-        fontWeight: 700,
-        color: '#64748B',
-        textAlign: 'center' as const,
-        background: '#F8FAFC',
-    } as React.CSSProperties,
+
     tdStudent: {
-        padding: '14px 20px',
-        background: '#fff',
-        verticalAlign: 'middle',
+        padding: '8px 12px',
+        fontWeight: 500,
+        fontSize: '14px',
+        color: '#344054',
+        whiteSpace: 'nowrap' as const,
+        minWidth: '160px',
+        maxWidth: '180px',
+        textOverflow: 'ellipsis',
+        overflow: 'hidden',
     } as React.CSSProperties,
-    td: {
-        padding: '8px 10px',
+
+    tdCenter: {
         textAlign: 'center' as const,
-        verticalAlign: 'middle' as const,
-        background: '#fff',
     } as React.CSSProperties,
-    commentBtn: {
-        background: 'transparent',
-        border: 'none',
-        cursor: 'pointer',
-        padding: '6px',
-        display: 'flex',
-        alignItems: 'center',
-        borderRadius: '6px',
-        transition: 'all 0.15s ease',
-    } as React.CSSProperties,
-    checkbox: {
-        width: '26px',
-        height: '26px',
-        border: '2px solid #CBD5E1',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justify: 'center',
-        justifyContent: 'center',
-        flexShrink: 0,
-        transition: 'all 0.15s ease',
-        padding: 0,
-    } as React.CSSProperties,
-    scoreSelect: {
-        width: '72px',
-        padding: '8px 10px',
-        border: '2px solid #E2E8F0',
-        borderRadius: '10px',
-        fontSize: '14.5px',
-        background: '#fff',
-        textAlign: 'center' as const,
-        cursor: 'pointer',
-        transition: 'all 0.15s ease',
-    } as React.CSSProperties,
+
     sumPill: {
         display: 'inline-block',
-        padding: '6px 14px',
-        borderRadius: '8px',
+        padding: '4px 10px',
+        borderRadius: '6px',
         fontWeight: 700,
-        fontSize: '14px',
-        minWidth: '45px',
+        fontSize: '13px',
+        minWidth: '38px',
         textAlign: 'center' as const,
+        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
     } as React.CSSProperties,
+
     empty: {
-        padding: '60px 20px',
+        padding: '30px 16px',
         textAlign: 'center' as const,
+        fontSize: '14px',
+        color: '#98A2B3',
     } as React.CSSProperties,
 };
 

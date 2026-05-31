@@ -43,6 +43,11 @@ public class LessonRepository(AppDbContext context) : ILessonRepository
             .OrderBy(l => l.OrderIndex)
             .ToListAsync(cancellationToken);
     }
+    
+    public async Task<List<Lesson>> GetByGroupAndWeekAsync(int groupId, int weekNumber)
+        => await context.Lessons
+            .Where(l => l.GroupId == groupId && l.WeekNumber == weekNumber)
+            .ToListAsync();
 
     public async Task<Lesson?> GetByTitleAsync(string title, CancellationToken cancellationToken = default)
     {

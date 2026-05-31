@@ -190,52 +190,123 @@ const JournalPage: React.FC = () => {
         const key = `${lessonId}-${studentId}`;
         const existing = attLookup[key];
         setSaving(`att-${key}`);
+
         try {
             if (!existing) {
-                // первый раз — создаём
-                await journalService.createAttendance({
-                    lessonId, studentId, status: STATUS.Present
-                });
+                // Пытаемся создать
+                try {
+                    await journalService.createAttendance({
+                        lessonId,
+                        studentId,
+                        status: STATUS.Present,
+                    });
+                } catch (createErr: any) {
+                    // Если уже существует (409 Conflict) — перезагружаем и обновляем
+                    if (createErr?.response?.data?.errorType === 3 ||
+                        createErr?.response?.status === 409) {
+                        console.warn('Attendance already exists, reloading...');
+                        await loadAttScores(lessons);
+                        // После перезагрузки запись появится в lookup — пользователь
+                        // увидит реальный статус, повторный клик переключит правильно
+                        return;
+                    }
+                    throw createErr;
+                }
             } else {
-                // уже есть — только обновляем статус
-                const newStatus = existing.status === 'Present'
+                // Циклическое переключение: Present → Absent → Late → Excused → Present
+                const statusStr = String(existing.status);
+                const currentNum =
+                    statusStr === 'Present' ? STATUS.Present :
+                        statusStr === 'Absent' ? STATUS.Absent :
+                            statusStr === 'Late' ? STATUS.Late :
+                                statusStr === 'Excused' ? STATUS.Excused :
+                                    Number(existing.status) || STATUS.Present;
+
+                // Тоггл: Present ↔ Absent
+                const newStatus = currentNum === STATUS.Present
                     ? STATUS.Absent
                     : STATUS.Present;
-                await journalService.updateAttendance(existing.id, { status: newStatus });
+
+                await journalService.updateAttendance(existing.id, {
+                    status: newStatus,
+                    absenceReason: existing.absenceReason,
+                    mentorNote: existing.mentorNote,
+                });
             }
+
             await loadAttScores(lessons);
         } catch (err: any) {
-            // если всё же Conflict — просто обновляем
-            if (err?.response?.data?.errorType === 3) {
-                await loadAttScores(lessons); // перезагружаем чтобы получить id
-            }
-            console.error('Attendance error:', err);
+            console.error('Attendance error:', err?.response?.data || err);
         } finally {
             setSaving(null);
         }
     };
 
     const handleScoreChange = async (
-        lessonId: number, studentId: number, weekNumber: number, score: number
+        lessonId: number,
+        studentId: number,
+        weekNumber: number,
+        score: number
     ) => {
         const key = `${lessonId}-${studentId}`;
         const existing = scoreLookup[key];
         setSaving(`score-${key}`);
+
         try {
             if (!existing) {
-                await journalService.createLessonScore({ lessonId, studentId, score });
+                try {
+                    await journalService.createLessonScore({
+                        lessonId,
+                        studentId,
+                        score,
+                    });
+                } catch (createErr: any) {
+                    if (createErr?.response?.data?.errorType === 3 ||
+                        createErr?.response?.status === 409) {
+                        console.warn('LessonScore already exists, reloading...');
+                        await loadAttScores(lessons);
+                        return;
+                    }
+                    throw createErr;
+                }
             } else {
-                await journalService.updateLessonScore(existing.id, { score });
+                await journalService.updateLessonScore(existing.id, {
+                    score,
+                    mentorFeedback: existing.mentorFeedback,
+                });
             }
+
+            await loadAttScores(lessons);
+
             await journalService.recalculateWeekResult({
-                studentId, groupId: gid, weekNumber
+                studentId,
+                groupId: gid,
+                weekNumber,
             });
-            await Promise.all([
-                loadAttScores(lessons),
-                loadWeekResults([weekNumber]),
-            ]);
-        } catch (err) {
-            console.error('Score error:', err);
+            await loadWeekResults([weekNumber]);
+
+        } catch (err: any) {
+            console.error('Score change error:', err?.response?.data || err);
+        } finally {
+            setSaving(null);
+        }
+    };
+
+    const handleWeekFieldUpdate = async (
+        studentId: number,
+        weekNumber: number,
+        field: 'bonusScore' | 'examScore',
+        value: number
+    ) => {
+        const savingKey = `wr-${field}-${studentId}-${weekNumber}`;
+        setSaving(savingKey);
+        try {
+            await journalService.updateWeekResult(studentId, gid, weekNumber, {
+                [field]: value,
+            });
+            await loadWeekResults([weekNumber]);
+        } catch (err: any) {
+            console.error('Update week result error:', err?.response?.data || err);
         } finally {
             setSaving(null);
         }
@@ -380,6 +451,7 @@ const JournalPage: React.FC = () => {
                                                     text: att?.absenceReason ?? '',
                                                 })
                                             }
+                                            onWeekFieldUpdate={handleWeekFieldUpdate}
                                         />
                                     )}
                                 </div>
@@ -394,6 +466,7 @@ const JournalPage: React.FC = () => {
                     isOpen={showAddLesson}
                     groupId={gid}
                     currentWeek={currentWeek}
+                    lessons={lessons} // <--- ВОТ ЭТОТ ПРОП ДОБАВИЛСЯ
                     onClose={() => setShowAddLesson(false)}
                     onLessonCreated={() => {
                         setShowAddLesson(false);

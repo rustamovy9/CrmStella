@@ -151,68 +151,68 @@ public class ScheduleService(
     }
 
     public async Task<Result<ScheduleResponse>> UpdateAsync(
-    int id,
-    UpdateScheduleRequest request,
-    CancellationToken cancellationToken = default)
-{
-    var schedule = await unitOfWork.Schedules.GetByIdAsync(id, cancellationToken);
-    if (schedule is null)
-        return Result<ScheduleResponse>.Fail("Schedule not found");
-
-    if (request.StartTime >= request.EndTime)
-        return Result<ScheduleResponse>.Fail(
-            "StartTime must be before EndTime",
-            ErrorType.BadRequest);
-
-    if (request.RecurringTo.HasValue && request.RecurringTo.Value < schedule.RecurringFrom)
-        return Result<ScheduleResponse>.Fail(
-            "Дата окончания (RecurringTo) не может быть раньше даты начала занятия.",
-            ErrorType.BadRequest);
-
-    var oldValues = new
+        int id,
+        UpdateScheduleRequest request,
+        CancellationToken cancellationToken = default)
     {
-        schedule.DayOfWeek,
-        schedule.StartTime,
-        schedule.EndTime,
-        schedule.Room,
-        schedule.RecurringTo
-    };
+        var schedule = await unitOfWork.Schedules.GetByIdAsync(id, cancellationToken);
+        if (schedule is null)
+            return Result<ScheduleResponse>.Fail("Schedule not found");
 
-    schedule.DayOfWeek = request.DayOfWeek;
-    schedule.StartTime = request.StartTime;
-    schedule.EndTime = request.EndTime;
-    schedule.Room = request.Room?.Trim();
-    schedule.RecurringTo = request.RecurringTo.HasValue
-        ? DateTime.SpecifyKind(request.RecurringTo.Value, DateTimeKind.Utc)
-        : null;
+        if (request.StartTime >= request.EndTime)
+            return Result<ScheduleResponse>.Fail(
+                "StartTime must be before EndTime",
+                ErrorType.BadRequest);
 
-    await unitOfWork.Schedules.UpdateAsync(schedule, cancellationToken); // ← ключевая строка
+        if (request.RecurringTo.HasValue && request.RecurringTo.Value < schedule.RecurringFrom)
+            return Result<ScheduleResponse>.Fail(
+                "Дата окончания (RecurringTo) не может быть раньше даты начала занятия.",
+                ErrorType.BadRequest);
 
-    try
-    {
-        await unitOfWork.SaveChangesAsync(cancellationToken);
+        var oldValues = new
+        {
+            schedule.DayOfWeek,
+            schedule.StartTime,
+            schedule.EndTime,
+            schedule.Room,
+            schedule.RecurringTo
+        };
+
+        schedule.DayOfWeek = request.DayOfWeek;
+        schedule.StartTime = request.StartTime;
+        schedule.EndTime = request.EndTime;
+        schedule.Room = request.Room?.Trim();
+        schedule.RecurringTo = request.RecurringTo.HasValue
+            ? DateTime.SpecifyKind(request.RecurringTo.Value, DateTimeKind.Utc)
+            : null;
+
+        await unitOfWork.Schedules.UpdateAsync(schedule, cancellationToken); // ← ключевая строка
+
+        try
+        {
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            var dbErrorMessage = ex.InnerException?.Message ?? ex.Message;
+            return Result<ScheduleResponse>.Fail($"Ошибка БД при сохранении: {dbErrorMessage}");
+        }
+
+        await auditLogService.LogAsync(
+            null,
+            AuditActions.UpdateSchedule,
+            nameof(Schedule),
+            schedule.Id,
+            oldValues,
+            request
+        );
+
+        await cache.RemoveByPrefixAsync(ScheduleCachePrefix);
+
+        // Перечитываем из БД чтобы вернуть актуальные данные с навигационными свойствами
+        var updated = await unitOfWork.Schedules.GetByIdAsync(schedule.Id, cancellationToken);
+        return Result<ScheduleResponse>.Ok(MapToResponse(updated!));
     }
-    catch (Exception ex)
-    {
-        var dbErrorMessage = ex.InnerException?.Message ?? ex.Message;
-        return Result<ScheduleResponse>.Fail($"Ошибка БД при сохранении: {dbErrorMessage}");
-    }
-
-    await auditLogService.LogAsync(
-        null,
-        AuditActions.UpdateSchedule,
-        nameof(Schedule),
-        schedule.Id,
-        oldValues,
-        request
-    );
-
-    await cache.RemoveByPrefixAsync(ScheduleCachePrefix);
-
-    // Перечитываем из БД чтобы вернуть актуальные данные с навигационными свойствами
-    var updated = await unitOfWork.Schedules.GetByIdAsync(schedule.Id, cancellationToken);
-    return Result<ScheduleResponse>.Ok(MapToResponse(updated!));
-}
 
     public async Task<Result<bool>> DeleteAsync(
         int id,

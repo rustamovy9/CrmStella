@@ -352,9 +352,12 @@ public class AttendanceService(
         return new AttendanceListItemResponse
         {
             Id = a.Id,
+            LessonId = a.LessonId, // ← ДОБАВИЛ
             StudentId = a.StudentId,
             StudentFullName = a.Student?.User?.FullName ?? string.Empty,
             Status = a.Status.ToString(),
+            AbsenceReason = a.AbsenceReason, // ← ДОБАВИЛ для иконки 💬
+            MentorNote = a.MentorNote, // ← ДОБАВИЛ
             MarkedAt = a.MarkedAt
         };
     }

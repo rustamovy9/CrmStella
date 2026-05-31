@@ -12,6 +12,7 @@ public interface IAttendanceRepository
         CancellationToken cancellationToken = default);
 
     Task<bool> ExistsAsync(int lessonId, int studentId, CancellationToken cancellationToken = default);
+    Task<List<Attendance>> GetByStudentAndLessonsAsync(int studentId, List<int> lessonIds);
     Task<Attendance> CreateAsync(Attendance attendance, CancellationToken cancellationToken = default);
     Task<Attendance> UpdateAsync(Attendance attendance, CancellationToken cancellationToken = default);
     Task DeleteAsync(int id, CancellationToken cancellationToken = default);
