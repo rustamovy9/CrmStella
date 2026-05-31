@@ -48,6 +48,22 @@ public class WeekResultController(IWeekResultService weekResultService) : BaseCo
 
         return Ok(result);
     }
+    
+    [HttpPatch("{studentId:int}/{groupId:int}/{weekNumber:int}")]
+    [Authorize(Roles = "Admin,Mentor")]
+    public async Task<IActionResult> Update(
+        int studentId,
+        int groupId,
+        int weekNumber,
+        [FromBody] UpdateWeekResultRequest request)
+    {
+        var result = await weekResultService.UpdateAsync(
+            studentId, groupId, weekNumber, request);
+        if (!result.IsSuccess)
+            return HandleError(result);
+
+        return Ok(result);
+    }
 
     [HttpPatch("{id:int}/comment")]
     public async Task<IActionResult> SetComment(int id, [FromBody] SetMentorCommentRequest request)

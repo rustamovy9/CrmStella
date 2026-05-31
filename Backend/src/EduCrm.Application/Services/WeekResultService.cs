@@ -89,6 +89,9 @@ public class WeekResultService(
             .GetByKeyAsync(request.StudentId, request.GroupId, request.WeekNumber);
 
         var isNew = weekResult is null;
+
+        var existingBonus = weekResult?.BonusScore ?? 0;
+        var existingExam = weekResult?.ExamScore ?? 0;
         var existingComment = weekResult?.MentorComment;
 
         weekResult ??= new WeekResult
@@ -99,56 +102,43 @@ public class WeekResultService(
             CreatedAt = DateTime.UtcNow
         };
 
-        var lessonScores = student.LessonScores?
-            .Where(ls =>
-                ls.Lesson.GroupId == request.GroupId &&
-                ls.Lesson.WeekNumber == request.WeekNumber)
-            .Select(ls => ls.Score)
-            .ToList() ?? new List<decimal>();
+        var weekLessons = await unitOfWork.Lessons
+            .GetByGroupAndWeekAsync(request.GroupId, request.WeekNumber);
+
+        var weekLessonIds = weekLessons.Select(l => l.Id).ToList();
+
+        var lessonScores = await unitOfWork.LessonScores
+            .GetByStudentAndLessonsAsync(request.StudentId, weekLessonIds);
+
+        var lessonScoresSum = lessonScores.Sum(ls => ls.Score);
 
         weekResult.LessonAverageScore = lessonScores.Count == 0
             ? 0
-            : Math.Round(lessonScores.Average(), 2);
+            : Math.Round(lessonScores.Average(ls => ls.Score), 2);
 
         weekResult.HomeworkAverageScore = 0;
 
-        var weekAttendances = student.Attendances?
-            .Where(a =>
-                a.Lesson.GroupId == request.GroupId &&
-                a.Lesson.WeekNumber == request.WeekNumber)
-            .ToList() ?? new List<Attendance>();
+        var attendances = await unitOfWork.Attendances
+            .GetByStudentAndLessonsAsync(request.StudentId, weekLessonIds);
 
-        var totalLessonsInWeek = weekAttendances.Count;
-
-        var attendedInWeek = weekAttendances.Count(a =>
-            a.Status == AttendanceStatus.Present);
+        var totalLessonsInWeek = weekLessons.Count;
+        var attendedInWeek = attendances.Count(a => a.Status == AttendanceStatus.Present);
 
         weekResult.AttendanceScore = totalLessonsInWeek == 0
             ? 0
-            : Math.Round(
-                (decimal)attendedInWeek / totalLessonsInWeek * 100,
-                2);
+            : Math.Round((decimal)attendedInWeek / totalLessonsInWeek * 100, 2);
 
-        var examScores = student.ExamResults?
-            .Where(er => er.Exam.GroupId == request.GroupId)
-            .Select(er => er.Score)
-            .ToList() ?? new List<decimal>();
-
-        weekResult.ExamScore = examScores.Count == 0
-            ? 0
-            : Math.Round(examScores.Average(), 2);
-
-        weekResult.BonusScore = 0;
+        weekResult.BonusScore = existingBonus;
+        weekResult.ExamScore = existingExam;
+        weekResult.MentorComment = existingComment;
 
         weekResult.TotalScore = Math.Round(
-            weekResult.LessonAverageScore * 0.3m +
-            weekResult.HomeworkAverageScore * 0.2m +
-            weekResult.AttendanceScore * 0.2m +
-            weekResult.ExamScore * 0.25m +
-            weekResult.BonusScore * 0.05m,
+            lessonScoresSum + // сумма оценок (0-5 за каждый урок)
+            attendedInWeek + // +1 за каждое посещение
+            weekResult.ExamScore + // макс 70
+            weekResult.BonusScore, // бонус
             2);
 
-        weekResult.MentorComment = existingComment;
         weekResult.UpdatedAt = DateTime.UtcNow;
 
         if (isNew)
@@ -174,19 +164,81 @@ public class WeekResultService(
             });
 
         logger.LogInformation(
-            "WeekResult recalculated: student {StudentId} group {GroupId} week {Week} = {Total}",
+            "WeekResult recalculated: student {StudentId} group {GroupId} week {Week} = {Total} (lessons={L}, att={A}, exam={E}, bonus={B})",
             request.StudentId,
             request.GroupId,
             request.WeekNumber,
-            weekResult.TotalScore);
+            weekResult.TotalScore,
+            lessonScoresSum, attendedInWeek, weekResult.ExamScore, weekResult.BonusScore);
 
         var saved = await unitOfWork.WeekResults
-            .GetByKeyAsync(
-                request.StudentId,
-                request.GroupId,
-                request.WeekNumber);
+            .GetByKeyAsync(request.StudentId, request.GroupId, request.WeekNumber);
 
         return Result<WeekResultResponse>.Ok(MapToResponse(saved!));
+    }
+
+    public async Task<Result<WeekResultResponse>> UpdateAsync(
+        int studentId,
+        int groupId,
+        int weekNumber,
+        UpdateWeekResultRequest request)
+    {
+        var weekResult = await unitOfWork.WeekResults
+            .GetByKeyAsync(studentId, groupId, weekNumber);
+
+        if (weekResult is null)
+        {
+            logger.LogWarning(
+                "UpdateWeekResult failed - not found: student {StudentId} group {GroupId} week {Week}",
+                studentId, groupId, weekNumber);
+            return Result<WeekResultResponse>.Fail("WeekResult not found");
+        }
+
+        var oldValues = new
+        {
+            weekResult.BonusScore,
+            weekResult.ExamScore,
+            weekResult.MentorComment
+        };
+
+        if (request.BonusScore is not null)
+            weekResult.BonusScore = request.BonusScore.Value;
+
+        if (request.ExamScore is not null)
+            weekResult.ExamScore = request.ExamScore.Value;
+
+        if (request.MentorComment is not null)
+            weekResult.MentorComment = request.MentorComment.Trim();
+
+        weekResult.UpdatedAt = DateTime.UtcNow;
+
+        await unitOfWork.WeekResults.UpdateAsync(weekResult);
+        await unitOfWork.SaveChangesAsync();
+
+        await auditLogService.LogAsync(
+            null,
+            AuditActions.RecalculateWeekResult,
+            "WeekResult",
+            weekResult.Id,
+            oldValues,
+            new
+            {
+                weekResult.BonusScore,
+                weekResult.ExamScore,
+                weekResult.MentorComment
+            });
+
+        logger.LogInformation(
+            "WeekResult manual fields updated: student {StudentId} group {GroupId} week {Week}",
+            studentId, groupId, weekNumber);
+
+
+        return await RecalculateAsync(new RecalculateWeekRequest
+        {
+            StudentId = studentId,
+            GroupId = groupId,
+            WeekNumber = weekNumber
+        });
     }
 
     public async Task<Result<WeekResultResponse>> SetMentorCommentAsync(

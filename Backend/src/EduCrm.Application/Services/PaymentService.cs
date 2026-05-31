@@ -150,7 +150,6 @@ public class PaymentService(
 
         // загружаем квитанцию если есть
         if (request.Receipt is not null && request.Receipt.Length > 0)
-        {
             try
             {
                 var fileRecord = await fileStorage.UploadAsync(
@@ -169,7 +168,6 @@ public class PaymentService(
             {
                 logger.LogWarning(ex, "Failed to upload receipt: {PaymentId}", payment.Id);
             }
-        }
 
         // пересчитываем баланс напрямую через UpdateStudentAsync
         await RecalculateStudentBalanceAsync(request.StudentId);
@@ -215,10 +213,10 @@ public class PaymentService(
         var studentId = payment.StudentId;
 
         if (request.Amount is not null) payment.Amount = request.Amount.Value;
-        if (request.Type is not null)   payment.Type   = request.Type.Value;
+        if (request.Type is not null) payment.Type = request.Type.Value;
         if (request.Method is not null) payment.Method = request.Method.Value;
         if (request.DueDate is not null) payment.DueDate = request.DueDate;
-        if (request.Note is not null)   payment.Note   = request.Note.Trim();
+        if (request.Note is not null) payment.Note = request.Note.Trim();
 
         await unitOfWork.Payments.UpdateAsync(payment);
         await unitOfWork.SaveChangesAsync();
@@ -298,7 +296,7 @@ public class PaymentService(
             AuditActions.DeletePayment,
             nameof(Payment),
             id,
-            oldValues: new { payment.Amount, payment.Type, payment.StudentId }
+            new { payment.Amount, payment.Type, payment.StudentId }
         );
 
         await cache.RemoveByPrefixAsync(PaymentCachePrefix);
@@ -366,38 +364,44 @@ public class PaymentService(
             studentId, newBalance);
     }
 
-    private static PaymentResponse MapToResponse(Payment p) => new()
+    private static PaymentResponse MapToResponse(Payment p)
     {
-        Id = p.Id,
-        StudentId = p.StudentId,
-        StudentFullName = p.Student?.User?.FullName ?? "",
-        GroupId = p.GroupId,
-        GroupName = p.Group?.Name ?? "",
-        Amount = p.Amount,
-        Type = p.Type.ToString(),
-        Method = p.Method.ToString(),
-        Date = p.Date,
-        DueDate = p.DueDate,
-        IsConfirmed = p.IsConfirmed,
-        Note = p.Note,
-        ReceiptUrl = p.ReceiptUrl,
-        CreatedByUserId = p.CreatedByUserId,
-        CreatedByFullName = p.CreatedByUser?.FullName,
-        CreatedAt = p.CreatedAt
-    };
+        return new PaymentResponse
+        {
+            Id = p.Id,
+            StudentId = p.StudentId,
+            StudentFullName = p.Student?.User?.FullName ?? "",
+            GroupId = p.GroupId,
+            GroupName = p.Group?.Name ?? "",
+            Amount = p.Amount,
+            Type = p.Type.ToString(),
+            Method = p.Method.ToString(),
+            Date = p.Date,
+            DueDate = p.DueDate,
+            IsConfirmed = p.IsConfirmed,
+            Note = p.Note,
+            ReceiptUrl = p.ReceiptUrl,
+            CreatedByUserId = p.CreatedByUserId,
+            CreatedByFullName = p.CreatedByUser?.FullName,
+            CreatedAt = p.CreatedAt
+        };
+    }
 
-    private static PaymentListItemResponse MapToListItem(Payment p) => new()
+    private static PaymentListItemResponse MapToListItem(Payment p)
     {
-        Id = p.Id,
-        StudentId = p.StudentId,
-        StudentFullName = p.Student?.User?.FullName ?? "",
-        GroupId = p.GroupId,
-        GroupName = p.Group?.Name ?? "",
-        Amount = p.Amount,
-        Type = p.Type.ToString(),
-        Method = p.Method.ToString(),
-        Date = p.Date,
-        IsConfirmed = p.IsConfirmed,
-        CreatedAt = p.CreatedAt
-    };
+        return new PaymentListItemResponse
+        {
+            Id = p.Id,
+            StudentId = p.StudentId,
+            StudentFullName = p.Student?.User?.FullName ?? "",
+            GroupId = p.GroupId,
+            GroupName = p.Group?.Name ?? "",
+            Amount = p.Amount,
+            Type = p.Type.ToString(),
+            Method = p.Method.ToString(),
+            Date = p.Date,
+            IsConfirmed = p.IsConfirmed,
+            CreatedAt = p.CreatedAt
+        };
+    }
 }

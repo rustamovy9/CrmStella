@@ -52,16 +52,15 @@ public class StudentRepository(AppDbContext context) : IStudentRepository
         };
     }
 
-    public async Task<Student?> GetByIdAsync(
-        int id,
-        CancellationToken cancellationToken = default)
-    {
-        return await context.Students
+    public async Task<Student?> GetByIdAsync(int id, CancellationToken ct = default)
+        => await context.Students
             .Include(s => s.User)
-            .ThenInclude(u => u.Profile)
             .Include(s => s.GroupStudents)
-            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
-    }
+            .Include(s => s.LessonScores)             
+            .ThenInclude(ls => ls.Lesson)         
+            .Include(s => s.Attendances)            
+            .ThenInclude(a => a.Lesson)          
+            .FirstOrDefaultAsync(s => s.Id == id, ct);
 
     public async Task<Student?> GetByUserIdAsync(
         int userId,

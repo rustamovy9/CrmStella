@@ -45,7 +45,7 @@ public class GroupService(
                     Name = g.Name,
                     CourseId = g.CourseId,
                     CourseName = g.Course.Name,
-                    MentorUserId = g.Mentor.UserId, 
+                    MentorUserId = g.Mentor.UserId,
                     MentorId = g.MentorId,
                     MentorName = g.Mentor.User.FullName,
                     StartDate = g.StartDate,
