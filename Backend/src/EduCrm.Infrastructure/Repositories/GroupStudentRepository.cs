@@ -66,4 +66,23 @@ public class GroupStudentRepository(AppDbContext context) : IGroupStudentReposit
         context.GroupStudents.Update(groupStudent);
         return Task.CompletedTask;
     }
+
+    public async Task<List<GroupStudent>> GetDueBillingsAsync(
+        DateTime asOf, CancellationToken ct = default)
+    {
+        return await context.GroupStudents
+            .Where(gs => gs.IsActive
+                         && gs.NextBillingDate != null
+                         && gs.NextBillingDate <= asOf)
+            .ToListAsync(ct);
+    }
+    
+    public async Task<GroupStudent?> GetByGroupAndStudentAsync(
+        int groupId, int studentId, CancellationToken ct = default)
+        => await context.GroupStudents
+            .FirstOrDefaultAsync(gs =>
+                    gs.GroupId == groupId &&
+                    gs.StudentId == studentId &&
+                    gs.IsActive,
+                ct);
 }

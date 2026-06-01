@@ -37,6 +37,13 @@ public class AttendanceService(
 
         return Result<List<AttendanceListItemResponse>>.Ok(response);
     }
+    
+    public async Task<Result<AttendanceSummaryResponse>> GetSummaryAsync(
+        DateTime date, CancellationToken ct = default)
+    {
+        var summary = await unitOfWork.Attendances.GetDailySummaryAsync(date, ct);
+        return Result<AttendanceSummaryResponse>.Ok(summary);
+    }
 
     public async Task<Result<List<AttendanceListItemResponse>>> GetByStudentIdAsync(
         int studentId,

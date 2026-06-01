@@ -7,10 +7,10 @@ public class Payment
     public int Id { get; set; }
 
     public int StudentId { get; set; }
-    public int GroupId { get; set; }
+    public int? GroupId { get; set; }
 
     public decimal Amount { get; set; }
-    public PaymentType Type { get; set; } = PaymentType.Payment;
+    public PaymentType Type { get; set; } = PaymentType.Income;
     public PaymentMethod Method { get; set; } = PaymentMethod.Cash;
 
     public DateTime Date { get; set; } = DateTime.UtcNow;

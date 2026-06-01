@@ -49,7 +49,8 @@ const StudentsPage: React.FC = () => {
                 if (data) {
                     const pages = Math.ceil(data.totalCount / data.pageSize) || 1;
                     setTotalPages(pages);
-                } setTotalItems(response.data.data.totalCount || 0);
+                } 
+                setTotalItems(response.data.data.totalCount || 0);
                 setError(null);
             } else {
                 setError("Не удалось корректно прочитать данные студентов");
@@ -107,12 +108,15 @@ const StudentsPage: React.FC = () => {
                 roleId: 3
             });
 
-            if (response.data && response.data.isSuccess) {
+            // ИСПРАВЛЕНИЕ БАГА: Проверяем успешные HTTP статусы 200/201 или флаг isSuccess
+            const isApiSuccess = response.status === 200 || response.status === 201 || (response.data && response.data.isSuccess);
+
+            if (isApiSuccess) {
                 setIsCreateModalOpen(false);
                 setCreateFormData({ firstName: '', lastName: '', email: '', phoneNumber: '' });
-                fetchStudents();
+                await fetchStudents(); // Обновляем список сразу после закрытия модалки
             } else {
-                setFormError(response.data.message || "Не удалось зарегистрировать студента");
+                setFormError(response.data?.message || "Не удалось зарегистрировать студента");
             }
         } catch (err) {
             console.error("Ошибка регистрации:", err);
@@ -135,7 +139,6 @@ const StudentsPage: React.FC = () => {
                 </div>
             </div>
 
-            {/* Блок метрик с идеально ровными карточками */}
             <div style={styles.metricsWrapper}>
                 <div
                     onClick={() => setIsCreateModalOpen(true)}
@@ -197,17 +200,13 @@ const StudentsPage: React.FC = () => {
                             return (
                                 <UserCard
                                     key={student.id}
-                                    id={student.userId}  // Используется внутри карточки
+                                    id={student.userId}
                                     name={displayName}
                                     email={student.email}
                                     role="student"
                                     balance={student.balance}
                                     isActive={student.isActive}
-
-                                    // 🎯 Для изменения статуса студента передаем именно его student.id
                                     onStatusToggle={() => handleStatusToggle(student.id, student.isActive)}
-
-                                    // 🎯 Для страницы деталей передаем userId в URL, а student.id (как studentId) в state
                                     onView={() => navigate(`/admin/users/${student.userId}`, {
                                         state: { studentId: student.id }
                                     })}
@@ -328,12 +327,9 @@ const styles = {
     headerRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' },
     title: { fontSize: '26px', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' },
     subtitle: { fontSize: '14px', color: '#64748B', margin: '4px 0 0 0', fontWeight: 500 },
-
-    // Сетка для верхних карточек метрик
     metricsWrapper: { display: 'flex', flexWrap: 'wrap' as const, gap: '20px', marginBottom: '32px', width: '100%', alignItems: 'stretch' },
     metricCardGridWrapper: { flex: '1 1 240px', display: 'grid' as const },
     metricCardGridWrapperClickable: { flex: '1 1 240px', display: 'grid' as const, cursor: 'pointer' },
-
     toolbar: { marginBottom: '28px', display: 'flex', gap: '14px', flexWrap: 'wrap' as const, alignItems: 'center' },
     searchWrapper: { position: 'relative' as const, flex: 1, minWidth: '280px', maxWidth: '400px' },
     searchIcon: { position: 'absolute' as const, left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' },

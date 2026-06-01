@@ -20,7 +20,7 @@ public class CreatePaymentRequest
 
     [Required]
     [EnumDataType(typeof(PaymentType), ErrorMessage = "Invalid PaymentType value")]
-    public PaymentType Type { get; set; } = PaymentType.Payment;
+    public PaymentType Type { get; set; } = PaymentType.Income;
 
     [Required]
     [EnumDataType(typeof(PaymentMethod), ErrorMessage = "Invalid PaymentMethod value")]

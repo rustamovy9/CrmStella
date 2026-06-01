@@ -7,7 +7,7 @@ public class PaymentResponse
     public int StudentId { get; set; }
     public string StudentFullName { get; set; } = null!;
 
-    public int GroupId { get; set; }
+    public int? GroupId { get; set; }
     public string GroupName { get; set; } = null!;
 
     public decimal Amount { get; set; }
@@ -35,7 +35,7 @@ public class PaymentListItemResponse
     public int StudentId { get; set; }
     public string StudentFullName { get; set; } = null!;
 
-    public int GroupId { get; set; }
+    public int? GroupId { get; set; }
     public string GroupName { get; set; } = null!;
 
     public decimal Amount { get; set; }

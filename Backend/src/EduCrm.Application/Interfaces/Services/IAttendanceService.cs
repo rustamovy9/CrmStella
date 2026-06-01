@@ -6,6 +6,9 @@ namespace EduCrm.Application.Interfaces.Services;
 
 public interface IAttendanceService
 {
+    public Task<Result<AttendanceSummaryResponse>> GetSummaryAsync(
+        DateTime date, CancellationToken ct = default);
+
     Task<Result<List<AttendanceListItemResponse>>> GetByLessonIdAsync(int lessonId,
         CancellationToken cancellationToken = default);
 

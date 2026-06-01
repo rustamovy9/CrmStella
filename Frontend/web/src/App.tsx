@@ -24,6 +24,7 @@ import SchedulePage from './pages/admin/education/SchedulePage';
 import GroupDetailsPage from './pages/admin/education/GroupDetailsPage';
 import JournalPage from './pages/admin/journal/JournalPage';
 import FinanceDashboard from './pages/admin/finance/FinanceDashboard';
+import { AnalyticsPage } from './pages/admin/analytic/AnalyticsPage';
 
 function App() {
     return (
@@ -62,13 +63,14 @@ function App() {
                                     {/* БЛОК "УЧЕБНЫЙ ПРОЦЕСС" */}
                                     <Route path="courses" element={<CoursesPage />} />
                                     <Route path="courses/:id" element={<CourseInfoPage />} />
-                                    
+
                                     {/* БЛОК ГРУПП И ЖУРНАЛА */}
                                     <Route path="groups" element={<GroupsPage />} />
                                     <Route path="groups/:id" element={<GroupDetailsPage />} />
                                     <Route path="groups/:groupId/journal" element={<JournalPage />} />
                                     <Route path="schedules" element={<SchedulePage />} />
                                     <Route path="finance" element={<FinanceDashboard />} />
+                                    <Route path="analytics" element={<AnalyticsPage />} />
                                 </Routes>
                             </MainLayout>
                         </ProtectedRoute>
@@ -81,7 +83,7 @@ function App() {
                                 <Routes>
                                     <Route index element={<Navigate to="dashboard" replace />} />
                                     <Route path="dashboard" element={<MentorDashboard />} />
-                                    
+
                                     {/* Добавили роут сюда, чтобы ментор тоже мог зайти в журнал */}
                                     <Route path="groups/:groupId/journal" element={<JournalPage />} />
                                 </Routes>

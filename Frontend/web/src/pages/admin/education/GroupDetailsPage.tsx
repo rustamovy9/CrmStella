@@ -474,6 +474,8 @@ const GroupDetailsPage: React.FC = () => {
             {filteredStudents.length > 0 ? (
                 <StudentTable
                     students={filteredStudents}
+                    groupId={groupId}
+                    groupStatus={groupData?.status ?? 'Active'}   // ← статус группы из данных страницы
                     onRemove={(id) => {
                         const target = students.find(x => x.id === id);
                         handleRemoveClick(id, target?.studentName || `Студента с ID #${id}`);
@@ -482,6 +484,7 @@ const GroupDetailsPage: React.FC = () => {
                         const target = students.find(x => x.id === id);
                         handleTransferClick(id, target?.studentName || `Студента с ID #${id}`);
                     }}
+                    onCharged={() => loadPageData()}
                 />
             ) : (
                 <div style={st.emptyState}>

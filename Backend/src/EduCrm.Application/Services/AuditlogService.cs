@@ -18,12 +18,17 @@ public class AuditLogService(
         var pageSize = query.PageSize is < 1 or > 200 ? 50 : query.PageSize;
         var page = query.Page < 1 ? 1 : query.Page;
 
+        var fromDate = NormalizeToUtc(query.FromDate);
+        var toDate = query.ToDate.HasValue
+            ? NormalizeToUtc(query.ToDate.Value.Date.AddDays(1).AddTicks(-1))
+            : null;
+
         var logs = await unitOfWork.AuditLogs.QueryAsync(
             query.UserId,
             query.EntityName,
             query.EntityId,
-            query.FromDate,
-            query.ToDate,
+            fromDate,
+            toDate,
             page,
             pageSize);
 
@@ -78,5 +83,20 @@ public class AuditLogService(
                 "Failed to write audit log: {Action} {Entity} {EntityId}",
                 action, entityName, entityId);
         }
+    }
+
+    private static DateTime? NormalizeToUtc(DateTime? value)
+    {
+        if (!value.HasValue) return null;
+
+        return value.Value.Kind switch
+        {
+            DateTimeKind.Utc => value.Value,
+            // дата без зоны (как из <input type="date">) — трактуем как UTC
+            DateTimeKind.Unspecified => DateTime.SpecifyKind(value.Value, DateTimeKind.Utc),
+            // если вдруг пришло локальное — конвертируем
+            DateTimeKind.Local => value.Value.ToUniversalTime(),
+            _ => value.Value
+        };
     }
 }

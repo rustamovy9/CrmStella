@@ -149,6 +149,9 @@ namespace EduCrm.Infrastructure.Migrations
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 
+                    b.Property<decimal>("MonthlyPrice")
+                        .HasColumnType("numeric");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -399,6 +402,9 @@ namespace EduCrm.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("GroupId")
                         .HasColumnType("integer");
 
@@ -408,7 +414,13 @@ namespace EduCrm.Infrastructure.Migrations
                     b.Property<DateTime>("JoinedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("LastBilledAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("LeftAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("NextBillingDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("RemoveReason")
@@ -734,7 +746,7 @@ namespace EduCrm.Infrastructure.Migrations
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("GroupId")
+                    b.Property<int?>("GroupId")
                         .HasColumnType("integer");
 
                     b.Property<bool>("IsConfirmed")
@@ -1441,8 +1453,7 @@ namespace EduCrm.Infrastructure.Migrations
                     b.HasOne("EduCrm.Domain.Entities.Group", "Group")
                         .WithMany("Payments")
                         .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("EduCrm.Domain.Entities.Student", "Student")
                         .WithMany("Payments")

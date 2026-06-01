@@ -21,6 +21,7 @@ namespace EduCrm.Infrastructure.Migrations
                     Name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     Description = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     Price = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
+                    MonthlyPrice = table.Column<decimal>(type: "numeric", nullable: false),
                     IconUrl = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     DurationWeeks = table.Column<int>(type: "integer", nullable: false),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
@@ -311,8 +312,11 @@ namespace EduCrm.Infrastructure.Migrations
                     LeftAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     IsActive = table.Column<bool>(type: "boolean", nullable: false),
                     RemoveReason = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    DiscountPercent = table.Column<decimal>(type: "numeric", nullable: false),
                     TransferredFromGroupStudentId = table.Column<int>(type: "integer", nullable: true),
-                    TransferredToGroupStudentId = table.Column<int>(type: "integer", nullable: true)
+                    TransferredToGroupStudentId = table.Column<int>(type: "integer", nullable: true),
+                    LastBilledAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    NextBillingDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -379,7 +383,7 @@ namespace EduCrm.Infrastructure.Migrations
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     StudentId = table.Column<int>(type: "integer", nullable: false),
-                    GroupId = table.Column<int>(type: "integer", nullable: false),
+                    GroupId = table.Column<int>(type: "integer", nullable: true),
                     Amount = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
                     Type = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),
                     Method = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false),

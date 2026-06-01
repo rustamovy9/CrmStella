@@ -34,7 +34,8 @@ public static class AuditActions
     public const string UpdateStudent = "UpdateStudent";
     public const string DeleteStudent = "DeleteStudent";
     public const string EnrollStudent = "EnrollStudent";
-
+    public const string ChargeStudent = "ChargeStudent";
+    
     public const string CreateCourse = "CreateCourse";
     public const string UpdateCourse = "UpdateCourse";
     public const string DeleteCourse = "DeleteCourse";
@@ -64,6 +65,7 @@ public static class AuditActions
     public const string ConfirmPayment = "ConfirmPayment";
     public const string RefundPayment = "RefundPayment";
     public const string UploadPaymentReceipt = "UploadPaymentReceipt";
+    public const string TopUpBalance = "TopUpBalance";
 
     public const string CreateHomework = "CreateHomework";
     public const string UpdateHomework = "UpdateHomework";

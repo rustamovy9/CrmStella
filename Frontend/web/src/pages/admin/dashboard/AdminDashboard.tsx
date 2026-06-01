@@ -1,19 +1,22 @@
 // pages/Admin/AdminDashboard.tsx
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // Импортируем хук для навигации
+import { useNavigate } from 'react-router-dom';
 import adminService from '../../../api/adminService';
 import { financeService } from '../../../api/paymentService';
+import { journalService } from '../../../api/journalService';
 import type { StudentListItemResponse, MentorListItemResponse, UserResponse } from '../../../types/admin';
 import type { PaymentListItem } from '../../../types/finance';
+import type { AttendanceSummaryResponse } from '../../../types/journal';
 import MetricCard from '../../../components/ui/MetricCard';
-import { Activity, ArrowRight, DollarSign } from 'lucide-react';
+import { Activity, ArrowRight, DollarSign, UserCheck, UserX, Clock } from 'lucide-react';
 
 const AdminDashboard: React.FC = () => {
-    const navigate = useNavigate(); // Инициализируем навигацию
+    const navigate = useNavigate();
     const [students, setStudents] = useState<StudentListItemResponse[]>([]);
     const [mentors, setMentors] = useState<MentorListItemResponse[]>([]);
     const [users, setUsers] = useState<UserResponse[]>([]);
     const [payments, setPayments] = useState<PaymentListItem[]>([]);
+    const [attendance, setAttendance] = useState<AttendanceSummaryResponse | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -21,12 +24,13 @@ const AdminDashboard: React.FC = () => {
         const fetchDashboardData = async () => {
             try {
                 setLoading(true);
-                
-                const [studentsRes, mentorsRes, usersRes, paymentsRes] = await Promise.all([
+
+                const [studentsRes, mentorsRes, usersRes, paymentsRes, attendanceRes] = await Promise.all([
                     adminService.getStudents(),
                     adminService.getMentors(),
                     adminService.getUsers(),
-                    financeService.getAll().catch(() => ({ isSuccess: false, data: [] }))
+                    financeService.getAll().catch(() => ({ isSuccess: false, data: [] })),
+                    journalService.getSummary().catch(() => ({ isSuccess: false, data: null })),
                 ]);
 
                 if (studentsRes.data && studentsRes.data.isSuccess) {
@@ -34,23 +38,27 @@ const AdminDashboard: React.FC = () => {
                     const studentsArray = pagedData && 'items' in pagedData ? pagedData.items : [];
                     setStudents(Array.isArray(studentsArray) ? studentsArray : []);
                 }
-                
+
                 if (mentorsRes.data && mentorsRes.data.isSuccess) {
                     const pagedData = mentorsRes.data.data;
                     const mentorsArray = pagedData && 'items' in pagedData ? pagedData.items : [];
                     setMentors(Array.isArray(mentorsArray) ? mentorsArray : []);
                 }
-                
+
                 if (usersRes.data && usersRes.data.isSuccess) {
                     const userData = usersRes.data.data;
-                    const usersArray = userData && typeof userData === 'object' && 'items' in userData 
-                        ? (userData as any).items 
+                    const usersArray = userData && typeof userData === 'object' && 'items' in userData
+                        ? (userData as any).items
                         : userData;
                     setUsers(Array.isArray(usersArray) ? usersArray : []);
                 }
 
                 if (paymentsRes.isSuccess && paymentsRes.data) {
                     setPayments(paymentsRes.data);
+                }
+
+                if (attendanceRes.isSuccess && attendanceRes.data) {
+                    setAttendance(attendanceRes.data);
                 }
 
             } catch (err) {
@@ -64,7 +72,7 @@ const AdminDashboard: React.FC = () => {
     }, []);
 
     if (loading) return <div style={styles.centeredState}>Загрузка аналитических данных...</div>;
-    if (error) return <div style={{...styles.centeredState, color: '#ef4444'}}>{error}</div>;
+    if (error) return <div style={{ ...styles.centeredState, color: '#ef4444' }}>{error}</div>;
 
     // ВЫЧИСЛЕНИЕ КАССЫ: Считаем сумму только подтвержденных доходов
     const totalPaymentsVolume = payments.reduce((sum, p) => {
@@ -72,7 +80,7 @@ const AdminDashboard: React.FC = () => {
 
         const typeStr = String(p.type || '').toLowerCase();
         const isIncome = typeStr === 'income' || typeStr === 'payment' || typeStr === '0' || typeStr === '1' || typeStr === 'доход' || !p.type;
-        
+
         return isIncome ? sum + (Number(p.amount) || 0) : sum;
     }, 0);
 
@@ -89,43 +97,115 @@ const AdminDashboard: React.FC = () => {
 
             {/* Сетка аналитических карточек */}
             <div style={styles.statsGrid}>
-                {/* Обернули в div для обработки клика и перехода к способам оплаты */}
-                <div 
-                    onClick={() => navigate('/admin/finance')} 
+                <div
+                    onClick={() => navigate('/admin/finance')}
                     style={{ cursor: 'pointer', flex: '1 1 240px', minWidth: '240px' }}
                     title="Перейти к управлению способами оплаты"
                 >
-                    <MetricCard 
-                        value={`${totalPaymentsVolume.toLocaleString()} TJS`} 
-                        label="Общая выручка" 
+                    <MetricCard
+                        value={`${totalPaymentsVolume.toLocaleString()} TJS`}
+                        label="Общая выручка"
                         subLabel="Сумма всех подтвержденных оплат"
-                        isMain={true} 
+                        isMain={true}
                     />
                 </div>
-                
-                <MetricCard 
-                    value={students.length} 
-                    label="Студенты" 
+
+                <MetricCard
+                    value={students.length}
+                    label="Студенты"
                     subLabel={`${activeStudentsCount} активных профилей`}
-                    variant="purple" 
+                    variant="purple"
                 />
-                <MetricCard 
-                    value={mentors.length} 
-                    label="Менторы" 
+                <MetricCard
+                    value={mentors.length}
+                    label="Менторы"
                     subLabel="Академический персонал"
-                    variant="blue" 
+                    variant="blue"
                 />
-                <MetricCard 
-                    value={users.length} 
-                    label="Пользователи" 
+                <MetricCard
+                    value={users.length}
+                    label="Пользователи"
                     subLabel="Регистрации в системе"
-                    variant="amber" 
+                    variant="amber"
                 />
+            </div>
+
+            {/* Посещаемость за сегодня */}
+            <div style={styles.attendanceSection}>
+                <div style={styles.tableHeaderSection}>
+                    <div style={styles.titleWithIcon}>
+                        <div style={{ ...styles.iconBadge, backgroundColor: '#ECFDF5', color: '#10B981' }}>
+                            <UserCheck size={18} />
+                        </div>
+                        <h3 style={styles.sectionTitle}>Посещаемость сегодня</h3>
+                    </div>
+                </div>
+
+                {/* Три счётчика */}
+                <div style={styles.attCounters}>
+                    <div style={{ ...styles.attCounter, background: '#F0FDF4', border: '1px solid #DCFCE7' }}>
+                        <UserCheck size={20} color="#10B981" />
+                        <div>
+                            <div style={{ ...styles.attCountValue, color: '#10B981' }}>
+                                {attendance?.present ?? 0}
+                            </div>
+                            <div style={styles.attCountLabel}>Присутствуют</div>
+                        </div>
+                    </div>
+                    <div style={{ ...styles.attCounter, background: '#FEF2F2', border: '1px solid #FEE2E2' }}>
+                        <UserX size={20} color="#EF4444" />
+                        <div>
+                            <div style={{ ...styles.attCountValue, color: '#EF4444' }}>
+                                {attendance?.absent ?? 0}
+                            </div>
+                            <div style={styles.attCountLabel}>Отсутствуют</div>
+                        </div>
+                    </div>
+                    <div style={{ ...styles.attCounter, background: '#FFFBEB', border: '1px solid #FEF3C7' }}>
+                        <Clock size={20} color="#F59E0B" />
+                        <div>
+                            <div style={{ ...styles.attCountValue, color: '#F59E0B' }}>
+                                {attendance?.late ?? 0}
+                            </div>
+                            <div style={styles.attCountLabel}>Опоздали</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Список отсутствующих */}
+                {attendance && attendance.recentAbsent.length > 0 ? (
+                    <table style={styles.table}>
+                        <thead>
+                            <tr style={styles.thRow}>
+                                <th style={styles.th}>Студент</th>
+                                <th style={styles.th}>Урок</th>
+                                <th style={styles.th}>Причина</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {attendance.recentAbsent.map((a, i) => (
+                                <tr key={i} style={styles.tr}>
+                                    <td style={{ ...styles.td, fontWeight: 700, color: '#0F172A' }}>
+                                        {a.studentFullName}
+                                    </td>
+                                    <td style={styles.td}>{a.lessonTitle}</td>
+                                    <td style={{ ...styles.td, color: '#64748B', fontStyle: a.reason ? 'normal' : 'italic' }}>
+                                        {a.reason || 'без причины'}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                ) : (
+                    <div style={{ padding: '24px', textAlign: 'center', color: '#94A3B8', fontSize: '14px' }}>
+                        Сегодня отсутствующих нет
+                    </div>
+                )}
             </div>
 
             {/* Интерактивные таблицы */}
             <div style={styles.contentLayout}>
-                
+
                 {/* Блок пользователей */}
                 <div style={styles.tableSection}>
                     <div style={styles.tableHeaderSection}>
@@ -137,7 +217,7 @@ const AdminDashboard: React.FC = () => {
                         </div>
                         <span style={styles.countBadge}>{users.length} чел.</span>
                     </div>
-                    
+
                     <div style={styles.tableWrapper}>
                         <table style={styles.table}>
                             <thead>
@@ -149,7 +229,7 @@ const AdminDashboard: React.FC = () => {
                             </thead>
                             <tbody>
                                 {users.slice(0, 5).map((user) => {
-                                    const userGlow = user.role === 'Admin' 
+                                    const userGlow = user.role === 'Admin'
                                         ? 'linear-gradient(135deg, #EF4444 0%, #991B1B 100%)'
                                         : 'linear-gradient(135deg, #3B82F6 0%, #1D4ED8 100%)';
 
@@ -178,7 +258,7 @@ const AdminDashboard: React.FC = () => {
                                             <td style={styles.td}>
                                                 <div style={styles.statusRow}>
                                                     <span style={{
-                                                        ...styles.pulseDot, 
+                                                        ...styles.pulseDot,
                                                         backgroundColor: user.isActive ? '#34C759' : '#94A3B8',
                                                         boxShadow: user.isActive ? '0 0 10px rgba(52, 199, 89, 0.4)' : 'none'
                                                     }} />
@@ -204,7 +284,7 @@ const AdminDashboard: React.FC = () => {
                             </div>
                             <h3 style={styles.sectionTitle}>Финансовый комплаенс</h3>
                         </div>
-                        <span style={{...styles.countBadge, backgroundColor: '#E0F2FE', color: '#0369A1'}}>Дебет</span>
+                        <span style={{ ...styles.countBadge, backgroundColor: '#E0F2FE', color: '#0369A1' }}>Дебет</span>
                     </div>
 
                     <div style={styles.tableWrapper}>
@@ -213,13 +293,13 @@ const AdminDashboard: React.FC = () => {
                                 <tr style={styles.thRow}>
                                     <th style={styles.th}>Студент</th>
                                     <th style={styles.th}>Статус счета</th>
-                                    <th style={{...styles.th, textAlign: 'right'}}>Действие</th>
+                                    <th style={{ ...styles.th, textAlign: 'right' }}>Действие</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {students.slice(0, 5).map((student) => (
                                     <tr key={student.id} style={styles.tr}>
-                                        <td style={{...styles.td, fontWeight: 700, color: '#0F172A'}}>{student.fullName}</td>
+                                        <td style={{ ...styles.td, fontWeight: 700, color: '#0F172A' }}>{student.fullName}</td>
                                         <td style={styles.td}>
                                             <span style={{
                                                 ...styles.balanceText,
@@ -230,11 +310,10 @@ const AdminDashboard: React.FC = () => {
                                                 {student.balance !== undefined ? student.balance.toLocaleString() : 0} TJS
                                             </span>
                                         </td>
-                                        <td style={{...styles.td, textAlign: 'right'}}>
-                                            <button 
+                                        <td style={{ ...styles.td, textAlign: 'right' }}>
+                                            <button
                                                 style={styles.actionBtn}
-                                                // ВНИМАНИЕ: Изменили student.id на student.userId для корректного перехода в профиль
-                                                onClick={() => navigate(`/admin/users/${student.userId || student.id}`)} 
+                                                onClick={() => navigate(`/admin/users/${student.userId || student.id}`)}
                                                 onMouseEnter={(e) => {
                                                     e.currentTarget.style.backgroundColor = '#EEF2FF';
                                                     e.currentTarget.style.color = '#6366F1';
@@ -266,6 +345,11 @@ const styles = {
     pageTitle: { fontSize: '26px', fontWeight: 700, color: '#0F172A', margin: 0, letterSpacing: '-0.02em' },
     pageSubtitle: { fontSize: '14px', color: '#64748B', margin: '4px 0 0 0', fontWeight: 500 },
     statsGrid: { display: 'flex', flexWrap: 'wrap' as const, gap: '20px', marginBottom: '32px', width: '100%' },
+    attendanceSection: { backgroundColor: '#ffffff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 16px -4px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.06)', marginBottom: '32px' },
+    attCounters: { display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap' as const },
+    attCounter: { flex: '1 1 160px', display: 'flex', alignItems: 'center', gap: '12px', padding: '16px', borderRadius: '14px' },
+    attCountValue: { fontSize: '24px', fontWeight: 800, lineHeight: 1 },
+    attCountLabel: { fontSize: '12px', color: '#64748B', marginTop: '2px' },
     contentLayout: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 540px), 1fr))', gap: '24px', width: '100%' },
     tableSection: { backgroundColor: '#ffffff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 16px -4px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.06)', minWidth: 0 },
     tableHeaderSection: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },

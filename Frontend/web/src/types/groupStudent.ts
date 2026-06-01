@@ -10,4 +10,6 @@ export interface GroupStudentResponse {
     isActive: boolean;
     isTransferred: boolean;
     removeReason: string | null;
+    lastBilledAt: string | null;       // ← добавь
+    nextBillingDate: string | null;    // ← добавь
 }

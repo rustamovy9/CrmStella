@@ -193,7 +193,6 @@ const JournalPage: React.FC = () => {
 
         try {
             if (!existing) {
-                // Пытаемся создать
                 try {
                     await journalService.createAttendance({
                         lessonId,
@@ -201,31 +200,16 @@ const JournalPage: React.FC = () => {
                         status: STATUS.Present,
                     });
                 } catch (createErr: any) {
-                    // Если уже существует (409 Conflict) — перезагружаем и обновляем
                     if (createErr?.response?.data?.errorType === 3 ||
                         createErr?.response?.status === 409) {
-                        console.warn('Attendance already exists, reloading...');
                         await loadAttScores(lessons);
-                        // После перезагрузки запись появится в lookup — пользователь
-                        // увидит реальный статус, повторный клик переключит правильно
                         return;
                     }
                     throw createErr;
                 }
             } else {
-                // Циклическое переключение: Present → Absent → Late → Excused → Present
-                const statusStr = String(existing.status);
-                const currentNum =
-                    statusStr === 'Present' ? STATUS.Present :
-                        statusStr === 'Absent' ? STATUS.Absent :
-                            statusStr === 'Late' ? STATUS.Late :
-                                statusStr === 'Excused' ? STATUS.Excused :
-                                    Number(existing.status) || STATUS.Present;
-
-                // Тоггл: Present ↔ Absent
-                const newStatus = currentNum === STATUS.Present
-                    ? STATUS.Absent
-                    : STATUS.Present;
+                const isPresent = String(existing.status) === 'Present';
+                const newStatus = isPresent ? STATUS.Absent : STATUS.Present;
 
                 await journalService.updateAttendance(existing.id, {
                     status: newStatus,
@@ -235,6 +219,17 @@ const JournalPage: React.FC = () => {
             }
 
             await loadAttScores(lessons);
+
+            // ✅ посещаемость входит в TotalScore (attendedInWeek) — пересчитываем неделю
+            const lesson = lessons.find(l => l.id === lessonId);
+            if (lesson) {
+                await journalService.recalculateWeekResult({
+                    studentId,
+                    groupId: gid,
+                    weekNumber: lesson.weekNumber,
+                });
+                await loadWeekResults([lesson.weekNumber]);
+            }
         } catch (err: any) {
             console.error('Attendance error:', err?.response?.data || err);
         } finally {

@@ -15,4 +15,6 @@ public class GroupStudentResponse
     public bool IsActive { get; set; }
     public bool IsTransferred { get; set; }
     public string? RemoveReason { get; set; }
+    public DateTime? LastBilledAt { get; set; }
+    public DateTime? NextBillingDate { get; set; }
 }
