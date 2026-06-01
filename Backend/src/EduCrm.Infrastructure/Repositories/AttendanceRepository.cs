@@ -1,5 +1,7 @@
+using EduCrm.Application.DTOs.Attendance.Response;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Domain.Entities;
+using EduCrm.Domain.Enums;
 using EduCrm.Infrastructure.Persistence.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -58,6 +60,43 @@ public class AttendanceRepository(AppDbContext context) : IAttendanceRepository
             .FirstOrDefaultAsync(
                 x => x.LessonId == lessonId && x.StudentId == studentId,
                 cancellationToken);
+    }
+    
+    public async Task<AttendanceSummaryResponse> GetDailySummaryAsync(
+        DateTime date, CancellationToken ct = default)
+    {
+        var dayStart = DateTime.SpecifyKind(date.Date, DateTimeKind.Utc);
+        var dayEnd = dayStart.AddDays(1);
+
+        var query = context.Attendances
+            .AsNoTracking()
+            .Where(a => a.MarkedAt >= dayStart && a.MarkedAt < dayEnd);
+
+        var present = await query.CountAsync(a => a.Status == AttendanceStatus.Present, ct);
+        var absent  = await query.CountAsync(a => a.Status == AttendanceStatus.Absent, ct);
+        var late    = await query.CountAsync(a => a.Status == AttendanceStatus.Late, ct);
+
+        var recentAbsent = await query
+            .Where(a => a.Status == AttendanceStatus.Absent)
+            .OrderByDescending(a => a.MarkedAt)
+            .Take(10)
+            .Select(a => new AbsentItem
+            {
+                StudentFullName = a.Student.User.FullName,
+                LessonTitle = a.Lesson.Title,
+                Reason = a.AbsenceReason,
+                MarkedAt = a.MarkedAt
+            })
+            .ToListAsync(ct);
+
+        return new AttendanceSummaryResponse
+        {
+            Present = present,
+            Absent = absent,
+            Late = late,
+            Total = present + absent + late,
+            RecentAbsent = recentAbsent
+        };
     }
     
     public async Task<List<Attendance>> GetByStudentAndLessonsAsync(

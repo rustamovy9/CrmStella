@@ -1,5 +1,6 @@
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Domain.Entities;
+using EduCrm.Domain.Enums;
 using EduCrm.Infrastructure.Persistence.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -51,8 +52,24 @@ public class PaymentRepository(AppDbContext db) : IPaymentRepository
     public async Task<decimal> GetStudentBalanceAsync(int studentId)
     {
         return await db.Payments
-            .Where(p => p.StudentId == studentId)
-            .SumAsync(p => p.Amount);
+            .AsNoTracking()
+            .Where(x => x.StudentId == studentId && x.IsConfirmed)
+            .SumAsync(p =>
+                p.Type == PaymentType.Income ? p.Amount :
+                p.Type == PaymentType.Bonus    ? p.Amount :
+                p.Type == PaymentType.Debt     ? -p.Amount :
+                p.Type == PaymentType.CourseFee     ? -p.Amount :
+                p.Type == PaymentType.Refund   ? -p.Amount :
+                p.Type == PaymentType.Discount ? -p.Amount :
+                p.Amount);
+    }
+    
+    public async Task<List<Payment>> GetAllConfirmedAsync()
+    {
+        return await db.Payments
+            .AsNoTracking()
+            .Where(p => p.IsConfirmed)
+            .ToListAsync();
     }
 
     public async Task CreateAsync(Payment payment)

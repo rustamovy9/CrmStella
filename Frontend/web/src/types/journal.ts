@@ -97,3 +97,16 @@ export interface JournalRow {
   cells: Record<number, JournalCell>; // lessonId -> данные ячейки
   weekResult?: WeekResultResponse;
 }
+
+export interface AttendanceSummaryResponse {
+    present: number;
+    absent: number;
+    late: number;
+    total: number;
+    recentAbsent: {
+        studentFullName: string;
+        lessonTitle: string;
+        reason: string | null;
+        markedAt: string;
+    }[];
+}

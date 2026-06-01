@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EduCrm.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260520151929_InitialCreate")]
+    [Migration("20260601100828_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -151,6 +151,9 @@ namespace EduCrm.Infrastructure.Migrations
 
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
+
+                    b.Property<decimal>("MonthlyPrice")
+                        .HasColumnType("numeric");
 
                     b.Property<string>("Name")
                         .IsRequired()
@@ -402,6 +405,9 @@ namespace EduCrm.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<decimal>("DiscountPercent")
+                        .HasColumnType("numeric");
+
                     b.Property<int>("GroupId")
                         .HasColumnType("integer");
 
@@ -411,7 +417,13 @@ namespace EduCrm.Infrastructure.Migrations
                     b.Property<DateTime>("JoinedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime?>("LastBilledAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("LeftAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("NextBillingDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("RemoveReason")
@@ -737,7 +749,7 @@ namespace EduCrm.Infrastructure.Migrations
                     b.Property<DateTime?>("DueDate")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("GroupId")
+                    b.Property<int?>("GroupId")
                         .HasColumnType("integer");
 
                     b.Property<bool>("IsConfirmed")
@@ -1444,8 +1456,7 @@ namespace EduCrm.Infrastructure.Migrations
                     b.HasOne("EduCrm.Domain.Entities.Group", "Group")
                         .WithMany("Payments")
                         .HasForeignKey("GroupId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("EduCrm.Domain.Entities.Student", "Student")
                         .WithMany("Payments")

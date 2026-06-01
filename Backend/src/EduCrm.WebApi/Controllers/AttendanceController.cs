@@ -18,6 +18,15 @@ public class AttendanceController(IAttendanceService attendanceService) : BaseCo
         var result = await attendanceService.GetByLessonIdAsync(lessonId, cancellationToken);
         return Ok(result);
     }
+    
+    [Authorize(Roles = "Admin")]
+    [HttpGet("summary")]
+    public async Task<IActionResult> GetSummary([FromQuery] DateTime? date)
+    {
+        var result = await attendanceService.GetSummaryAsync(date ?? DateTime.UtcNow);
+        if (!result.IsSuccess) return HandleError(result);
+        return Ok(result);
+    }
 
     [HttpGet("student/{studentId}")]
     public async Task<IActionResult> GetByStudent(

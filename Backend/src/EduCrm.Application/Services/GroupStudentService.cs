@@ -244,7 +244,9 @@ public class GroupStudentService(
             LeftAt = gs.LeftAt,
             IsActive = gs.IsActive,
             IsTransferred = gs.TransferredTo is not null,
-            RemoveReason = gs.RemoveReason
+            RemoveReason = gs.RemoveReason,
+            LastBilledAt = gs.LastBilledAt,          
+            NextBillingDate = gs.NextBillingDate   
         };
     }
 }

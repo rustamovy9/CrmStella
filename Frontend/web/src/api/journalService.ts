@@ -5,7 +5,8 @@ import type {
   LessonResponse,
   AttendanceResponse,
   LessonScoreResponse,
-  WeekResultResponse
+  WeekResultResponse,
+  AttendanceSummaryResponse
 } from '../types/journal';
 
 export const journalService = {
@@ -50,6 +51,14 @@ export const journalService = {
     score: data.score,
     mentorFeedback: data.mentorFeedback,
   }),
+
+  getSummary: async (date?: string) => {
+    const response = await agent.get<ApiResult<AttendanceSummaryResponse>>(
+        '/attendances/summary',
+        { params: date ? { date } : {} }
+    );
+    return response.data;
+},
 
   recalculateWeekResult: (data: {
     studentId: number;

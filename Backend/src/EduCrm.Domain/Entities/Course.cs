@@ -6,6 +6,7 @@ public class Course
     public string Name { get; set; } = null!;
     public string? Description { get; set; }
     public decimal Price { get; set; }
+    public decimal MonthlyPrice { get; set; }
     public string? IconUrl { get; set; }
     public int DurationWeeks { get; set; }
     public bool IsActive { get; set; } = true;

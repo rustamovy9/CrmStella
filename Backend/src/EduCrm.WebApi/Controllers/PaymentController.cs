@@ -11,6 +11,15 @@ namespace EduCrm.WebApi.Controllers;
 [Authorize]
 public class PaymentController(IPaymentService paymentService) : BaseController
 {
+    [Authorize(Roles = "Admin")]
+    [HttpGet("dashboard")]
+    public async Task<IActionResult> Dashboard()
+    {
+        var result = await paymentService.GetFinanceDashboardAsync();
+        if (!result.IsSuccess) return HandleError(result);
+        return Ok(result);
+    }
+    
     [HttpGet]
     public async Task<IActionResult> GetAll()
     {
@@ -106,6 +115,28 @@ public class PaymentController(IPaymentService paymentService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
+        return Ok(result);
+    }
+    
+    [Authorize(Roles = "Admin")]
+    [HttpPost("top-up")]
+    public async Task<IActionResult> TopUp([FromForm] TopUpRequest request)
+    {
+        var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+        var result = await paymentService.TopUpAsync(request, currentUserId);
+        if (!result.IsSuccess)
+            return HandleError(result);
+
+        return Ok(result);
+    }
+    
+    [Authorize(Roles = "Admin")]
+    [HttpPost("recalculate-balances")]
+    public async Task<IActionResult> RecalculateBalances()
+    {
+        var result = await paymentService.RecalculateAllBalancesAsync();
+        if (!result.IsSuccess) return HandleError(result);
         return Ok(result);
     }
 

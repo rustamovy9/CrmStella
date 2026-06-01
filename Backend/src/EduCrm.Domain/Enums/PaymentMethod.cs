@@ -6,5 +6,6 @@ public enum PaymentMethod
     Card = 2,
     Transfer = 3,
     Online = 4,
-    Other = 5
+    Internal = 5,  
+    Other = 6
 }

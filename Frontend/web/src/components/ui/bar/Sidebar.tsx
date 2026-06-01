@@ -136,7 +136,7 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
                 ]
             },
             { path: '/admin/finance', label: 'Финансы и счета', icon: <CreditCard size={24} /> },
-            { path: '/admin/reports', label: 'Аналитика и отчеты', icon: <PieChart size={24} /> },
+            { path: '/admin/analytics', label: 'Аналитика и отчеты', icon: <PieChart size={24} /> },
         ],
         Mentor: [
             { path: '/mentor/dashboard', label: 'Панель ментора', icon: <LayoutGrid size={24} /> },

@@ -54,6 +54,7 @@ public class ProfileController(
 
         return Ok(result);
     }
+    
 
     [HttpPatch("avatar")]
     public async Task<IActionResult> SetAvatar(IFormFile? file)

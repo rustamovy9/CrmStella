@@ -38,7 +38,7 @@ public class CourseController(ICourseService courseService) : BaseController
         if (!result.IsSuccess)
             return HandleError(result);
 
-        return CreatedAtAction(nameof(GetById), result);
+        return Ok(result);
     }
 
     [HttpPut("{id:int}")]

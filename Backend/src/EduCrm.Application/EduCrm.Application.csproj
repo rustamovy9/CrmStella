@@ -18,6 +18,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <Folder Include="DTOs\Billing\Request\"/>
         <Folder Include="DTOs\StudentProgress\Request\"/>
     </ItemGroup>
 

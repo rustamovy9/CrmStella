@@ -25,7 +25,7 @@ public class AuditLogRepository(AppDbContext context) : IAuditLogRepository
             query = query.Where(a => a.UserId == userId);
 
         if (!string.IsNullOrWhiteSpace(entityName))
-            query = query.Where(a => a.EntityName == entityName);
+            query = query.Where(a => EF.Functions.ILike(a.EntityName, $"%{entityName}%"));
 
         if (entityId is not null)
             query = query.Where(a => a.EntityId == entityId);

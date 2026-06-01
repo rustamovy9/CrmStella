@@ -2,6 +2,7 @@ using EduCrm.Application.Common;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Application.Services;
+using EduCrm.Infrastructure.BackgroundJobs;
 using EduCrm.Infrastructure.Persistence.Data;
 using EduCrm.Infrastructure.Repositories;
 using EduCrm.Infrastructure.Services;
@@ -59,6 +60,8 @@ public static class DependencyInjection
         services.AddScoped<IFileStorageService, FileStorageService>();
         services.AddScoped<IPaymentService, PaymentService>();
         services.AddScoped<IProfileService, ProfileService>();
+        services.AddScoped<IBillingService, BillingService>();
+        services.AddHostedService<BillingJob>();
 
         //Exam module
         services.AddScoped<IExamService, ExamService>();

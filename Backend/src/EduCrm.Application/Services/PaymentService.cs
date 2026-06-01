@@ -1,6 +1,7 @@
 using EduCrm.Application.Common;
 using EduCrm.Application.DTOs.Payment.Request;
 using EduCrm.Application.DTOs.Payment.Response;
+using EduCrm.Application.DTOs.Student.Request;
 using EduCrm.Application.Interfaces.Repositories;
 using EduCrm.Application.Interfaces.Services;
 using EduCrm.Domain.Constants;
@@ -130,6 +131,12 @@ public class PaymentService(
         if (group is null)
             return Result<PaymentResponse>.Fail("Group not found");
 
+        var enrollment = await unitOfWork.GroupStudents
+            .GetByGroupAndStudentAsync(request.GroupId, request.StudentId);
+        if (enrollment is null || !enrollment.IsActive || enrollment.LeftAt.HasValue)
+            return Result<PaymentResponse>.Fail(
+                "Студент не учится в этой группе", ErrorType.BadRequest);
+
         var payment = new Payment
         {
             StudentId = request.StudentId,
@@ -250,11 +257,14 @@ public class PaymentService(
             return Result<bool>.Fail("Payment not found");
 
         var oldValues = new { payment.IsConfirmed };
+        var studentId = payment.StudentId;
 
         payment.IsConfirmed = request.IsConfirmed;
 
         await unitOfWork.Payments.UpdateAsync(payment);
         await unitOfWork.SaveChangesAsync();
+
+        await RecalculateStudentBalanceAsync(studentId);
 
         await auditLogService.LogAsync(
             null,
@@ -266,6 +276,7 @@ public class PaymentService(
         );
 
         await cache.RemoveByPrefixAsync(PaymentCachePrefix);
+        await cache.RemoveByPrefixAsync(StudentCachePrefix); // ← добавил сброс кэша студентов
 
         logger.LogInformation(
             "Payment confirmed: {PaymentId} IsConfirmed: {IsConfirmed}",
@@ -307,6 +318,116 @@ public class PaymentService(
         return Result<bool>.Ok(true);
     }
 
+    public async Task<Result<PaymentResponse>> TopUpAsync(
+        TopUpRequest request, int createdByUserId)
+    {
+        var student = await unitOfWork.Students.GetByIdAsync(request.StudentId);
+        if (student is null)
+            return Result<PaymentResponse>.Fail("Student not found");
+
+        if (request.Amount <= 0)
+            return Result<PaymentResponse>.Fail("Amount must be positive", ErrorType.BadRequest);
+
+        var payment = new Payment
+        {
+            StudentId = request.StudentId,
+            GroupId = null,
+            Amount = request.Amount,
+            Type = PaymentType.Income,
+            Method = request.Method,
+            Note = request.Note?.Trim(),
+            IsConfirmed = true,
+            Date = DateTime.UtcNow,
+            CreatedAt = DateTime.UtcNow,
+            CreatedByUserId = createdByUserId
+        };
+
+        await unitOfWork.Payments.CreateAsync(payment);
+        await unitOfWork.SaveChangesAsync();
+
+        if (request.Receipt is not null && request.Receipt.Length > 0)
+            try
+            {
+                var file = await fileStorage.UploadAsync(
+                    request.Receipt, FileOwnerType.PaymentReceipt, payment.Id, createdByUserId);
+                payment.ReceiptUrl = file.Url;
+                await unitOfWork.Payments.UpdateAsync(payment);
+                await unitOfWork.SaveChangesAsync();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Failed to upload top-up receipt: {PaymentId}", payment.Id);
+            }
+
+        await RecalculateStudentBalanceAsync(request.StudentId);
+
+        await auditLogService.LogAsync(
+            createdByUserId, AuditActions.TopUpBalance, nameof(Payment), payment.Id,
+            newValues: new { request.Amount, request.Method });
+
+        await cache.RemoveByPrefixAsync(PaymentCachePrefix);
+        await cache.RemoveByPrefixAsync(StudentCachePrefix);
+
+        var created = await unitOfWork.Payments.GetByIdAsync(payment.Id);
+        return Result<PaymentResponse>.Ok(MapToResponse(created!));
+    }
+
+    public async Task<Result<int>> RecalculateAllBalancesAsync()
+    {
+        var paged = await unitOfWork.Students.GetAllAsync(new StudentQueryRequest
+        {
+            Page = 1,
+            PageSize = 10000 // берём всех разом
+        });
+
+        var students = paged.Items; // подставь реальное имя коллекции в PagedResult
+
+        foreach (var student in students)
+        {
+            var balance = await unitOfWork.Payments.GetStudentBalanceAsync(student.Id);
+            student.Balance = balance;
+            await unitOfWork.Students.UpdateAsync(student);
+        }
+
+        await unitOfWork.SaveChangesAsync();
+
+        await cache.RemoveByPrefixAsync(PaymentCachePrefix);
+        await cache.RemoveByPrefixAsync(StudentCachePrefix);
+
+        logger.LogInformation("Recalculated balances for {Count} students", students.Count);
+
+        return Result<int>.Ok(students.Count);
+    }
+
+    public async Task<Result<FinanceDashboardResponse>> GetFinanceDashboardAsync()
+    {
+        var payments = await unitOfWork.Payments.GetAllConfirmedAsync();
+
+        var byStudent = payments
+            .GroupBy(p => p.StudentId)
+            .Select(g => new
+            {
+                StudentId = g.Key,
+                Balance = g.Sum(p =>
+                    p.Type == PaymentType.Income ? p.Amount :
+                    p.Type == PaymentType.Bonus ? p.Amount :
+                    -p.Amount),
+                HasIncome = g.Any(p => p.Type == PaymentType.Income)
+            })
+            .ToList();
+
+        var response = new FinanceDashboardResponse
+        {
+            TotalBalance = byStudent.Sum(s => s.Balance),
+            TotalDebt = byStudent.Where(s => s.Balance < 0).Sum(s => Math.Abs(s.Balance)),
+            StudentsInDebt = byStudent.Count(s => s.Balance < 0),
+            TotalIncome = payments.Where(p => p.Type == PaymentType.Income).Sum(p => p.Amount),
+            StudentsPaid = byStudent.Count(s => s.HasIncome)
+        };
+
+        return Result<FinanceDashboardResponse>.Ok(response);
+    }
+
     public async Task<Result<PaymentResponse>> SetReceiptAsync(
         int paymentId,
         IFormFile receiptFile,
@@ -343,7 +464,6 @@ public class PaymentService(
         return Result<PaymentResponse>.Ok(MapToResponse(updated!));
     }
 
-    // ─── PRIVATE ──────────────────────────────────────────────────────────
 
     private async Task RecalculateStudentBalanceAsync(int studentId)
     {
