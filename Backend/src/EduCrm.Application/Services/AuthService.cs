@@ -145,9 +145,18 @@ public class AuthService(
         await cache.RemoveByPrefixAsync(UserCachePrefix);
         await cache.RemoveByPrefixAsync(MentorCachePrefix); // ✅ Сразу виден в GetAll
         await cache.RemoveByPrefixAsync(StudentCachePrefix); // ✅ Сразу виден в GetAll
-
-        await emailService.SendWelcomeAsync(user.Email, user.FullName, tempPassword);
-
+        
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await emailService.SendWelcomeAsync(user.Email, user.FullName, tempPassword);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Ошибка при отправке приветственного письма для {Email}", user.Email);
+            }
+        });
         await auditLogService.LogAsync(
             adminUserId,
             AuditActions.Register,
