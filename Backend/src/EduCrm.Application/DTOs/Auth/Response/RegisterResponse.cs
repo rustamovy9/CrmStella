@@ -8,4 +8,6 @@ public class RegisterResponse
     public string? PhoneNumber { get; set; }
     public string Role { get; set; } = null!;
     public DateTime CreatedAt { get; set; }
+    public string? TempPassword { get; set; }
+
 }

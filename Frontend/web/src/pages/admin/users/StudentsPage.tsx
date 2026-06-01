@@ -16,10 +16,11 @@ const StudentsPage: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalItems, setTotalItems] = useState(0);
-    const pageSize = 6;
+    const pageSize = 10;
     const navigate = useNavigate();
 
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+    const [submitting, setSubmitting] = useState(false);
     const [formError, setFormError] = useState<string | null>(null);
 
     const [createFormData, setCreateFormData] = useState({
@@ -49,7 +50,7 @@ const StudentsPage: React.FC = () => {
                 if (data) {
                     const pages = Math.ceil(data.totalCount / data.pageSize) || 1;
                     setTotalPages(pages);
-                } 
+                }
                 setTotalItems(response.data.data.totalCount || 0);
                 setError(null);
             } else {
@@ -98,6 +99,7 @@ const StudentsPage: React.FC = () => {
     const handleCreateStudent = async (e: React.FormEvent) => {
         e.preventDefault();
         setFormError(null);
+        setSubmitting(true);
 
         try {
             const response = await adminService.registerUser({
@@ -108,19 +110,18 @@ const StudentsPage: React.FC = () => {
                 roleId: 3
             });
 
-            // ИСПРАВЛЕНИЕ БАГА: Проверяем успешные HTTP статусы 200/201 или флаг isSuccess
-            const isApiSuccess = response.status === 200 || response.status === 201 || (response.data && response.data.isSuccess);
-
-            if (isApiSuccess) {
+            if (response.data && response.data.isSuccess) {
                 setIsCreateModalOpen(false);
                 setCreateFormData({ firstName: '', lastName: '', email: '', phoneNumber: '' });
-                await fetchStudents(); // Обновляем список сразу после закрытия модалки
+                fetchStudents();
             } else {
-                setFormError(response.data?.message || "Не удалось зарегистрировать студента");
+                setFormError(response.data.message || "Ошибка при регистрации студента");
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error("Ошибка регистрации:", err);
-            setFormError("Не удалось связаться с сервером");
+            setFormError(err.response?.data?.message || "Не удалось связаться с сервером");
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -311,8 +312,8 @@ const StudentsPage: React.FC = () => {
                                 />
                             </div>
 
-                            <button type="submit" style={styles.submitBtn}>
-                                Зарегистрировать
+                            <button type="submit" disabled={submitting} style={styles.submitBtn}>
+                                {submitting ? 'Создание учетной записи...' : 'Зарегистрировать'}
                             </button>
                         </form>
                     </div>
