@@ -16,6 +16,7 @@ public class Attendance
     public int? MarkedByMentorId { get; set; }
     public DateTime MarkedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
+    public int? LateMinutes { get; set; }
 
     public Lesson Lesson { get; set; } = null!;
     public Student Student { get; set; } = null!;

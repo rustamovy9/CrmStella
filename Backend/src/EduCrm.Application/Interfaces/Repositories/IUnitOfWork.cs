@@ -22,6 +22,8 @@ public interface IUnitOfWork
     ILessonScoreRepository LessonScores { get; }
     IStudentProgressRepository StudentProgress { get; }
     IExamRepository Exams { get; }
+    ILeadRepository Leads { get; }
+    ILeadActivityRepository LeadActivities { get; }
 
     INotificationRepository Notifications { get; }
     IExamResultRepository ExamResults { get; }

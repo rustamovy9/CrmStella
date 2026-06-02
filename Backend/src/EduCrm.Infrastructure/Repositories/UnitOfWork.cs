@@ -27,6 +27,8 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
     private IUserRepository? _users;
     private IVerificationCodeRepository? _verificationCodes;
     private IWeekResultRepository? _weekResults;
+    private ILeadRepository? _leads;
+    private ILeadActivityRepository? _leadActivities;
 
     public IUserRepository Users =>
         _users ??= new UserRepository(context);
@@ -81,6 +83,12 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
 
     public IExamRepository Exams =>
         _exams ??= new ExamRepository(context);
+
+    public ILeadRepository Leads =>
+        _leads ??= new LeadRepository(context);
+
+    public ILeadActivityRepository LeadActivities =>
+        _leadActivities ??= new LeadActivityRepository(context);
 
     public INotificationRepository Notifications =>
         _notifications ??= new NotificationRepository(context);

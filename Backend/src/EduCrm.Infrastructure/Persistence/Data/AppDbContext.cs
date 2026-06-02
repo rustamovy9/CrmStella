@@ -39,6 +39,9 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
 
     public DbSet<WeekResult> WeekResults => Set<WeekResult>();
     public DbSet<StudentProgress> StudentProgresses => Set<StudentProgress>();
+    
+    public DbSet<Lead> Leads { get; set; } = null!;
+    public DbSet<LeadActivity> LeadActivities { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

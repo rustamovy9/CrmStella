@@ -28,12 +28,14 @@ export const journalService = {
     status: number;
     absenceReason?: string;
     mentorNote?: string;
+    lateMinutes?: number | null;
   }) => agent.post<ApiResult<AttendanceResponse>>('/attendances', data),
 
   updateAttendance: (id: number, data: {
     status: number;
     absenceReason?: string;
     mentorNote?: string;
+    lateMinutes?: number | null;
   }) => agent.put<ApiResult<AttendanceResponse>>(`/attendances/${id}`, data),
 
   createLessonScore: (data: {
@@ -47,18 +49,18 @@ export const journalService = {
     score: number;
     mentorFeedback?: string;
   }) => agent.put<ApiResult<LessonScoreResponse>>('/lesson-scores', {
-    id,                         
+    id,
     score: data.score,
     mentorFeedback: data.mentorFeedback,
   }),
 
   getSummary: async (date?: string) => {
     const response = await agent.get<ApiResult<AttendanceSummaryResponse>>(
-        '/attendances/summary',
-        { params: date ? { date } : {} }
+      '/attendances/summary',
+      { params: date ? { date } : {} }
     );
     return response.data;
-},
+  },
 
   recalculateWeekResult: (data: {
     studentId: number;

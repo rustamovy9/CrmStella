@@ -10,8 +10,9 @@ import type {
 interface Student {
     id: number;
     name: string;
+    isActive?: boolean;
+    leftAt?: string | null;
 }
-
 interface Props {
     weekNumber: number;
     lessons: LessonResponse[];
@@ -30,8 +31,6 @@ interface Props {
         value: number
     ) => void;
 }
-
-// ─── HELPERS ──────────────────────────────────────────────────────────────
 
 const fmtDate = (d: string) => {
     const date = new Date(d);
@@ -54,17 +53,11 @@ const sumPillStyle = (score: number) => {
     return { bg: '#F04438', color: '#FFFFFF' };
 };
 
-// ─── КОМПОНЕНТ ВЕРХНЕГО ЧЕКБОКСА С ПРАВИЛЬНОЙ ЛОГИКОЙ ─────────────────────
-
 const HeaderCheckbox: React.FC<{ checked: boolean; indeterminate: boolean }> = ({ checked, indeterminate }) => {
     const ref = React.useRef<HTMLInputElement>(null);
-
     React.useEffect(() => {
-        if (ref.current) {
-            ref.current.indeterminate = indeterminate;
-        }
+        if (ref.current) ref.current.indeterminate = indeterminate;
     }, [indeterminate]);
-
     return (
         <input
             ref={ref}
@@ -73,12 +66,10 @@ const HeaderCheckbox: React.FC<{ checked: boolean; indeterminate: boolean }> = (
             checked={checked}
             disabled
             style={{ cursor: 'default', opacity: checked || indeterminate ? 1 : 0.7 }}
-            onChange={() => {}}
+            onChange={() => { }}
         />
     );
 };
-
-// ─── EDITABLE NUM ─────────────────────────────────────────────────────────
 
 interface EditableNumProps {
     value: number;
@@ -97,9 +88,7 @@ interface EditableNumProps {
 const EditableNum: React.FC<EditableNumProps> = ({
     value, studentId, weekNumber, field, saving, onSave
 }) => {
-    const [local, setLocal] = React.useState<string>(
-        value ? String(Math.round(value)) : ''
-    );
+    const [local, setLocal] = React.useState<string>(value ? String(Math.round(value)) : '');
     const savingKey = `wr-${field}-${studentId}-${weekNumber}`;
     const isSavingThis = saving === savingKey;
 
@@ -109,9 +98,7 @@ const EditableNum: React.FC<EditableNumProps> = ({
 
     const commit = () => {
         const num = Number(local) || 0;
-        if (num !== Math.round(value)) {
-            onSave(studentId, weekNumber, field, num);
-        }
+        if (num !== Math.round(value)) onSave(studentId, weekNumber, field, num);
     };
 
     return (
@@ -122,10 +109,7 @@ const EditableNum: React.FC<EditableNumProps> = ({
             value={local}
             disabled={!!saving}
             style={{ opacity: isSavingThis ? 0.5 : 1 }}
-            onChange={e => {
-                const v = e.target.value.replace(/[^\d]/g, '');
-                setLocal(v);
-            }}
+            onChange={e => setLocal(e.target.value.replace(/[^\d]/g, ''))}
             onBlur={commit}
             onKeyDown={e => {
                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
@@ -138,8 +122,6 @@ const EditableNum: React.FC<EditableNumProps> = ({
     );
 };
 
-// ─── ГЛАВНЫЙ КОМПОНЕНТ ТАБЛИЦЫ ───────────────────────────────────────────
-
 const JournalWeekTable: React.FC<Props> = ({
     weekNumber, lessons, students, attLookup, scoreLookup, weekResults,
     saving, onAttToggle, onScoreChange, onCommentOpen, onWeekFieldUpdate,
@@ -147,177 +129,39 @@ const JournalWeekTable: React.FC<Props> = ({
     return (
         <div className="w-full" style={s.container}>
             <style>{`
-                .omz-table-wrapper {
-                    overflow-x: hidden; /* Убираем агрессивный скролл */
-                    width: 100%;
-                    position: relative;
-                }
+                .omz-table-wrapper { overflow-x: hidden; width: 100%; position: relative; }
+                .omz-table { border-collapse: separate; border-spacing: 0; width: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+                .omz-table .sticky-col { position: sticky; left: 0; z-index: 10; border-right: 2px solid #F2F4F7 !important; }
+                .omz-table th.sticky-col { z-index: 20; background-color: #FCFCFD !important; }
+                .omz-table td.sticky-col { background-color: #FFFFFF !important; }
+                .omz-row:hover td.sticky-col { background-color: #F9FAFB !important; }
+                .omz-table th { background-color: #FCFCFD; color: #101828; font-weight: 600; border-bottom: 1px solid #EAECF0; border-top: 1px solid #EAECF0; }
+                .omz-table td { border-bottom: 1px solid #EAECF0; padding: 6px 8px; vertical-align: middle; background: #FFFFFF; }
+                .omz-row:hover td { background: #F9FAFB; }
+                .col-divider { border-right: 1px solid #EAECF0; }
 
-                .omz-table {
-                    border-collapse: separate;
-                    border-spacing: 0;
-                    width: 100%;
-                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-                }
+                .crm-cell-combo { display: inline-flex; align-items: center; border: 1px solid #D0D5DD; border-radius: 8px; background: #FFFFFF; overflow: hidden; box-shadow: 0 1px 2px rgba(16,24,40,0.05); transition: all 0.15s ease; height: 32px; }
+                .crm-cell-combo.active { border-color: #2F60E6; box-shadow: 0 0 0 1px #2F60E6, 0 1px 2px rgba(16,24,40,0.05); }
+                .crm-cell-combo.late { border-color: #F59E0B; box-shadow: 0 0 0 1px #F59E0B, 0 1px 2px rgba(16,24,40,0.05); }
 
-                .omz-table .sticky-col {
-                    position: sticky;
-                    left: 0;
-                    z-index: 10;
-                    border-right: 2px solid #F2F4F7 !important;
-                }
+                .crm-att-side { display: flex; align-items: center; gap: 6px; padding: 0 8px; background: #F9FAFB; border-right: 1px solid #EAECF0; height: 100%; flex-shrink: 0; }
+                .crm-score-side { display: flex; align-items: center; height: 100%; }
 
-                .omz-table th.sticky-col {
-                    z-index: 20;
-                    background-color: #FCFCFD !important;
-                }
+                .omz-cmt { background: transparent; border: none; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; color: #D0D5DD; transition: color 0.15s ease; flex-shrink: 0; }
+                .omz-cmt:hover { color: #2F60E6; }
+                .omz-cmt.highlight-blue { color: #2F60E6; }
+                .omz-cmt.highlight-amber { color: #F59E0B; }
 
-                .omz-table td.sticky-col {
-                    background-color: #FFFFFF !important;
-                }
+                .omz-native-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: #2F60E6; margin: 0; }
+                .omz-native-checkbox:disabled { cursor: not-allowed; }
 
-                .omz-row:hover td.sticky-col {
-                    background-color: #F9FAFB !important;
-                }
+                .omz-score { appearance: none; -webkit-appearance: none; background-color: transparent; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 6px center; width: 48px; height: 100%; padding: 0 16px 0 6px; border: none; font-size: 14px; font-weight: 600; color: #101828; cursor: pointer; outline: none; text-align: center; }
+                .omz-score:disabled { color: #98A2B3; cursor: not-allowed; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23D0D5DD' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); }
 
-                .omz-table th {
-                    background-color: #FCFCFD;
-                    color: #101828;
-                    font-weight: 600;
-                    border-bottom: 1px solid #EAECF0;
-                    border-top: 1px solid #EAECF0;
-                }
+                .omz-num { width: 44px; height: 30px; padding: 0; border: 1px solid #D0D5DD; border-radius: 6px; font-size: 14px; font-weight: 500; color: #475467; background: #FFFFFF; text-align: center; box-shadow: 0 1px 2px rgba(16,24,40,0.05); outline: none; transition: all 0.15s ease; }
+                .omz-num:focus { border-color: #2F60E6; box-shadow: 0 0 0 3px rgba(47, 96, 230, 0.1); }
 
-                .omz-table td {
-                    border-bottom: 1px solid #EAECF0;
-                    padding: 6px 8px; /* Сжатые отступы для предотвращения скролла */
-                    vertical-align: middle;
-                    background: #FFFFFF;
-                }
-
-                .omz-row:hover td {
-                    background: #F9FAFB;
-                }
-
-                .col-divider {
-                    border-right: 1px solid #EAECF0;
-                }
-
-                .crm-cell-combo {
-                    display: inline-flex;
-                    align-items: center;
-                    border: 1px solid #D0D5DD;
-                    border-radius: 8px;
-                    background: #FFFFFF;
-                    overflow: hidden;
-                    box-shadow: 0 1px 2px rgba(16,24,40,0.05);
-                    transition: all 0.15s ease;
-                    height: 32px; /* Чуть компактнее по высоте */
-                }
-
-                .crm-cell-combo.active {
-                    border-color: #2F60E6;
-                    box-shadow: 0 0 0 1px #2F60E6, 0 1px 2px rgba(16,24,40,0.05);
-                }
-
-                .crm-att-side {
-                    display: flex;
-                    align-items: center;
-                    gap: 6px;
-                    padding: 0 8px;
-                    background: #F9FAFB;
-                    border-right: 1px solid #EAECF0;
-                    height: 100%;
-                    flex-shrink: 0;
-                }
-
-                .crm-score-side {
-                    display: flex;
-                    align-items: center;
-                    height: 100%;
-                }
-
-                .omz-cmt {
-                    background: transparent;
-                    border: none;
-                    cursor: pointer;
-                    padding: 0;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    color: #D0D5DD;
-                    transition: color 0.2s;
-                    flex-shrink: 0;
-                }
-                .omz-cmt:hover, .omz-cmt.active {
-                    color: #2F60E6;
-                }
-
-                /* Единый стиль чекбоксов */
-                .omz-native-checkbox {
-                    width: 18px;
-                    height: 18px;
-                    cursor: pointer;
-                    accent-color: #2F60E6;
-                    margin: 0;
-                }
-                .omz-native-checkbox:disabled {
-                    cursor: not-allowed;
-                }
-
-                .omz-score {
-                    appearance: none;
-                    -webkit-appearance: none;
-                    background-color: transparent;
-                    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-                    background-repeat: no-repeat;
-                    background-position: right 6px center;
-                    width: 48px;
-                    height: 100%;
-                    padding: 0 16px 0 6px;
-                    border: none;
-                    font-size: 14px;
-                    font-weight: 600;
-                    color: #101828;
-                    cursor: pointer;
-                    outline: none;
-                    text-align: center;
-                }
-
-                .omz-score:disabled {
-                    color: #98A2B3;
-                    cursor: not-allowed;
-                    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23D0D5DD' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
-                }
-
-                .omz-num {
-                    width: 44px;
-                    height: 30px;
-                    padding: 0;
-                    border: 1px solid #D0D5DD;
-                    border-radius: 6px;
-                    font-size: 14px;
-                    font-weight: 500;
-                    color: #475467;
-                    background: #FFFFFF;
-                    text-align: center;
-                    box-shadow: 0 1px 2px rgba(16,24,40,0.05);
-                    outline: none;
-                    transition: all 0.15s ease;
-                }
-                .omz-num:focus {
-                    border-color: #2F60E6;
-                    box-shadow: 0 0 0 3px rgba(47, 96, 230, 0.1);
-                }
-
-                .omz-head-label {
-                    display: inline-flex;
-                    align-items: center;
-                    gap: 6px;
-                    color: #667085;
-                    font-weight: 600;
-                    font-size: 12px;
-                }
+                .omz-head-label { display: inline-flex; align-items: center; gap: 6px; color: #667085; font-weight: 600; font-size: 12px; }
             `}</style>
 
             <div className="omz-table-wrapper">
@@ -332,9 +176,7 @@ const JournalWeekTable: React.FC<Props> = ({
                                     {fmtDate(l.lessonDate)}
                                 </th>
                             ))}
-                            <th colSpan={4} style={s.thEnd}>
-                                END OF WEEK
-                            </th>
+                            <th colSpan={4} style={s.thEnd}>END OF WEEK</th>
                         </tr>
                         <tr>
                             {lessons.map(l => {
@@ -342,8 +184,6 @@ const JournalWeekTable: React.FC<Props> = ({
                                 const presentCount = students.filter(st =>
                                     isPresent(attLookup[`${l.id}-${st.id}`]?.status)
                                 ).length;
-
-                                // Умная логика состояний верхнего чекбокса
                                 const allPresent = total > 0 && presentCount === total;
                                 const isIndeterminate = presentCount > 0 && presentCount < total;
 
@@ -358,10 +198,9 @@ const JournalWeekTable: React.FC<Props> = ({
                             })}
                             <th style={s.thSub}>
                                 <div className="omz-head-label" style={{ justifyContent: 'center' }}>
-                                    {/* Общая посещаемость за неделю */}
-                                    <HeaderCheckbox 
-                                        checked={students.length > 0 && students.every(st => lessons.every(l => isPresent(attLookup[`${l.id}-${st.id}`]?.status)))} 
-                                        indeterminate={students.length > 0 && !students.every(st => lessons.every(l => isPresent(attLookup[`${l.id}-${st.id}`]?.status))) && students.some(st => lessons.some(l => isPresent(attLookup[`${l.id}-${st.id}`]?.status)))} 
+                                    <HeaderCheckbox
+                                        checked={students.length > 0 && students.every(st => lessons.every(l => isPresent(attLookup[`${l.id}-${st.id}`]?.status)))}
+                                        indeterminate={students.length > 0 && !students.every(st => lessons.every(l => isPresent(attLookup[`${l.id}-${st.id}`]?.status))) && students.some(st => lessons.some(l => isPresent(attLookup[`${l.id}-${st.id}`]?.status)))}
                                     />
                                     <span>Att</span>
                                 </div>
@@ -392,7 +231,6 @@ const JournalWeekTable: React.FC<Props> = ({
                             return (
                                 <tr key={student.id} className="omz-row">
                                     <td className="col-divider sticky-col" style={s.tdStudent}>
-                                        {/* Полностью одинаковые шрифты номеров и имен */}
                                         <span style={{ color: '#98A2B3', marginRight: '8px', fontWeight: 500, fontSize: '14px', fontVariantNumeric: 'tabular-nums' }}>
                                             {idx + 1}.
                                         </span>
@@ -406,27 +244,50 @@ const JournalWeekTable: React.FC<Props> = ({
                                         const isSavingAtt = saving === `att-${aKey}`;
                                         const isSavingScore = saving === `score-${aKey}`;
                                         const present = isPresent(att?.status);
-                                        const hasComment = !!att?.absenceReason;
+                                        const isLate = String(att?.status) === 'Late';
+                                        
+                                        // Надежная проверка на наличие текста внутри комментария
+                                        const hasComment = !!(att?.absenceReason && String(att.absenceReason).trim());
+                                        
+                                        // Определяем класс подсветки кнопки в зависимости от CRM статуса
+                                        const highlightClass = isLate ? 'highlight-amber' : hasComment ? 'highlight-blue' : '';
+                                        // Цвет для заливки иконки Lucide
+                                        const activeColor = isLate ? '#F59E0B' : '#2F60E6';
+
                                         const currentScore = (sc && sc.score !== undefined) ? sc.score : 0;
+
+                                        const isLeft = student.isActive === false;
+                                        const canScore = (present || isLate) && !isLeft;
+                                        const canToggleAtt = !isLeft && !isLate;
 
                                         return (
                                             <td key={lesson.id} className="col-divider" style={s.tdCenter}>
-                                                <div className={`crm-cell-combo ${present ? 'active' : ''}`} style={{ opacity: (isSavingAtt || isSavingScore) ? 0.6 : 1 }}>
+                                                <div className={`crm-cell-combo ${present ? 'active' : ''} ${isLate ? 'late' : ''}`} style={{ opacity: (isSavingAtt || isSavingScore || isLeft) ? 0.6 : 1 }}>
                                                     <div className="crm-att-side">
                                                         <button
                                                             type="button"
-                                                            className={`omz-cmt ${hasComment ? 'active' : ''}`}
-                                                            title={att?.absenceReason ?? 'Добавить комментарий'}
-                                                            onClick={() => onCommentOpen(lesson.id, student.id, att)}
+                                                            className={`omz-cmt ${highlightClass}`}
+                                                            title={isLeft ? 'Студент выбыл' : (att?.absenceReason ?? 'Добавить комментарий')}
+                                                            disabled={isLeft}
+                                                            style={{ cursor: isLeft ? 'not-allowed' : 'pointer' }}
+                                                            onClick={() => !isLeft && onCommentOpen(lesson.id, student.id, att)}
                                                         >
-                                                            <MessageSquare size={14} fill={hasComment ? "currentColor" : "none"} />
+                                                            <MessageSquare 
+                                                                size={14} 
+                                                                fill={hasComment ? activeColor : 'none'} 
+                                                            />
                                                         </button>
 
                                                         <input
                                                             type="checkbox"
                                                             className="omz-native-checkbox"
-                                                            checked={present}
-                                                            disabled={!!saving}
+                                                            checked={present || isLate}
+                                                            disabled={!!saving || !canToggleAtt}
+                                                            title={
+                                                                isLeft ? 'Студент выбыл' :
+                                                                    isLate ? 'Студент опоздал — статус меняется через комментарий' :
+                                                                        undefined
+                                                            }
                                                             onChange={() => onAttToggle(lesson.id, student.id)}
                                                         />
                                                     </div>
@@ -435,11 +296,13 @@ const JournalWeekTable: React.FC<Props> = ({
                                                         <select
                                                             className="omz-score"
                                                             value={currentScore}
-                                                            disabled={!!saving}
-                                                            onChange={e => {
-                                                                const v = Number(e.target.value);
-                                                                onScoreChange(lesson.id, student.id, weekNumber, v);
-                                                            }}
+                                                            disabled={!!saving || !canScore}
+                                                            title={
+                                                                isLeft ? 'Студент выбыл' :
+                                                                    !canScore ? 'Студент не присутствовал — оценку поставить нельзя' : undefined
+                                                            }
+                                                            style={{ cursor: canScore ? 'pointer' : 'not-allowed' }}
+                                                            onChange={e => onScoreChange(lesson.id, student.id, weekNumber, Number(e.target.value))}
                                                         >
                                                             <option value={0}>0</option>
                                                             {[1, 2, 3, 4, 5].map(v => (
@@ -452,7 +315,6 @@ const JournalWeekTable: React.FC<Props> = ({
                                         );
                                     })}
 
-                                    {/* END OF WEEK */}
                                     <td style={s.tdCenter}>
                                         <div className="crm-cell-combo" style={{ opacity: 0.6, background: '#F9FAFB' }}>
                                             <div className="crm-att-side" style={{ borderRight: 'none', padding: '0 10px' }}>
@@ -484,11 +346,7 @@ const JournalWeekTable: React.FC<Props> = ({
                                     </td>
 
                                     <td style={s.tdCenter}>
-                                        <span style={{
-                                            ...s.sumPill,
-                                            background: sumSt.bg,
-                                            color: sumSt.color,
-                                        }}>
+                                        <span style={{ ...s.sumPill, background: sumSt.bg, color: sumSt.color }}>
                                             {sum}
                                         </span>
                                     </td>
@@ -502,85 +360,16 @@ const JournalWeekTable: React.FC<Props> = ({
     );
 };
 
-// ─── ОПТИМИЗИРОВАННЫЕ КОМПАКТНЫЕ СТИЛИ ────────────────────────────────────
-
 const s = {
-    container: {
-        background: '#FFFFFF',
-        border: '1px solid #EAECF0',
-        borderRadius: '12px',
-        boxShadow: '0px 1px 3px rgba(16, 24, 40, 0.05)',
-        overflow: 'hidden',
-    } as React.CSSProperties,
-
-    thStudent: {
-        padding: '10px 12px',
-        textAlign: 'left' as const,
-        fontSize: '12px',
-        textTransform: 'uppercase' as const,
-        letterSpacing: '0.04em',
-        minWidth: '160px',
-        maxWidth: '180px',
-    } as React.CSSProperties,
-
-    thDate: {
-        padding: '10px 8px',
-        textAlign: 'center' as const,
-        fontSize: '14px',
-        fontWeight: 700,
-        color: '#101828',
-        minWidth: '105px',
-    } as React.CSSProperties,
-
-    thEnd: {
-        padding: '8px 10px',
-        textAlign: 'center' as const,
-        fontSize: '11px',
-        textTransform: 'uppercase' as const,
-        letterSpacing: '0.04em',
-    } as React.CSSProperties,
-
-    thSub: {
-        padding: '6px 8px',
-        fontSize: '11px',
-        fontWeight: 500,
-        color: '#667085',
-        textAlign: 'center' as const,
-    } as React.CSSProperties,
-
-    tdStudent: {
-        padding: '8px 12px',
-        fontWeight: 500,
-        fontSize: '14px',
-        color: '#344054',
-        whiteSpace: 'nowrap' as const,
-        minWidth: '160px',
-        maxWidth: '180px',
-        textOverflow: 'ellipsis',
-        overflow: 'hidden',
-    } as React.CSSProperties,
-
-    tdCenter: {
-        textAlign: 'center' as const,
-    } as React.CSSProperties,
-
-    sumPill: {
-        display: 'inline-block',
-        padding: '4px 10px',
-        borderRadius: '6px',
-        fontWeight: 700,
-        fontSize: '13px',
-        minWidth: '38px',
-        textAlign: 'center' as const,
-        boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)',
-    } as React.CSSProperties,
-
-    empty: {
-        padding: '30px 16px',
-        textAlign: 'center' as const,
-        fontSize: '14px',
-        color: '#98A2B3',
-    } as React.CSSProperties,
+    container: { background: '#FFFFFF', border: '1px solid #EAECF0', borderRadius: '12px', boxShadow: '0px 1px 3px rgba(16, 24, 40, 0.05)', overflow: 'hidden' } as React.CSSProperties,
+    thStudent: { padding: '10px 12px', textAlign: 'left' as const, fontSize: '12px', textTransform: 'uppercase' as const, letterSpacing: '0.04em', minWidth: '160px', maxWidth: '180px' } as React.CSSProperties,
+    thDate: { padding: '10px 8px', textAlign: 'center' as const, fontSize: '14px', fontWeight: 700, color: '#101828', minWidth: '105px' } as React.CSSProperties,
+    thEnd: { padding: '8px 10px', textAlign: 'center' as const, fontSize: '11px', textTransform: 'uppercase' as const, letterSpacing: '0.04em' } as React.CSSProperties,
+    thSub: { padding: '6px 8px', fontSize: '11px', fontWeight: 500, color: '#667085', textAlign: 'center' as const } as React.CSSProperties,
+    tdStudent: { padding: '8px 12px', fontWeight: 500, fontSize: '14px', color: '#344054', whiteSpace: 'nowrap' as const, minWidth: '160px', maxWidth: '180px', textOverflow: 'ellipsis', overflow: 'hidden' } as React.CSSProperties,
+    tdCenter: { textAlign: 'center' as const } as React.CSSProperties,
+    sumPill: { display: 'inline-block', padding: '4px 10px', borderRadius: '6px', fontWeight: 700, fontSize: '13px', minWidth: '38px', textAlign: 'center' as const, boxShadow: '0px 1px 2px rgba(0, 0, 0, 0.05)' } as React.CSSProperties,
+    empty: { padding: '30px 16px', textAlign: 'center' as const, fontSize: '14px', color: '#98A2B3' } as React.CSSProperties,
 };
 
 export default JournalWeekTable;

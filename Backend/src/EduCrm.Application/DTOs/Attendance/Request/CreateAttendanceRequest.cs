@@ -10,6 +10,7 @@ public class CreateAttendanceRequest
     [Required] public int StudentId { get; set; }
 
     [Required] public AttendanceStatus Status { get; set; }
+    public int? LateMinutes { get; set; }
 
     public string? AbsenceReason { get; set; }
     public string? MentorNote { get; set; }

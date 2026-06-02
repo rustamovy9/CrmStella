@@ -11,6 +11,7 @@ public class AttendanceResponse
     public string? AbsenceReason { get; set; }
     public string? MentorNote { get; set; }
     public int? MarkedByMentorId { get; set; }
+    public int? LateMinutes { get; set; }
     public string? MarkedByMentorName { get; set; }
     public DateTime MarkedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }

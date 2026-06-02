@@ -16,6 +16,15 @@ import { AddLessonModal } from '../../../components/modals/AddLessonModal';
 
 const STATUS = { Present: 1, Absent: 2, Late: 3, Excused: 4 } as const;
 
+const EMPTY_COMMENT = { 
+    open: false, 
+    lessonId: 0, 
+    studentId: 0, 
+    text: '', 
+    lateMinutes: 0,
+    status: STATUS.Present
+};
+
 const JournalPage: React.FC = () => {
     const { groupId } = useParams<{ groupId: string }>();
     const navigate = useNavigate();
@@ -25,7 +34,7 @@ const JournalPage: React.FC = () => {
     const [attMap, setAttMap] = useState<Record<number, AttendanceResponse[]>>({});
     const [scoreMap, setScoreMap] = useState<Record<number, LessonScoreResponse[]>>({});
     const [weekResults, setWeekResults] = useState<Record<number, WeekResultResponse[]>>({});
-    const [groupStudents, setGroupStudents] = useState<{ id: number; name: string }[]>([]);
+    const [groupStudents, setGroupStudents] = useState<{ id: number; name: string; isActive?: boolean; leftAt?: string | null }[]>([]);
     const [loading, setLoading] = useState(true);
     const [openWeeks, setOpenWeeks] = useState<Set<number>>(new Set());
     const [saving, setSaving] = useState<string | null>(null);
@@ -38,9 +47,11 @@ const JournalPage: React.FC = () => {
         lessonId: number;
         studentId: number;
         text: string;
-    }>({ open: false, lessonId: 0, studentId: 0, text: '' });
+        lateMinutes: number;
+        status: number;
+    }>(EMPTY_COMMENT);
 
-    // ─── ЗАГРУЗКА ─────────────────────────────────────────────────────────
+    const closeCommentModal = () => setCommentModal(EMPTY_COMMENT);
 
     const loadAttScores = async (allLessons: LessonResponse[]) => {
         if (allLessons.length === 0) return;
@@ -64,7 +75,7 @@ const JournalPage: React.FC = () => {
         setScoreMap(sMap);
     };
 
-    const loadWeekResults = async (weeks: number[]) => {
+    const loadWeekResults = async (weeks: number[], isInitialLoad = false) => {
         if (weeks.length === 0) return;
         const results = await Promise.all(
             weeks.map(wn =>
@@ -73,26 +84,44 @@ const JournalPage: React.FC = () => {
                     .catch(() => ({ wn, data: [] as WeekResultResponse[] }))
             )
         );
-        const map: Record<number, WeekResultResponse[]> = {};
-        results.forEach(r => { map[r.wn] = r.data; });
-        setWeekResults(map);
+
+        setWeekResults(prev => {
+            const nextMap = isInitialLoad ? {} : { ...prev };
+            results.forEach(r => { nextMap[r.wn] = r.data; });
+            return nextMap;
+        });
+    };
+
+    const recalcAndReload = async (studentId: number, weekNumbers: number[]) => {
+        await Promise.all(
+            weekNumbers.map(wn =>
+                journalService.recalculateWeekResult({
+                    studentId,
+                    groupId: gid,
+                    weekNumber: wn,
+                }).catch(err => console.error('Recalc error:', err))
+            )
+        );
+        await loadWeekResults(weekNumbers);
     };
 
     const loadAll = async () => {
         setLoading(true);
         try {
-            // загружаем студентов группы
             const gsData = await groupStudentService.getById(gid);
             const studentList = gsData
-                .filter(gs => gs.isActive)
                 .map(gs => ({
                     id: gs.studentId,
-                    name: gs.studentName  // правильное поле
+                    name: gs.studentName,
+                    isActive: gs.isActive,
+                    leftAt: gs.leftAt ?? null,
                 }))
-                .sort((a, b) => a.name.localeCompare(b.name));
+                .sort((a, b) => {
+                    if (a.isActive !== b.isActive) return a.isActive ? -1 : 1;
+                    return a.name.localeCompare(b.name);
+                });
             setGroupStudents(studentList);
 
-            // загружаем уроки
             const res = await journalService.getLessonsByGroup(gid);
             const data = res.data.data ?? [];
             setLessons(data);
@@ -101,7 +130,7 @@ const JournalPage: React.FC = () => {
 
             await Promise.all([
                 loadAttScores(data),
-                loadWeekResults(weeks),
+                loadWeekResults(weeks, true),
             ]);
 
             if (weeks.length > 0) {
@@ -119,8 +148,6 @@ const JournalPage: React.FC = () => {
     useEffect(() => {
         if (gid) loadAll();
     }, [gid]);
-
-    // ─── ГРУППИРОВКА ──────────────────────────────────────────────────────
 
     const lessonsByWeek = useMemo(() => {
         const map: Record<number, LessonResponse[]> = {};
@@ -142,11 +169,9 @@ const JournalPage: React.FC = () => {
     );
 
     const allWeekNumbers = useMemo(() =>
-        Object.keys(lessonsByWeek).map(Number),
+        Object.keys(lessonsByWeek).map(Number).sort((a, b) => a - b),
         [lessonsByWeek]
     );
-
-    // ─── LOOKUPS ──────────────────────────────────────────────────────────
 
     const attLookup = useMemo(() => {
         const m: Record<string, AttendanceResponse> = {};
@@ -164,8 +189,6 @@ const JournalPage: React.FC = () => {
         return m;
     }, [scoreMap]);
 
-    // студенты — берём из groupStudents (всегда актуально)
-    // fallback на attMap/scoreMap если groupStudents пустой
     const students = useMemo(() => {
         if (groupStudents.length > 0) return groupStudents;
 
@@ -184,7 +207,12 @@ const JournalPage: React.FC = () => {
             .sort((a, b) => a.name.localeCompare(b.name));
     }, [groupStudents, attMap, scoreMap, weekResults]);
 
-    // ─── ДЕЙСТВИЯ ─────────────────────────────────────────────────────────
+    const chartStudentsFormat = useMemo(() => {
+        return students.map(s => ({
+            id: s.id,
+            fullName: s.name
+        }));
+    }, [students]);
 
     const handleAttToggle = async (lessonId: number, studentId: number) => {
         const key = `${lessonId}-${studentId}`;
@@ -208,27 +236,31 @@ const JournalPage: React.FC = () => {
                     throw createErr;
                 }
             } else {
-                const isPresent = String(existing.status) === 'Present';
-                const newStatus = isPresent ? STATUS.Absent : STATUS.Present;
+                const isP = String(existing.status) === 'Present';
+                const newStatus = isP ? STATUS.Absent : STATUS.Present;
 
                 await journalService.updateAttendance(existing.id, {
                     status: newStatus,
                     absenceReason: existing.absenceReason,
                     mentorNote: existing.mentorNote,
                 });
+
+                if (newStatus === STATUS.Absent) {
+                    const existingScore = scoreLookup[key];
+                    if (existingScore && existingScore.score > 0) {
+                        await journalService.updateLessonScore(existingScore.id, {
+                            score: 0,
+                            mentorFeedback: existingScore.mentorFeedback,
+                        });
+                    }
+                }
             }
 
             await loadAttScores(lessons);
 
-            // ✅ посещаемость входит в TotalScore (attendedInWeek) — пересчитываем неделю
             const lesson = lessons.find(l => l.id === lessonId);
             if (lesson) {
-                await journalService.recalculateWeekResult({
-                    studentId,
-                    groupId: gid,
-                    weekNumber: lesson.weekNumber,
-                });
-                await loadWeekResults([lesson.weekNumber]);
+                await recalcAndReload(studentId, [lesson.weekNumber]);
             }
         } catch (err: any) {
             console.error('Attendance error:', err?.response?.data || err);
@@ -258,7 +290,6 @@ const JournalPage: React.FC = () => {
                 } catch (createErr: any) {
                     if (createErr?.response?.data?.errorType === 3 ||
                         createErr?.response?.status === 409) {
-                        console.warn('LessonScore already exists, reloading...');
                         await loadAttScores(lessons);
                         return;
                     }
@@ -273,12 +304,9 @@ const JournalPage: React.FC = () => {
 
             await loadAttScores(lessons);
 
-            await journalService.recalculateWeekResult({
-                studentId,
-                groupId: gid,
-                weekNumber,
-            });
-            await loadWeekResults([weekNumber]);
+            const lesson = lessons.find(l => l.id === lessonId);
+            const wn = lesson?.weekNumber ?? weekNumber;
+            await recalcAndReload(studentId, [wn]);
 
         } catch (err: any) {
             console.error('Score change error:', err?.response?.data || err);
@@ -308,31 +336,33 @@ const JournalPage: React.FC = () => {
     };
 
     const handleSaveComment = async () => {
-        const { att, lessonId, studentId, text } = commentModal;
+        const { att, lessonId, studentId, text, lateMinutes, status } = commentModal;
         setSaving('comment');
         try {
             if (!att) {
                 await journalService.createAttendance({
-                    lessonId, studentId,
-                    status: STATUS.Absent,
+                    lessonId, 
+                    studentId,
+                    status: status,
                     absenceReason: text,
+                    lateMinutes: status === STATUS.Late ? lateMinutes : null,
                 });
             } else {
-                const statusNum = att.status === 'Present' ? STATUS.Present
-                    : att.status === 'Late' ? STATUS.Late
-                        : att.status === 'Excused' ? STATUS.Excused
-                            : STATUS.Absent;
                 await journalService.updateAttendance(att.id, {
-                    status: statusNum,
+                    status: status,
                     absenceReason: text,
+                    lateMinutes: status === STATUS.Late ? lateMinutes : null,
                 });
             }
             await loadAttScores(lessons);
+
+            const lesson = lessons.find(l => l.id === lessonId);
+            if (lesson) await recalcAndReload(studentId, [lesson.weekNumber]);
         } catch (err) {
             console.error('Comment error:', err);
         } finally {
             setSaving(null);
-            setCommentModal({ open: false, lessonId: 0, studentId: 0, text: '' });
+            closeCommentModal();
         }
     };
 
@@ -342,8 +372,6 @@ const JournalPage: React.FC = () => {
             next.has(wn) ? next.delete(wn) : next.add(wn);
             return next;
         });
-
-    // ─── RENDER ───────────────────────────────────────────────────────────
 
     if (loading) return (
         <div style={s.center}>
@@ -355,6 +383,8 @@ const JournalPage: React.FC = () => {
             <span style={{ color: '#64748B', fontSize: '14px' }}>Загрузка журнала...</span>
         </div>
     );
+
+    const isLate = commentModal.status === STATUS.Late;
 
     return (
         <div style={s.page}>
@@ -402,10 +432,13 @@ const JournalPage: React.FC = () => {
                 </div>
             ) : (
                 <>
-                    <JournalChart
-                        weekResults={weekResults}
-                        weeks={allWeekNumbers}
-                    />
+                    <div style={s.chartWrapper}>
+                        <JournalChart
+                            weekResults={weekResults}
+                            weeks={allWeekNumbers}
+                            students={chartStudentsFormat}
+                        />
+                    </div>
 
                     <div style={s.weekList}>
                         {sortedWeeks.map(wn => {
@@ -437,15 +470,24 @@ const JournalPage: React.FC = () => {
                                             saving={saving}
                                             onAttToggle={handleAttToggle}
                                             onScoreChange={handleScoreChange}
-                                            onCommentOpen={(lessonId, studentId, att) =>
+                                            onCommentOpen={(lessonId, studentId, att) => {
+                                                const currentStatus = att
+                                                    ? (att.status === 'Present' ? STATUS.Present
+                                                        : att.status === 'Late' ? STATUS.Late
+                                                        : att.status === 'Excused' ? STATUS.Excused
+                                                        : STATUS.Absent)
+                                                    : STATUS.Present;
+
                                                 setCommentModal({
                                                     open: true,
                                                     att,
                                                     lessonId,
                                                     studentId,
                                                     text: att?.absenceReason ?? '',
-                                                })
-                                            }
+                                                    lateMinutes: att?.lateMinutes ?? 0,
+                                                    status: currentStatus
+                                                });
+                                            }}
                                             onWeekFieldUpdate={handleWeekFieldUpdate}
                                         />
                                     )}
@@ -461,7 +503,7 @@ const JournalPage: React.FC = () => {
                     isOpen={showAddLesson}
                     groupId={gid}
                     currentWeek={currentWeek}
-                    lessons={lessons} // <--- ВОТ ЭТОТ ПРОП ДОБАВИЛСЯ
+                    lessons={lessons}
                     onClose={() => setShowAddLesson(false)}
                     onLessonCreated={() => {
                         setShowAddLesson(false);
@@ -474,33 +516,58 @@ const JournalPage: React.FC = () => {
                 <div style={s.overlay}>
                     <div style={s.modal}>
                         <div style={s.modalHeader}>
-                            <span style={s.modalTitle}>Комментарий к посещаемости</span>
-                            <button
-                                style={s.modalClose}
-                                onClick={() => setCommentModal({
-                                    open: false, lessonId: 0, studentId: 0, text: ''
-                                })}
-                            >
+                            <span style={s.modalTitle}>Управление посещаемостью</span>
+                            <button style={s.modalClose} onClick={closeCommentModal}>
                                 <X size={18} />
                             </button>
                         </div>
+
+                        <label style={s.label}>Статус посещаемости</label>
+                        <select
+                            style={s.selectInput}
+                            value={commentModal.status}
+                            onChange={e => setCommentModal(prev => ({
+                                ...prev,
+                                status: Number(e.target.value),
+                                lateMinutes: Number(e.target.value) === STATUS.Late ? prev.lateMinutes : 0
+                            }))}
+                        >
+                            <option value={STATUS.Present}>Присутствует</option>
+                            <option value={STATUS.Late}>Опоздал</option>
+                            <option value={STATUS.Absent}>Отсутствует</option>
+                            <option value={STATUS.Excused}>Уважительная причина</option>
+                        </select>
+
+                        {isLate && (
+                            <>
+                                <label style={s.label}>Минут опоздания</label>
+                                <input
+                                    type="number"
+                                    min={0}
+                                    style={s.numInput}
+                                    placeholder="Например: 15"
+                                    value={commentModal.lateMinutes || ''}
+                                    onChange={e => setCommentModal(prev => ({
+                                        ...prev,
+                                        lateMinutes: Math.max(0, Number(e.target.value)) || 0
+                                    }))}
+                                />
+                            </>
+                        )}
+
+                        <label style={s.label}>Комментарий / Причина</label>
                         <textarea
                             style={s.textarea}
                             placeholder="Причина отсутствия или опоздания..."
                             value={commentModal.text}
-                            rows={4}
+                            rows={3}
                             onChange={e => setCommentModal(prev => ({
                                 ...prev, text: e.target.value
                             }))}
                         />
+
                         <div style={s.modalFooter}>
-                            <button
-                                className="jcancelm"
-                                style={s.cancelBtn}
-                                onClick={() => setCommentModal({
-                                    open: false, lessonId: 0, studentId: 0, text: ''
-                                })}
-                            >
+                            <button className="jcancelm" style={s.cancelBtn} onClick={closeCommentModal}>
                                 Отмена
                             </button>
                             <button
@@ -520,189 +587,30 @@ const JournalPage: React.FC = () => {
 };
 
 const s = {
-    page: {
-        padding: '24px 32px',
-        background: '#F8FAFC',
-        minHeight: '100vh',
-        fontFamily: 'system-ui, -apple-system, sans-serif',
-    } as React.CSSProperties,
-
-    center: {
-        display: 'flex',
-        flexDirection: 'column' as const,
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '12px',
-        height: '60vh',
-    } as React.CSSProperties,
-
-    spinner: {
-        width: '28px',
-        height: '28px',
-        border: '3px solid #E2E8F0',
-        borderTopColor: '#6366F1',
-        borderRadius: '50%',
-    } as React.CSSProperties,
-
-    header: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '24px',
-    } as React.CSSProperties,
-
-    backBtn: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
-        background: 'none',
-        border: 'none',
-        cursor: 'pointer',
-        padding: 0,
-        color: '#0F172A',
-        transition: 'color 0.15s',
-    } as React.CSSProperties,
-
-    addBtn: {
-        display: 'flex',
-        alignItems: 'center',
-        gap: '6px',
-        background: '#4F46E5',
-        color: '#FFFFFF',
-        border: 'none',
-        borderRadius: '10px',
-        padding: '10px 18px',
-        fontSize: '13px',
-        fontWeight: 600,
-        cursor: 'pointer',
-        transition: 'background 0.15s',
-    } as React.CSSProperties,
-
-    emptyWrap: {
-        display: 'flex',
-        flexDirection: 'column' as const,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '64px 24px',
-        background: '#FFFFFF',
-        borderRadius: '20px',
-        border: '1px solid #E2E8F0',
-        textAlign: 'center' as const,
-    } as React.CSSProperties,
-
-    weekList: {
-        display: 'flex',
-        flexDirection: 'column' as const,
-        gap: '12px',
-    } as React.CSSProperties,
-
-    weekCard: {
-        background: '#FFFFFF',
-        border: '1px solid #E2E8F0',
-        borderRadius: '16px',
-        overflow: 'hidden',
-        boxShadow: '0 1px 3px rgba(15,23,42,0.04)',
-    } as React.CSSProperties,
-
-    weekHeader: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '18px 24px',
-        background: 'none',
-        border: 'none',
-        width: '100%',
-        textAlign: 'left' as const,
-        cursor: 'pointer',
-        transition: 'background 0.15s',
-    } as React.CSSProperties,
-
-    weekTitle: {
-        fontSize: '17px',
-        fontWeight: 700,
-        color: '#0F172A',
-    } as React.CSSProperties,
-
-    overlay: {
-        position: 'fixed' as const,
-        inset: 0,
-        background: 'rgba(15,23,42,0.45)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-    } as React.CSSProperties,
-
-    modal: {
-        background: '#FFFFFF',
-        borderRadius: '20px',
-        width: '420px',
-        padding: '24px',
-        boxShadow: '0 20px 40px rgba(15,23,42,0.15)',
-    } as React.CSSProperties,
-
-    modalHeader: {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: '16px',
-    } as React.CSSProperties,
-
-    modalTitle: {
-        fontSize: '16px',
-        fontWeight: 700,
-        color: '#0F172A',
-    } as React.CSSProperties,
-
-    modalClose: {
-        background: 'none',
-        border: 'none',
-        cursor: 'pointer',
-        color: '#94A3B8',
-        padding: '4px',
-        borderRadius: '6px',
-    } as React.CSSProperties,
-
-    textarea: {
-        width: '100%',
-        padding: '12px',
-        border: '1px solid #E2E8F0',
-        borderRadius: '10px',
-        fontSize: '13px',
-        color: '#0F172A',
-        resize: 'vertical' as const,
-        fontFamily: 'inherit',
-        boxSizing: 'border-box' as const,
-        marginBottom: '16px',
-    } as React.CSSProperties,
-
-    modalFooter: {
-        display: 'flex',
-        justifyContent: 'flex-end',
-        gap: '10px',
-    } as React.CSSProperties,
-
-    cancelBtn: {
-        padding: '9px 18px',
-        border: '1px solid #E2E8F0',
-        borderRadius: '10px',
-        background: '#FFFFFF',
-        color: '#64748B',
-        fontSize: '13px',
-        fontWeight: 600,
-        cursor: 'pointer',
-    } as React.CSSProperties,
-
-    saveBtn: {
-        padding: '9px 18px',
-        border: 'none',
-        borderRadius: '10px',
-        background: '#4F46E5',
-        color: '#FFFFFF',
-        fontSize: '13px',
-        fontWeight: 600,
-        cursor: 'pointer',
-    } as React.CSSProperties,
+    page: { padding: '24px 32px', background: '#F8FAFC', minHeight: '100vh', fontFamily: 'system-ui, -apple-system, sans-serif' } as React.CSSProperties,
+    center: { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', gap: '12px', height: '60vh' } as React.CSSProperties,
+    spinner: { width: '28px', height: '28px', border: '3px solid #E2E8F0', borderTopColor: '#6366F1', borderRadius: '50%' } as React.CSSProperties,
+    header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' } as React.CSSProperties,
+    backBtn: { display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#0F172A', transition: 'color 0.15s' } as React.CSSProperties,
+    addBtn: { display: 'flex', alignItems: 'center', gap: '6px', background: '#4F46E5', color: '#FFFFFF', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s' } as React.CSSProperties,
+    emptyWrap: { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', padding: '64px 24px', background: '#FFFFFF', borderRadius: '20px', border: '1px solid #E2E8F0', textAlign: 'center' as const } as React.CSSProperties,
+    chartWrapper: { marginBottom: '28px' } as React.CSSProperties,
+    weekList: { display: 'flex', flexDirection: 'column' as const, gap: '12px' } as React.CSSProperties,
+    weekCard: { background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' } as React.CSSProperties,
+    weekHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 24px', background: 'none', border: 'none', width: '100%', textAlign: 'left' as const, cursor: 'pointer', transition: 'background 0.15s' } as React.CSSProperties,
+    weekTitle: { fontSize: '17px', fontWeight: 700, color: '#0F172A' } as React.CSSProperties,
+    overlay: { position: 'fixed' as const, inset: 0, background: 'rgba(15,23,42,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 } as React.CSSProperties,
+    modal: { background: '#FFFFFF', borderRadius: '20px', width: '420px', padding: '24px', boxShadow: '0 20px 40px rgba(15,23,42,0.15)' } as React.CSSProperties,
+    modalHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' } as React.CSSProperties,
+    modalTitle: { fontSize: '16px', fontWeight: 700, color: '#0F172A' } as React.CSSProperties,
+    modalClose: { background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: '4px', borderRadius: '6px' } as React.CSSProperties,
+    selectInput: { width: '100%', padding: '10px 12px', border: '1px solid #E2E8F0', borderRadius: '10px', fontSize: '14px', color: '#0F172A', fontFamily: 'inherit', boxSizing: 'border-box' as const, marginBottom: '16px', outline: 'none', background: '#FFFFFF', cursor: 'pointer' } as React.CSSProperties,
+    textarea: { width: '100%', padding: '12px', border: '1px solid #E2E8F0', borderRadius: '10px', fontSize: '13px', color: '#0F172A', resize: 'vertical' as const, fontFamily: 'inherit', boxSizing: 'border-box' as const, marginBottom: '16px' } as React.CSSProperties,
+    label: { display: 'block', fontSize: '12px', fontWeight: 600, color: '#64748B', marginBottom: '6px' } as React.CSSProperties,
+    numInput: { width: '100%', padding: '10px 12px', border: '1px solid #E2E8F0', borderRadius: '10px', fontSize: '14px', color: '#0F172A', fontFamily: 'inherit', boxSizing: 'border-box' as const, marginBottom: '16px', outline: 'none' } as React.CSSProperties,
+    modalFooter: { display: 'flex', justifyContent: 'flex-end', gap: '10px' } as React.CSSProperties,
+    cancelBtn: { padding: '9px 18px', border: '1px solid #E2E8F0', borderRadius: '10px', background: '#FFFFFF', color: '#64748B', fontSize: '13px', fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
+    saveBtn: { padding: '9px 18px', border: 'none', borderRadius: '10px', background: '#4F46E5', color: '#FFFFFF', fontSize: '13px', fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
 };
 
 export default JournalPage;
