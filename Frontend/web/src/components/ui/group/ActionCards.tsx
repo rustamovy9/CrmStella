@@ -1,6 +1,5 @@
-// components/ui/ActionCards.tsx
 import React, { useState } from 'react';
-import { UserPlus, BookOpen, Calendar, GraduationCap, ChevronRight, Plus } from 'lucide-react';
+import { UserPlus, BookOpen, Calendar, GraduationCap, ChevronRight, Plus, Clock } from 'lucide-react';
 
 export interface GroupDto {
     id: number;
@@ -16,14 +15,21 @@ export interface GroupDto {
     endDate?: string;
 }
 
-interface ActionCardsProps {
-    group: GroupDto;
-    onNavigate: (path: string) => void;
-    onEnrollClick: () => void;
-    onAddScheduleClick: () => void; // Новый обработчик для модалки
+interface TodaySchedule {
+    startTime: string;
+    endTime: string;
+    room?: string;
 }
 
-/* ── Вспомогательная карточка ── */
+interface ActionCardsProps {
+    group: GroupDto;
+    todaySchedule?: TodaySchedule | null;
+    todayDayName?: string;
+    onNavigate: (path: string) => void;
+    onEnrollClick: () => void;
+    onAddScheduleClick: () => void;
+}
+
 interface CardProps {
     icon: React.ReactNode;
     iconBg: string;
@@ -76,7 +82,7 @@ const Card: React.FC<CardProps> = ({ icon, iconBg, iconColor, title, subtitle, a
                 <div style={{ fontSize: '13px', fontWeight: 700, color: '#0F172A', marginBottom: '3px' }}>
                     {title}
                 </div>
-                <div style={{ fontSize: '12px', color: '#64748B', lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: '12px', color: '#64748B', lineHeight: 1.4 }}>
                     {subtitle}
                 </div>
             </div>
@@ -88,17 +94,31 @@ const Card: React.FC<CardProps> = ({ icon, iconBg, iconColor, title, subtitle, a
     );
 };
 
-/* ── Главный компонент ── */
-export const ActionCards: React.FC<ActionCardsProps> = ({ group, onNavigate, onEnrollClick, onAddScheduleClick }) => {
+export const ActionCards: React.FC<ActionCardsProps> = ({
+    group, todaySchedule,
+    onNavigate, onEnrollClick, onAddScheduleClick
+}) => {
     const hasSchedule = !!group.schedule && group.schedule.trim() !== '';
+    const SHORT_DAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
+    const getTodayShort = () => SHORT_DAYS[new Date().getDay()];
 
-    const scheduleSubtitle = hasSchedule
-        ? group.schedule
-        : (
+    // Subtitle для карточки расписания
+    let scheduleSubtitle: React.ReactNode;
+
+    if (todaySchedule) {
+        scheduleSubtitle = (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#0F172A', fontWeight: 700 }}>
+                <Clock size={11} color="#10B981" />
+                {getTodayShort()} · {todaySchedule.startTime}–{todaySchedule.endTime}
+                {todaySchedule.room && <span style={{ color: '#64748B', fontWeight: 500 }}> · {todaySchedule.room}</span>}
+            </span>
+        );
+    } else {
+        scheduleSubtitle = (
             <span
-                onClick={(e) => { 
-                    e.stopPropagation(); // Изолируем клик от самой карточки
-                    onAddScheduleClick(); 
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onAddScheduleClick();
                 }}
                 style={{
                     display: 'inline-flex', alignItems: 'center', gap: '4px',
@@ -107,9 +127,10 @@ export const ActionCards: React.FC<ActionCardsProps> = ({ group, onNavigate, onE
                     fontSize: '11px',
                 }}
             >
-                <Plus size={11} /> Добавить расписание
+                <Plus size={11} /> Добавить на сегодня
             </span>
         );
+    }
 
     return (
         <div style={{
@@ -140,7 +161,7 @@ export const ActionCards: React.FC<ActionCardsProps> = ({ group, onNavigate, onE
                 title="Расписание занятий"
                 subtitle={scheduleSubtitle}
                 accent="#F59E0B"
-                onClick={hasSchedule ? () => onNavigate(`/admin/schedules`) : undefined}
+                onClick={hasSchedule ? () => onNavigate(`/admin/schedules`) : onAddScheduleClick}
                 arrow={hasSchedule}
             />
             <Card

@@ -16,7 +16,28 @@ import { StudentTable } from '../../../components/ui/group/StudentTable';
 import type { ApiResult } from '../../../types/auth';
 import type { AxiosResponse } from 'axios';
 
-// --- КАСТOМНЫЙ СЕЛЕКТ С ЖИВЫМ ПОИСКОМ СТУДЕНТОВ ---
+// ─── HELPERS ──────────────────────────────────────────────
+const getTodayDayNumber = (): number => {
+    const js = new Date().getDay();
+    return js === 0 ? 7 : js;
+};
+
+const DAY_NAMES: Record<number, string> = {
+    1: 'Понедельник', 2: 'Вторник', 3: 'Среда', 4: 'Четверг',
+    5: 'Пятница', 6: 'Суббота', 7: 'Воскресенье',
+};
+
+const STRING_TO_DAY_NUM: Record<string, number> = {
+    Monday: 1, Tuesday: 2, Wednesday: 3, Thursday: 4,
+    Friday: 5, Saturday: 6, Sunday: 7,
+};
+
+const dayOfWeekToNum = (val: any): number => {
+    if (typeof val === 'number') return val;
+    return STRING_TO_DAY_NUM[String(val)] || Number(val) || 0;
+};
+
+// ─── КАСТOМНЫЙ СЕЛЕКТ СТУДЕНТОВ ────────────────────────────
 interface StudentAsyncSelectProps {
     onSelect: (id: number) => void;
     disabled?: boolean;
@@ -118,7 +139,7 @@ const StudentAsyncSelect: React.FC<StudentAsyncSelectProps> = ({ onSelect, disab
 };
 
 
-// --- ОСНОВНОЙ КОМПОНЕНТ СТРАНИЦЫ ---
+// ─── ОСНОВНОЙ КОМПОНЕНТ ────────────────────────────────────
 const GroupDetailsPage: React.FC = () => {
     const { id } = useParams<{ id: string }>();
     const groupId = Number(id);
@@ -131,8 +152,7 @@ const GroupDetailsPage: React.FC = () => {
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState<string>('');
-    const [filterTab, setFilterTab] = useState<'all' | 'active' | 'left'>('active');
-
+    const [filterTab, setFilterTab] = useState<'all' | 'active' | 'left' | 'transferred'>('active');
     const [isEnrollOpen, setIsEnrollOpen] = useState<boolean>(false);
     const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -153,7 +173,6 @@ const GroupDetailsPage: React.FC = () => {
     const [endTime, setEndTime] = useState<string>('20:00');
     const [isScheduling, setIsScheduling] = useState<boolean>(false);
 
-    // --- МОДАЛКА РЕДАКТИРОВАНИЯ ГРУППЫ ---
     const [isEditOpen, setIsEditOpen] = useState<boolean>(false);
     const [editForm, setEditForm] = useState({
         name: '',
@@ -164,6 +183,12 @@ const GroupDetailsPage: React.FC = () => {
     });
     const [mentors, setMentors] = useState<{ id: number; fullName: string }[]>([]);
     const [isEditing, setIsEditing] = useState<boolean>(false);
+
+    const [todaySchedule, setTodaySchedule] = useState<{
+        startTime: string;
+        endTime: string;
+        room?: string;
+    } | null>(null);
 
     const daysMap: Record<string, string> = {
         '1': 'Пн', '2': 'Вт', '3': 'Ср', '4': 'Чт', '5': 'Пт', '6': 'Сб', '7': 'Вс',
@@ -189,16 +214,14 @@ const GroupDetailsPage: React.FC = () => {
 
             let finalStudents: GroupStudentResponse[] = [];
             const resStudents = fetchedStudentsRes as any;
-            if (resStudents?.data?.data) {
-                finalStudents = resStudents.data.data;
-            } else if (resStudents?.data) {
-                finalStudents = resStudents.data;
-            } else if (Array.isArray(resStudents)) {
-                finalStudents = resStudents;
-            }
+            if (resStudents?.data?.data) finalStudents = resStudents.data.data;
+            else if (resStudents?.data) finalStudents = resStudents.data;
+            else if (Array.isArray(resStudents)) finalStudents = resStudents;
             setStudents(finalStudents);
 
             let scheduleText: string | null = null;
+            setTodaySchedule(null);
+
             if (fetchedScheduleRes) {
                 const resSchedule = fetchedScheduleRes as any;
                 const rawScheduleArray = resSchedule?.data?.data || resSchedule?.data || resSchedule;
@@ -209,24 +232,29 @@ const GroupDetailsPage: React.FC = () => {
                             const day = daysMap[String(s.dayOfWeek)] || s.dayOfWeek;
                             const start = s.startTime ? s.startTime.substring(0, 5) : '';
                             const end = s.endTime ? s.endTime.substring(0, 5) : '';
-
                             if (day && start && end) return `${day} ${start}-${end}`;
                             return day;
                         })
                         .filter(Boolean)
                         .join(', ');
+
+                    const todayNum = getTodayDayNumber();
+                    const todayItem = rawScheduleArray.find((s: any) => dayOfWeekToNum(s.dayOfWeek) === todayNum);
+                    if (todayItem) {
+                        setTodaySchedule({
+                            startTime: todayItem.startTime?.substring(0, 5) || '',
+                            endTime: todayItem.endTime?.substring(0, 5) || '',
+                            room: todayItem.room || undefined,
+                        });
+                    }
                 }
             }
 
             let finalGroupData: GroupDto | null = null;
             const resGroup = fetchedGroupInfoRes as any;
-            if (resGroup?.data?.data) {
-                finalGroupData = resGroup.data.data;
-            } else if (resGroup?.data) {
-                finalGroupData = resGroup.data;
-            } else if (resGroup && typeof resGroup === 'object' && 'id' in resGroup) {
-                finalGroupData = resGroup;
-            }
+            if (resGroup?.data?.data) finalGroupData = resGroup.data.data;
+            else if (resGroup?.data) finalGroupData = resGroup.data;
+            else if (resGroup && typeof resGroup === 'object' && 'id' in resGroup) finalGroupData = resGroup;
 
             if (finalGroupData) {
                 finalGroupData.schedule = scheduleText || null;
@@ -246,6 +274,11 @@ const GroupDetailsPage: React.FC = () => {
     useEffect(() => {
         loadPageData();
     }, [loadPageData]);
+
+    const openScheduleModal = () => {
+        setScheduleDay(String(getTodayDayNumber()));
+        setIsScheduleOpen(true);
+    };
 
     const handleEnrollSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -399,12 +432,8 @@ const GroupDetailsPage: React.FC = () => {
                 maxStudents: editForm.maxStudents,
             };
             if (editForm.mentorId > 0) payload.mentorId = editForm.mentorId;
-            if (editForm.startDate) {
-                payload.startDate = new Date(editForm.startDate + 'T00:00:00Z').toISOString();
-            }
-            if (editForm.endDate) {
-                payload.endDate = new Date(editForm.endDate + 'T00:00:00Z').toISOString();
-            }
+            if (editForm.startDate) payload.startDate = new Date(editForm.startDate + 'T00:00:00Z').toISOString();
+            if (editForm.endDate) payload.endDate = new Date(editForm.endDate + 'T00:00:00Z').toISOString();
 
             await groupService.update(groupId, payload);
             setIsEditOpen(false);
@@ -415,7 +444,6 @@ const GroupDetailsPage: React.FC = () => {
             setIsEditing(false);
         }
     };
-
     const filteredStudents = students.filter(s => {
         const name = s.studentName?.toLowerCase() || '';
         const email = s.studentEmail?.toLowerCase() || '';
@@ -423,13 +451,18 @@ const GroupDetailsPage: React.FC = () => {
         const matchesSearch = name.includes(query) || email.includes(query);
 
         if (filterTab === 'active') return matchesSearch && s.isActive;
-        if (filterTab === 'left') return matchesSearch && !s.isActive;
+        if (filterTab === 'transferred') return matchesSearch && !s.isActive && s.isTransferred;
+        if (filterTab === 'left') return matchesSearch && !s.isActive && !s.isTransferred;
         return matchesSearch;
     });
+
+    const transferredCount = students.filter(s => !s.isActive && s.isTransferred).length;
+    const removedCount = students.filter(s => !s.isActive && !s.isTransferred).length;
 
     const activeCount = students.filter(s => s.isActive).length;
     const totalCount = students.length;
     const enrolledStudentIds = students.filter(s => s.isActive).map(s => s.studentId);
+    const todayNum = getTodayDayNumber();
 
     if (loading) {
         return (
@@ -479,9 +512,11 @@ const GroupDetailsPage: React.FC = () => {
             {groupData && (
                 <ActionCards
                     group={groupData}
+                    todaySchedule={todaySchedule}
+                    todayDayName={DAY_NAMES[todayNum]}
                     onNavigate={navigate}
                     onEnrollClick={() => setIsEnrollOpen(true)}
-                    onAddScheduleClick={() => setIsScheduleOpen(true)}
+                    onAddScheduleClick={openScheduleModal}
                 />
             )}
 
@@ -492,13 +527,28 @@ const GroupDetailsPage: React.FC = () => {
 
                 <div style={st.controlsRow}>
                     <div style={st.tabsGroup}>
-                        <button style={filterTab === 'active' ? st.tabActive : st.tab} onClick={() => setFilterTab('active')}>
-                            Активные студенты ({activeCount})
+                        <button
+                            style={filterTab === 'active' ? st.tabActive : st.tab}
+                            onClick={() => setFilterTab('active')}
+                        >
+                            Активные ({activeCount})
                         </button>
-                        <button style={filterTab === 'left' ? st.tabActive : st.tab} onClick={() => setFilterTab('left')}>
-                            Исключенные ({totalCount - activeCount})
+                        <button
+                            style={filterTab === 'transferred' ? st.tabActive : st.tab}
+                            onClick={() => setFilterTab('transferred')}
+                        >
+                            Переведённые ({transferredCount})
                         </button>
-                        <button style={filterTab === 'all' ? st.tabActive : st.tab} onClick={() => setFilterTab('all')}>
+                        <button
+                            style={filterTab === 'left' ? st.tabActive : st.tab}
+                            onClick={() => setFilterTab('left')}
+                        >
+                            Исключённые ({removedCount})
+                        </button>
+                        <button
+                            style={filterTab === 'all' ? st.tabActive : st.tab}
+                            onClick={() => setFilterTab('all')}
+                        >
                             Все ({totalCount})
                         </button>
                     </div>
@@ -733,6 +783,7 @@ const GroupDetailsPage: React.FC = () => {
                 </div>
             )}
 
+            {/* Модалка редактирования группы */}
             {isEditOpen && (
                 <div style={st.modalOverlay} onClick={e => e.target === e.currentTarget && setIsEditOpen(false)}>
                     <div style={st.editModalContent}>
@@ -814,7 +865,7 @@ const GroupDetailsPage: React.FC = () => {
 export default GroupDetailsPage;
 
 
-// --- СТИЛИ ---
+// ─── СТИЛИ ───────────────────────────────────────────────
 const st = {
     container: { padding: '24px 40px', backgroundColor: '#F8FAFC', minHeight: '100vh', fontFamily: '"Inter", sans-serif' },
     navBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: '12px 20px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '24px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' },
@@ -825,6 +876,17 @@ const st = {
     statusBadge: { fontSize: '11px', fontWeight: 700, backgroundColor: '#D1FAE5', color: '#065F46', padding: '4px 10px', borderRadius: '12px', textTransform: 'uppercase' as const, letterSpacing: '0.05em' },
     subtitle: { fontSize: '14px', color: '#64748B', margin: 0 },
     editGroupBtn: { display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 16px', border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#334155', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap' as const },
+
+    // КАРТОЧКА СЕГОДНЯ
+    todayCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '16px 20px', marginTop: '20px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' } as React.CSSProperties,
+    todayLeft: { display: 'flex', alignItems: 'center', gap: '14px' } as React.CSSProperties,
+    todayIcon: { width: '44px', height: '44px', borderRadius: '12px', background: '#EEF2FF', display: 'flex', alignItems: 'center', justifyContent: 'center' } as React.CSSProperties,
+    todayLabel: { fontSize: '12px', fontWeight: 700, color: '#64748B', textTransform: 'uppercase' as const, letterSpacing: '0.05em', marginBottom: '4px' } as React.CSSProperties,
+    todayInfo: { fontSize: '15px', color: '#475569' } as React.CSSProperties,
+    todayRoom: { marginLeft: '8px', color: '#64748B', fontSize: '13px' } as React.CSSProperties,
+    todayEmpty: { fontSize: '14px', color: '#94A3B8', fontStyle: 'italic' as const } as React.CSSProperties,
+    todayBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '9px 16px', background: '#4F46E5', color: '#FFFFFF', border: 'none', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
+
     divider: { border: 'none', height: '1px', backgroundColor: '#E2E8F0', margin: '28px 0' },
     workspaceHeader: { marginBottom: '20px' },
     sectionTitle: { fontSize: '18px', fontWeight: 700, color: '#0F172A', margin: '0 0 16px 0', letterSpacing: '-0.01em' },
@@ -840,6 +902,7 @@ const st = {
     spinner: { color: '#4F46E5', animation: 'spin 1s linear infinite' },
     errorBanner: { display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#FEF2F2', border: '1px solid #FEE2E2', color: '#EF4444', padding: '12px 16px', borderRadius: '10px', marginBottom: '24px', fontSize: '14px', fontWeight: 500 },
     removeWarningBox: { padding: '12px', backgroundColor: '#FEF2F2', border: '1px solid #FEE2E2', borderRadius: '8px', color: '#64748B', fontSize: '13px', lineHeight: '1.5' },
+
     editCloseBtn: { position: 'absolute' as const, top: '20px', right: '20px', background: '#F1F5F9', border: 'none', color: '#64748B', cursor: 'pointer', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '32px', height: '32px' },
     editTitle: { margin: 0, fontSize: '20px', fontWeight: 700, color: '#0F172A' },
     editSubtitle: { margin: '6px 0 0 0', fontSize: '13px', color: '#64748B', lineHeight: 1.4 },
@@ -847,6 +910,7 @@ const st = {
     editLabel: { fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '6px', letterSpacing: '0.05em' },
     editInput: { width: '100%', height: '44px', padding: '0 14px', borderRadius: '12px', border: '1px solid #E2E8F0', background: '#F8FAFC', fontSize: '14px', outline: 'none', color: '#0F172A', boxSizing: 'border-box' as const },
     editSubmitBtn: { marginTop: '6px', height: '48px', backgroundColor: '#4F46E5', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' },
+
     modalOverlay: { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
     modalContent: { backgroundColor: '#FFFFFF', borderRadius: '16px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'visible' as const, border: '1px solid #E2E8F0' },
     modalHeader: { padding: '16px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
