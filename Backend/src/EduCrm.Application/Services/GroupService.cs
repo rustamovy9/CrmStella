@@ -179,10 +179,10 @@ public class GroupService(
             group.Name = request.Name.Trim();
 
         if (request.StartDate is not null)
-            group.StartDate = request.StartDate.Value;
+            group.StartDate = DateTime.SpecifyKind(request.StartDate.Value, DateTimeKind.Utc);
 
         if (request.EndDate is not null)
-            group.EndDate = request.EndDate;
+            group.EndDate = DateTime.SpecifyKind(request.EndDate.Value, DateTimeKind.Utc);
 
         if (request.MaxStudents is not null)
             group.MaxStudents = request.MaxStudents.Value;

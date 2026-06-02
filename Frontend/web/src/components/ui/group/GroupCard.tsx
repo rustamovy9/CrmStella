@@ -17,17 +17,17 @@ const GroupCard: React.FC<GroupCardProps> = ({ group, onDetails, onStatusToggle 
         <div style={styles.card} className="premium-group-card">
             <style>{`
                 @keyframes smoothFadeIn {
-                    from { opacity: 0; transform: scale(0.96) translateY(10px); }
+                    from { opacity: 0; transform: scale(0.98) translateY(8px); }
                     to { opacity: 1; transform: scale(1) translateY(0); }
                 }
                 .premium-group-card {
                     animation: smoothFadeIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-                    transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) !important;
+                    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
                 }
                 .premium-group-card:hover {
-                    transform: translateY(-6px) scale(1.01);
-                    border-color: #CBD5E1 !important;
-                    box-shadow: 0 20px 25px -5px rgba(79, 70, 229, 0.1), 0 10px 10px -5px rgba(79, 70, 229, 0.04) !important;
+                    transform: translateY(-4px);
+                    border-color: #E2E8F0 !important;
+                    box-shadow: 0 12px 20px -4px rgba(79, 70, 229, 0.08), 0 4px 8px -4px rgba(79, 70, 229, 0.04) !important;
                 }
                 .btn-group-manage {
                     transition: all 0.2s ease;
@@ -35,8 +35,7 @@ const GroupCard: React.FC<GroupCardProps> = ({ group, onDetails, onStatusToggle 
                 .btn-group-manage:hover {
                     background-color: #4F46E5 !important;
                     color: #ffffff !important;
-                    transform: translateY(-1px);
-                    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
+                    border-color: #4F46E5 !important;
                 }
             `}</style>
 
@@ -49,7 +48,7 @@ const GroupCard: React.FC<GroupCardProps> = ({ group, onDetails, onStatusToggle 
             {/* Avatar + Title */}
             <div style={styles.mainContentRow}>
                 <div style={styles.groupAvatar}>
-                    <GraduationCap size={26} color="#ffffff" />
+                    <GraduationCap size={24} color="#ffffff" />
                 </div>
                 <div style={styles.metaContainer}>
                     <h4 style={styles.groupTitle}>{group.name}</h4>
@@ -73,7 +72,7 @@ const GroupCard: React.FC<GroupCardProps> = ({ group, onDetails, onStatusToggle 
                             Студенты: <strong>{group.activeStudentsCount} / {group.maxStudents}</strong>
                             <span style={{
                                 marginLeft: '6px',
-                                fontSize: '12px',
+                                fontSize: '11px',
                                 fontWeight: 600,
                                 color: freeSlots > 0 ? '#10B981' : '#EF4444'
                             }}>
@@ -111,25 +110,33 @@ const GroupCard: React.FC<GroupCardProps> = ({ group, onDetails, onStatusToggle 
                 </div>
             </div>
 
-            {/* Bottom */}
+            {/* Bottom Section */}
             <div style={styles.bottomSection}>
-                <div style={styles.statusWrapper}>
-                    <div style={{ ...styles.statusDot, backgroundColor: isActive ? '#10B981' : '#F59E0B' }} />
-                    <span style={styles.statusLabel}>{isActive ? 'Активна' : 'Архив'}</span>
+                {/* Segmented Status Control */}
+                <div style={styles.statusToggleGroup}>
+                    <button
+                        type="button"
+                        onClick={() => !isActive && onStatusToggle(group.id, group.status)}
+                        style={{
+                            ...styles.statusButton,
+                            ...(isActive ? styles.activeBtn : styles.inactiveBtn)
+                        }}
+                    >
+                        Активна
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => isActive && onStatusToggle(group.id, group.status)}
+                        style={{
+                            ...styles.statusButton,
+                            ...(!isActive ? styles.archiveBtn : styles.inactiveBtn)
+                        }}
+                    >
+                        Архив
+                    </button>
                 </div>
 
-                <label style={styles.switch}>
-                    <input
-                        type="checkbox"
-                        checked={isActive}
-                        onChange={() => onStatusToggle(group.id, group.status)}
-                        style={styles.switchInput}
-                    />
-                    <span style={{ ...styles.slider, backgroundColor: isActive ? '#10B981' : '#CBD5E1' }}>
-                        <span style={{ ...styles.sliderCircle, transform: isActive ? 'translateX(16px)' : 'translateX(0px)' }} />
-                    </span>
-                </label>
-
+                {/* Details Button */}
                 <button
                     className="btn-group-manage"
                     style={styles.manageButton}
@@ -144,33 +151,34 @@ const GroupCard: React.FC<GroupCardProps> = ({ group, onDetails, onStatusToggle 
 };
 
 const styles = {
-    card: { background: '#ffffff', border: '1px solid #F1F5F9', borderRadius: '20px', padding: '24px', display: 'flex', flexDirection: 'column' as const, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.01)', boxSizing: 'border-box' as const, gap: '4px' },
-    topSection: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' },
-    categoryBadge: { fontSize: '11px', fontWeight: 600, padding: '2px 10px', borderRadius: '20px', backgroundColor: '#EEF2FF', color: '#4F46E5' },
+    card: { background: '#ffffff', border: '1px solid #F1F5F9', borderRadius: '16px', padding: '20px', display: 'flex', flexDirection: 'column' as const, boxShadow: '0 4px 6px -1px rgba(0,0,0,0.01)', boxSizing: 'border-box' as const, gap: '4px' },
+    topSection: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
+    categoryBadge: { fontSize: '11px', fontWeight: 600, padding: '2px 8px', borderRadius: '20px', backgroundColor: '#EEF2FF', color: '#4F46E5' },
     idBadge: { fontSize: '12px', fontWeight: 600, color: '#94A3B8' },
-    mainContentRow: { display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' },
-    groupAvatar: { width: '56px', height: '56px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4F46E5', flexShrink: 0 },
-    metaContainer: { display: 'flex', flexDirection: 'column' as const, gap: '4px', flex: 1 },
-    groupTitle: { margin: 0, fontSize: '17px', fontWeight: 700, color: '#0F172A', lineHeight: '1.3' },
+    mainContentRow: { display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '14px' },
+    groupAvatar: { width: '48px', height: '48px', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#4F46E5', flexShrink: 0 },
+    metaContainer: { display: 'flex', flexDirection: 'column' as const, gap: '2px', flex: 1 },
+    groupTitle: { margin: 0, fontSize: '16px', fontWeight: 700, color: '#0F172A', lineHeight: '1.3' },
     courseName: { margin: 0, fontSize: '13px', color: '#64748B', fontWeight: 500 },
-    infoSection: { display: 'flex', flexDirection: 'column' as const, gap: '14px', marginBottom: '20px', flex: 1 },
-    infoGrid: { display: 'flex', flexDirection: 'column' as const, gap: '8px' },
+    infoSection: { display: 'flex', flexDirection: 'column' as const, gap: '12px', marginBottom: '16px', flex: 1 },
+    infoGrid: { display: 'flex', flexDirection: 'column' as const, gap: '6px' },
     infoRow: { display: 'flex', alignItems: 'center', gap: '8px' },
     infoText: { fontSize: '13px', fontWeight: 500, color: '#64748B' },
-    datesBox: { display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: '#F8FAFC', borderRadius: '10px', padding: '12px 14px' },
+    datesBox: { display: 'flex', alignItems: 'center', gap: '12px', backgroundColor: '#F8FAFC', borderRadius: '12px', padding: '10px 12px' },
     dateItem: { display: 'flex', alignItems: 'center', gap: '8px', flex: 1 },
-    dateDivider: { width: '1px', height: '28px', backgroundColor: '#E2E8F0' },
-    dateLabel: { fontSize: '10px', fontWeight: 600, color: '#94A3B8', letterSpacing: '0.5px', textTransform: 'uppercase' as const },
-    dateValue: { fontSize: '13px', fontWeight: 600, color: '#334155' },
-    bottomSection: { display: 'flex', alignItems: 'center', paddingTop: '16px', borderTop: '1px solid #F8FAFC', gap: '10px' },
-    statusWrapper: { display: 'flex', alignItems: 'center', gap: '8px', flex: 1 },
-    statusDot: { width: '8px', height: '8px', borderRadius: '50%' },
-    statusLabel: { fontSize: '13px', fontWeight: 600, color: '#334155' },
-    switch: { position: 'relative' as const, display: 'inline-block', width: '38px', height: '22px', cursor: 'pointer', flexShrink: 0 },
-    switchInput: { opacity: 0, width: 0, height: 0 },
-    slider: { position: 'absolute' as const, top: 0, left: 0, right: 0, bottom: 0, borderRadius: '34px', transition: '0.2s', display: 'flex', alignItems: 'center', padding: '0 3px' },
-    sliderCircle: { height: '16px', width: '16px', borderRadius: '50%', backgroundColor: 'white', transition: '0.2s', boxShadow: '0 1px 2px rgba(0,0,0,0.1)' },
-    manageButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC', color: '#64748B', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '7px 14px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', flexShrink: 0 }
+    dateDivider: { width: '1px', height: '24px', backgroundColor: '#E2E8F0' },
+    dateLabel: { fontSize: '9px', fontWeight: 600, color: '#94A3B8', letterSpacing: '0.5px' },
+    dateValue: { fontSize: '12px', fontWeight: 600, color: '#334155' },
+    bottomSection: { display: 'flex', alignItems: 'center', paddingTop: '14px', borderTop: '1px solid #F1F5F9', gap: '8px' },
+    
+    // Segmented control styles
+    statusToggleGroup: { display: 'flex', backgroundColor: '#F1F5F9', borderRadius: '10px', padding: '3px', flex: 1 },
+    statusButton: { flex: 1, border: 'none', padding: '6px 10px', fontSize: '12px', fontWeight: 600, borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)', textAlign: 'center' as const },
+    activeBtn: { backgroundColor: '#10B981', color: '#ffffff', boxShadow: '0 2px 4px rgba(16, 185, 129, 0.15)' },
+    archiveBtn: { backgroundColor: '#64748B', color: '#ffffff', boxShadow: '0 2px 4px rgba(100, 116, 139, 0.15)' },
+    inactiveBtn: { backgroundColor: 'transparent', color: '#64748B' },
+
+    manageButton: { display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffffff', color: '#4F46E5', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '6px 14px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, height: '30px' }
 };
 
 export default GroupCard;

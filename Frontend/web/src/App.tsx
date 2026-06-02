@@ -11,7 +11,6 @@ import ForgotPassword from './pages/auth/ForgotPassword';
 import AdminDashboard from './pages/admin/dashboard/AdminDashboard';
 import MentorDashboard from './pages/mentor/MentorDashboard';
 import StudentDashboard from './pages/student/StudentDashboard';
-import LeadsPage from './pages/admin/users/LeadsPage';
 import StudentsPage from './pages/admin/users/StudentsPage';
 import MentorsPage from './pages/admin/users/MentorsPage';
 import UserInfoPage from './pages/admin/users/UserInfoPage';
@@ -25,6 +24,7 @@ import GroupDetailsPage from './pages/admin/education/GroupDetailsPage';
 import JournalPage from './pages/admin/journal/JournalPage';
 import FinanceDashboard from './pages/admin/finance/FinanceDashboard';
 import { AnalyticsPage } from './pages/admin/analytic/AnalyticsPage';
+import LeadsPage from './pages/admin/leads/LeadsPage';
 
 function App() {
     return (

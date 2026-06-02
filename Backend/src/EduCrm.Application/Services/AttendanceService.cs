@@ -37,7 +37,7 @@ public class AttendanceService(
 
         return Result<List<AttendanceListItemResponse>>.Ok(response);
     }
-    
+
     public async Task<Result<AttendanceSummaryResponse>> GetSummaryAsync(
         DateTime date, CancellationToken ct = default)
     {
@@ -135,6 +135,7 @@ public class AttendanceService(
             Status = request.Status,
             AbsenceReason = request.AbsenceReason?.Trim(),
             MentorNote = request.MentorNote?.Trim(),
+            LateMinutes = request.Status == AttendanceStatus.Late ? request.LateMinutes : null,
             MarkedByMentorId = mentorId,
             MarkedAt = DateTime.UtcNow
         };
@@ -284,6 +285,7 @@ public class AttendanceService(
         attendance.Status = request.Status;
         attendance.AbsenceReason = request.AbsenceReason?.Trim();
         attendance.MentorNote = request.MentorNote?.Trim();
+        attendance.LateMinutes = request.Status == AttendanceStatus.Late ? request.LateMinutes : null;
 
         await unitOfWork.Attendances.UpdateAsync(attendance, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -347,6 +349,7 @@ public class AttendanceService(
             Status = a.Status.ToString(),
             AbsenceReason = a.AbsenceReason,
             MentorNote = a.MentorNote,
+            LateMinutes = a.LateMinutes,
             MarkedByMentorId = a.MarkedByMentorId,
             MarkedByMentorName = a.MarkedByMentor?.User?.FullName,
             MarkedAt = a.MarkedAt,
@@ -359,12 +362,13 @@ public class AttendanceService(
         return new AttendanceListItemResponse
         {
             Id = a.Id,
-            LessonId = a.LessonId, // ← ДОБАВИЛ
+            LessonId = a.LessonId,
             StudentId = a.StudentId,
             StudentFullName = a.Student?.User?.FullName ?? string.Empty,
             Status = a.Status.ToString(),
-            AbsenceReason = a.AbsenceReason, // ← ДОБАВИЛ для иконки 💬
-            MentorNote = a.MentorNote, // ← ДОБАВИЛ
+            LateMinutes = a.LateMinutes,
+            AbsenceReason = a.AbsenceReason,
+            MentorNote = a.MentorNote,
             MarkedAt = a.MarkedAt
         };
     }

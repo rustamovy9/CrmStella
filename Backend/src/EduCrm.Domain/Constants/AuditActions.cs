@@ -7,6 +7,12 @@ public static class AuditActions
     public const string Register = "Register";
     public const string RefreshToken = "RefreshToken";
     public const string AssignRole = "AssignRole";
+    
+    public const string CreateLead = "CreateLead";
+    public const string UpdateLead = "UpdateLead";
+    public const string ChangeLeadStatus = "ChangeLeadStatus";
+    public const string AssignLeadManager = "AssignLeadManager";
+    public const string DeleteLead = "DeleteLead";
 
     public const string ForgotPassword = "ForgotPassword";
     public const string VerifyResetCode = "VerifyResetCode";

@@ -24,6 +24,7 @@ export interface AttendanceResponse {
   studentFullName: string;
   status: 'Present' | 'Absent' | 'Late' | 'Excused';
   absenceReason?: string;
+  lateMinutes?: number | null;
   mentorNote?: string;
   markedByMentorId?: number;
   markedByMentorName?: string;
@@ -99,14 +100,32 @@ export interface JournalRow {
 }
 
 export interface AttendanceSummaryResponse {
-    present: number;
-    absent: number;
-    late: number;
-    total: number;
-    recentAbsent: {
-        studentFullName: string;
-        lessonTitle: string;
-        reason: string | null;
-        markedAt: string;
-    }[];
+  present: number;
+  absent: number;
+  late: number;
+  total: number;
+  recentAbsent: {
+    studentFullName: string;
+    lessonTitle: string;
+    reason: string | null;
+    markedAt: string;
+    // Навигационные поля
+    groupId: number;
+    groupName: string;
+    mentorId: number | null;
+    mentorUserId: number | null;
+    mentorFullName: string | null;
+  }[];
+  recentLate: {
+    studentFullName: string;
+    lessonTitle: string;
+    lateMinutes: number;
+    markedAt: string;
+    // Навигационные поля
+    groupId: number;
+    groupName: string;
+    mentorId: number | null;
+    mentorUserId: number | null;
+    mentorFullName: string | null;
+  }[];
 }

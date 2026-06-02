@@ -3,6 +3,7 @@ using System;
 using EduCrm.Infrastructure.Persistence.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace EduCrm.Infrastructure.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260602120359_AddLeads")]
+    partial class AddLeads
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -541,111 +544,6 @@ namespace EduCrm.Infrastructure.Migrations
                         .IsUnique();
 
                     b.ToTable("HomeworkSubmissions");
-                });
-
-            modelBuilder.Entity("EduCrm.Domain.Entities.Lead", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int?>("AssignedManagerId")
-                        .HasColumnType("integer");
-
-                    b.Property<int?>("ConvertedToStudentId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Email")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<int?>("InterestedCourseId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("LostReason")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<DateTime?>("NextFollowUpAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("Phone")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<int>("Source")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AssignedManagerId");
-
-                    b.HasIndex("InterestedCourseId");
-
-                    b.HasIndex("Phone");
-
-                    b.HasIndex("Status");
-
-                    b.ToTable("Leads", (string)null);
-                });
-
-            modelBuilder.Entity("EduCrm.Domain.Entities.LeadActivity", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<int>("LeadId")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Type")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("LeadId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("LeadActivities", (string)null);
                 });
 
             modelBuilder.Entity("EduCrm.Domain.Entities.Lesson", b =>
@@ -1486,42 +1384,6 @@ namespace EduCrm.Infrastructure.Migrations
                     b.Navigation("Student");
                 });
 
-            modelBuilder.Entity("EduCrm.Domain.Entities.Lead", b =>
-                {
-                    b.HasOne("EduCrm.Domain.Entities.User", "AssignedManager")
-                        .WithMany()
-                        .HasForeignKey("AssignedManagerId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("EduCrm.Domain.Entities.Course", "InterestedCourse")
-                        .WithMany()
-                        .HasForeignKey("InterestedCourseId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("AssignedManager");
-
-                    b.Navigation("InterestedCourse");
-                });
-
-            modelBuilder.Entity("EduCrm.Domain.Entities.LeadActivity", b =>
-                {
-                    b.HasOne("EduCrm.Domain.Entities.Lead", "Lead")
-                        .WithMany("Activities")
-                        .HasForeignKey("LeadId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("EduCrm.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Lead");
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("EduCrm.Domain.Entities.Lesson", b =>
                 {
                     b.HasOne("EduCrm.Domain.Entities.Group", "Group")
@@ -1748,11 +1610,6 @@ namespace EduCrm.Infrastructure.Migrations
             modelBuilder.Entity("EduCrm.Domain.Entities.HomeworkSubmission", b =>
                 {
                     b.Navigation("LessonScore");
-                });
-
-            modelBuilder.Entity("EduCrm.Domain.Entities.Lead", b =>
-                {
-                    b.Navigation("Activities");
                 });
 
             modelBuilder.Entity("EduCrm.Domain.Entities.Lesson", b =>

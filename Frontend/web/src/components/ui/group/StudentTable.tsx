@@ -33,7 +33,6 @@ const getLeaveType = (s: GroupStudentResponse) => {
     return 'removed';
 };
 
-// курс оплачен, если nextBillingDate в будущем
 const isCoursePaid = (s: GroupStudentResponse): boolean => {
     if (!s.nextBillingDate) return false;
     return new Date(s.nextBillingDate) > new Date();
@@ -46,7 +45,6 @@ const getDaysUntilNextBilling = (s: GroupStudentResponse): number => {
     );
 };
 
-// можно ли списать: группа активна, студент активен, не выбыл, ещё не оплачен
 const canCharge = (s: GroupStudentResponse, groupStatus: string): boolean => {
     return (
         groupStatus === 'Active' &&
@@ -72,6 +70,20 @@ export const StudentTable: React.FC<StudentTableProps> = ({
 
     return (
         <div style={st.wrapper}>
+            {/* Добавляем немного интерактивного лоска кнопкам через стили */}
+            <style>{`
+                .btn-action {
+                    transition: all 0.2s ease;
+                }
+                .btn-action:hover:not(:disabled) {
+                    transform: translateY(-1px);
+                    filter: brightness(0.95);
+                }
+                .btn-action:disabled {
+                    opacity: 0.6;
+                }
+            `}</style>
+
             <table style={st.table}>
                 <thead>
                     <tr style={st.thRow}>
@@ -139,9 +151,9 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                                     {/* Причина ухода */}
                                     <td style={{ ...st.td, color: '#70757a', fontStyle: 'italic' }}>
                                         {leaveType === 'transferred'
-                                            ? `Переведён ${formatDate(s.leftAt)}`
+                                            ? s.removeReason || `Переведён ${formatDate(s.leftAt)}`
                                             : leaveType === 'removed'
-                                                ? s.removeReason || '—'
+                                                ? s.removeReason || 'Исключён из группы'
                                                 : '—'}
                                     </td>
 
@@ -150,22 +162,34 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                                         <div style={st.actions}>
                                             {leaveType === 'active' ? (
                                                 <>
+                                                    {/* Исключить */}
                                                     <button
+                                                        className="btn-action"
                                                         style={{ ...st.btn, color: '#EF4444', backgroundColor: '#FEF2F2' }}
                                                         title="Исключить"
                                                         onClick={() => onRemove(s.id)}
                                                     >
                                                         <UserMinus size={15} />
                                                     </button>
+
+                                                    {/* Перевести в другую группу (Блокируется, если не оплачен) */}
                                                     <button
-                                                        style={{ ...st.btn, color: '#3B82F6', backgroundColor: '#EFF6FF' }}
-                                                        title="Перевести в другую группу"
-                                                        onClick={() => onTransfer(s.id)}
+                                                        className="btn-action"
+                                                        style={{ 
+                                                            ...st.btn, 
+                                                            color: paid ? '#3B82F6' : '#94A3B8', 
+                                                            backgroundColor: paid ? '#EFF6FF' : '#F1F5F9',
+                                                            cursor: paid ? 'pointer' : 'not-allowed',
+                                                            border: paid ? 'none' : '1px solid #E2E8F0'
+                                                        }}
+                                                        title={paid ? "Перевести в другую группу" : "Перевод заблокирован: курс не оплачен"}
+                                                        onClick={() => paid && onTransfer(s.id)}
+                                                        disabled={!paid}
                                                     >
                                                         <MoveRight size={15} />
                                                     </button>
 
-                                                    {/* Оплата курса — три состояния */}
+                                                    {/* Оплата курса */}
                                                     {paid ? (
                                                         <div
                                                             style={st.paidBadge}
@@ -195,7 +219,7 @@ export const StudentTable: React.FC<StudentTableProps> = ({
                                             ) : leaveType === 'transferred' ? (
                                                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                                                     <ArrowRightLeft size={14} color="#3B82F6" />
-                                                    <span style={{ ...st.sub, color: '#3B82F6' }}>Переведён</span>
+                                                    <span style={{ ...st.sub, color: '#3B82F6', fontWeight: 500 }}>Переведён</span>
                                                 </div>
                                             ) : (
                                                 <span style={st.sub}>

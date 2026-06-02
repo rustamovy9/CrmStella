@@ -61,7 +61,7 @@ public class AttendanceRepository(AppDbContext context) : IAttendanceRepository
                 x => x.LessonId == lessonId && x.StudentId == studentId,
                 cancellationToken);
     }
-    
+
     public async Task<AttendanceSummaryResponse> GetDailySummaryAsync(
         DateTime date, CancellationToken ct = default)
     {
@@ -70,11 +70,11 @@ public class AttendanceRepository(AppDbContext context) : IAttendanceRepository
 
         var query = context.Attendances
             .AsNoTracking()
-            .Where(a => a.MarkedAt >= dayStart && a.MarkedAt < dayEnd);
+            .Where(a => a.Lesson.LessonDate >= dayStart && a.Lesson.LessonDate < dayEnd);
 
         var present = await query.CountAsync(a => a.Status == AttendanceStatus.Present, ct);
-        var absent  = await query.CountAsync(a => a.Status == AttendanceStatus.Absent, ct);
-        var late    = await query.CountAsync(a => a.Status == AttendanceStatus.Late, ct);
+        var absent = await query.CountAsync(a => a.Status == AttendanceStatus.Absent, ct);
+        var late = await query.CountAsync(a => a.Status == AttendanceStatus.Late, ct);
 
         var recentAbsent = await query
             .Where(a => a.Status == AttendanceStatus.Absent)
@@ -85,7 +85,30 @@ public class AttendanceRepository(AppDbContext context) : IAttendanceRepository
                 StudentFullName = a.Student.User.FullName,
                 LessonTitle = a.Lesson.Title,
                 Reason = a.AbsenceReason,
-                MarkedAt = a.MarkedAt
+                MarkedAt = a.MarkedAt,
+                GroupId = a.Lesson.GroupId,
+                GroupName = a.Lesson.Group.Name,
+                MentorId = a.Lesson.Group.MentorId,
+                MentorUserId = (int?)a.Lesson.Group.Mentor.UserId,
+                MentorFullName = a.Lesson.Group.Mentor.User.FullName
+            })
+            .ToListAsync(ct);
+
+        var recentLate = await query
+            .Where(a => a.Status == AttendanceStatus.Late)
+            .OrderByDescending(a => a.MarkedAt)
+            .Take(10)
+            .Select(a => new LateItem
+            {
+                StudentFullName = a.Student.User.FullName,
+                LessonTitle = a.Lesson.Title,
+                LateMinutes = a.LateMinutes ?? 0,
+                MarkedAt = a.MarkedAt,
+                GroupId = a.Lesson.GroupId,
+                GroupName = a.Lesson.Group.Name,
+                MentorId = a.Lesson.Group.MentorId,
+                MentorUserId = (int?)a.Lesson.Group.Mentor.UserId,
+                MentorFullName = a.Lesson.Group.Mentor.User.FullName
             })
             .ToListAsync(ct);
 
@@ -95,15 +118,18 @@ public class AttendanceRepository(AppDbContext context) : IAttendanceRepository
             Absent = absent,
             Late = late,
             Total = present + absent + late,
-            RecentAbsent = recentAbsent
+            RecentAbsent = recentAbsent,
+            RecentLate = recentLate
         };
     }
-    
+
     public async Task<List<Attendance>> GetByStudentAndLessonsAsync(
         int studentId, List<int> lessonIds)
-        => await context.Attendances
+    {
+        return await context.Attendances
             .Where(a => a.StudentId == studentId && lessonIds.Contains(a.LessonId))
             .ToListAsync();
+    }
 
     public async Task<bool> ExistsAsync(
         int lessonId,

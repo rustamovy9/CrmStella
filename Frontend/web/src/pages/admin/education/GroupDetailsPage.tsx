@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
     ArrowLeft, Search, Loader2, AlertCircle, X,
-    UserPlus, Info, UserMinus, MessageSquare, Calendar, ArrowLeftRight, ChevronDown
+    UserPlus, Info, UserMinus, MessageSquare, Calendar, ArrowLeftRight, ChevronDown, Pencil
 } from 'lucide-react';
 import type { GroupStudentResponse } from '../../../types/groupStudent';
 import type { GroupListItemResponse } from '../../../types/group';
@@ -11,7 +11,7 @@ import { ActionCards, type GroupDto } from '../../../components/ui/group/ActionC
 import { groupStudentService } from '../../../api/groupStudentService';
 import groupService from '../../../api/groupService';
 import scheduleService from '../../../api/scheduleService';
-import adminService from '../../../api/adminService'; // Импортируем админ-сервис для получения студентов
+import adminService from '../../../api/adminService';
 import { StudentTable } from '../../../components/ui/group/StudentTable';
 import type { ApiResult } from '../../../types/auth';
 import type { AxiosResponse } from 'axios';
@@ -20,16 +20,16 @@ import type { AxiosResponse } from 'axios';
 interface StudentAsyncSelectProps {
     onSelect: (id: number) => void;
     disabled?: boolean;
+    excludeIds?: number[];
 }
 
-const StudentAsyncSelect: React.FC<StudentAsyncSelectProps> = ({ onSelect, disabled }) => {
+const StudentAsyncSelect: React.FC<StudentAsyncSelectProps> = ({ onSelect, disabled, excludeIds = [] }) => {
     const [search, setSearch] = useState('');
     const [isOpen, setIsOpen] = useState(false);
     const [students, setStudents] = useState<StudentListItemResponse[]>([]);
     const [loading, setLoading] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
 
-    // Закрытие списка при клике вне компонента
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
@@ -44,19 +44,15 @@ const StudentAsyncSelect: React.FC<StudentAsyncSelectProps> = ({ onSelect, disab
         const delayDebounceFn = setTimeout(async () => {
             setLoading(true);
             try {
-                // 1. Type it as the full AxiosResponse wrapper
                 const response: AxiosResponse<ApiResult<PagedResult<StudentListItemResponse>>> =
                     await adminService.getStudents(1, 20, search || undefined, true);
 
-                // 2. Extract your backend's custom envelope from Axios (.data)
                 const apiResult = response.data;
 
-                // 3. Drill down into your PagedResult structure
                 if (apiResult?.data?.items) {
-                    // Передаем конкретно массив из data.items
-                    setStudents(apiResult.data.items);
+                    const filtered = apiResult.data.items.filter(s => !excludeIds.includes(s.id));
+                    setStudents(filtered);
                 } else {
-                    // Если данных нет, сбрасываем в пустой массив
                     setStudents([]);
                 }
             } catch (err) {
@@ -67,7 +63,7 @@ const StudentAsyncSelect: React.FC<StudentAsyncSelectProps> = ({ onSelect, disab
         }, 300);
 
         return () => clearTimeout(delayDebounceFn);
-    }, [search]);
+    }, [search, excludeIds]);
 
     return (
         <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
@@ -96,7 +92,7 @@ const StudentAsyncSelect: React.FC<StudentAsyncSelectProps> = ({ onSelect, disab
                     )}
                     {!loading && students.length === 0 && (
                         <div style={{ padding: '10px', textAlign: 'center', color: '#94A3B8', fontSize: '13px' }}>
-                            Студенты не найдены
+                            Нет доступных студентов
                         </div>
                     )}
                     {!loading && students.map((student) => (
@@ -128,47 +124,52 @@ const GroupDetailsPage: React.FC = () => {
     const groupId = Number(id);
     const navigate = useNavigate();
 
-    // --- СОСТОЯНИЕ ДАННЫХ ---
     const [students, setStudents] = useState<GroupStudentResponse[]>([]);
     const [groupData, setGroupData] = useState<GroupDto | null>(null);
     const [availableGroups, setAvailableGroups] = useState<GroupListItemResponse[]>([]);
 
-    // --- UI СОСТОЯНИЯ ---
     const [loading, setLoading] = useState<boolean>(true);
     const [error, setError] = useState<string | null>(null);
     const [searchTerm, setSearchTerm] = useState<string>('');
     const [filterTab, setFilterTab] = useState<'all' | 'active' | 'left'>('active');
 
-    // --- МОДАЛКА ЗАЧИСЛЕНИЯ ---
     const [isEnrollOpen, setIsEnrollOpen] = useState<boolean>(false);
-    const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null); // Храним выбранный ID (число)
+    const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null);
     const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
-    // --- МОДАЛКА ИСКЛЮЧЕНИЯ ---
     const [isRemoveOpen, setIsRemoveOpen] = useState<boolean>(false);
     const [studentToRemove, setStudentToRemove] = useState<{ id: number; name: string } | null>(null);
     const [removeReason, setRemoveReason] = useState<string>('');
     const [isRemoving, setIsRemoving] = useState<boolean>(false);
 
-    // --- МОДАЛКА ТРАНСФЕРА ---
     const [isTransferOpen, setIsTransferOpen] = useState<boolean>(false);
     const [studentToTransfer, setStudentToTransfer] = useState<{ id: number; name: string } | null>(null);
     const [targetGroupId, setTargetGroupId] = useState<string>('');
     const [isTransferring, setIsTransferring] = useState<boolean>(false);
 
-    // --- МОДАЛКА СОЗДАНИЯ РАСПИСАНИЯ ---
     const [isScheduleOpen, setIsScheduleOpen] = useState<boolean>(false);
     const [scheduleDay, setScheduleDay] = useState<string>('1');
     const [startTime, setStartTime] = useState<string>('18:00');
     const [endTime, setEndTime] = useState<string>('20:00');
     const [isScheduling, setIsScheduling] = useState<boolean>(false);
 
+    // --- МОДАЛКА РЕДАКТИРОВАНИЯ ГРУППЫ ---
+    const [isEditOpen, setIsEditOpen] = useState<boolean>(false);
+    const [editForm, setEditForm] = useState({
+        name: '',
+        mentorId: 0,
+        startDate: '',
+        endDate: '',
+        maxStudents: 0,
+    });
+    const [mentors, setMentors] = useState<{ id: number; fullName: string }[]>([]);
+    const [isEditing, setIsEditing] = useState<boolean>(false);
+
     const daysMap: Record<string, string> = {
         '1': 'Пн', '2': 'Вт', '3': 'Ср', '4': 'Чт', '5': 'Пт', '6': 'Сб', '7': 'Вс',
         'Monday': 'Пн', 'Tuesday': 'Вт', 'Wednesday': 'Ср', 'Thursday': 'Чт', 'Friday': 'Пт', 'Saturday': 'Сб', 'Sunday': 'Вс'
     };
 
-    // --- БЕЗОПАСНЫЙ МЕТОД ЗАГРУЗКИ ДАННЫХ ---
     const loadPageData = useCallback(async () => {
         if (!groupId || isNaN(groupId)) {
             setError("Некорректный ID группы в URL-адресе");
@@ -186,7 +187,6 @@ const GroupDetailsPage: React.FC = () => {
                 scheduleService.getByGroupId(groupId).catch(() => null)
             ]);
 
-            // Студенты
             let finalStudents: GroupStudentResponse[] = [];
             const resStudents = fetchedStudentsRes as any;
             if (resStudents?.data?.data) {
@@ -198,7 +198,6 @@ const GroupDetailsPage: React.FC = () => {
             }
             setStudents(finalStudents);
 
-            // Форматирование расписания
             let scheduleText: string | null = null;
             if (fetchedScheduleRes) {
                 const resSchedule = fetchedScheduleRes as any;
@@ -211,9 +210,7 @@ const GroupDetailsPage: React.FC = () => {
                             const start = s.startTime ? s.startTime.substring(0, 5) : '';
                             const end = s.endTime ? s.endTime.substring(0, 5) : '';
 
-                            if (day && start && end) {
-                                return `${day} ${start}-${end}`;
-                            }
+                            if (day && start && end) return `${day} ${start}-${end}`;
                             return day;
                         })
                         .filter(Boolean)
@@ -221,7 +218,6 @@ const GroupDetailsPage: React.FC = () => {
                 }
             }
 
-            // Данные группы
             let finalGroupData: GroupDto | null = null;
             const resGroup = fetchedGroupInfoRes as any;
             if (resGroup?.data?.data) {
@@ -242,7 +238,7 @@ const GroupDetailsPage: React.FC = () => {
         } catch (err: any) {
             console.error("EduCrm API Sync Error:", err);
             setError(err.message || "Не удалось синхронизировать данные с сервером API");
-        } finalStudents: {
+        } finally {
             setLoading(false);
         }
     }, [groupId]);
@@ -251,10 +247,8 @@ const GroupDetailsPage: React.FC = () => {
         loadPageData();
     }, [loadPageData]);
 
-    // --- ХЕНДЛЕРЫ ДЕЙСТВИЙ ---
     const handleEnrollSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
         if (!selectedStudentId) {
             alert('Пожалуйста, выберите студента из выпадающего списка');
             return;
@@ -316,7 +310,6 @@ const GroupDetailsPage: React.FC = () => {
             const res = await groupService.getAll({ page: 1, pageSize: 100 });
             const resData = res as any;
             const groupsList: GroupListItemResponse[] = resData?.data?.data?.items || resData?.data?.items || [];
-
             const filteredGroups = groupsList.filter(g => g.id !== groupId);
             setAvailableGroups(filteredGroups);
         } catch (err) {
@@ -377,7 +370,52 @@ const GroupDetailsPage: React.FC = () => {
         }
     };
 
-    // --- ФИЛЬТРАЦИЯ И СЧЕТЧИКИ ---
+    const openEditModal = async () => {
+        if (!groupData) return;
+        setEditForm({
+            name: groupData.name || '',
+            mentorId: (groupData as any).mentorId || 0,
+            startDate: groupData.startDate?.split('T')[0] || '',
+            endDate: (groupData as any).endDate?.split('T')[0] || '',
+            maxStudents: (groupData as any).maxStudents || 0,
+        });
+        setIsEditOpen(true);
+
+        try {
+            const res = await adminService.getMentors(1, 100, undefined, true);
+            const list = (res as any)?.data?.data?.items || [];
+            setMentors(list.map((m: any) => ({ id: m.id, fullName: m.fullName })));
+        } catch (err) {
+            console.error('Не удалось загрузить менторов:', err);
+        }
+    };
+
+    const handleEditSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        try {
+            setIsEditing(true);
+            const payload: any = {
+                name: editForm.name,
+                maxStudents: editForm.maxStudents,
+            };
+            if (editForm.mentorId > 0) payload.mentorId = editForm.mentorId;
+            if (editForm.startDate) {
+                payload.startDate = new Date(editForm.startDate + 'T00:00:00Z').toISOString();
+            }
+            if (editForm.endDate) {
+                payload.endDate = new Date(editForm.endDate + 'T00:00:00Z').toISOString();
+            }
+
+            await groupService.update(groupId, payload);
+            setIsEditOpen(false);
+            await loadPageData();
+        } catch (err: any) {
+            alert(err.response?.data?.error || err.message || 'Ошибка при обновлении группы');
+        } finally {
+            setIsEditing(false);
+        }
+    };
+
     const filteredStudents = students.filter(s => {
         const name = s.studentName?.toLowerCase() || '';
         const email = s.studentEmail?.toLowerCase() || '';
@@ -391,6 +429,7 @@ const GroupDetailsPage: React.FC = () => {
 
     const activeCount = students.filter(s => s.isActive).length;
     const totalCount = students.length;
+    const enrolledStudentIds = students.filter(s => s.isActive).map(s => s.studentId);
 
     if (loading) {
         return (
@@ -429,6 +468,12 @@ const GroupDetailsPage: React.FC = () => {
                     </h2>
                     <p style={st.subtitle}>Просмотр расписания, назначенных преподавателей и аудит студентов</p>
                 </div>
+                {groupData && (
+                    <button onClick={openEditModal} style={st.editGroupBtn}>
+                        <Pencil size={14} />
+                        Редактировать группу
+                    </button>
+                )}
             </div>
 
             {groupData && (
@@ -475,7 +520,7 @@ const GroupDetailsPage: React.FC = () => {
                 <StudentTable
                     students={filteredStudents}
                     groupId={groupId}
-                    groupStatus={groupData?.status ?? 'Active'}   // ← статус группы из данных страницы
+                    groupStatus={groupData?.status ?? 'Active'}
                     onRemove={(id) => {
                         const target = students.find(x => x.id === id);
                         handleRemoveClick(id, target?.studentName || `Студента с ID #${id}`);
@@ -499,7 +544,7 @@ const GroupDetailsPage: React.FC = () => {
             {isEnrollOpen && (
                 <div style={st.modalOverlay} onClick={e => e.target === e.currentTarget && setIsEnrollOpen(false)}>
                     <div style={st.modalContent}>
-                        <div style={st.modalHeader}>
+                        <div style={{ ...st.modalHeader, ...st.modalHeaderRounded }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <UserPlus size={18} color="#4F46E5" />
                                 <h3 style={st.modalTitle}>Зачислить студента в группу</h3>
@@ -511,10 +556,10 @@ const GroupDetailsPage: React.FC = () => {
                         <form onSubmit={handleEnrollSubmit} style={st.modalBody}>
                             <label style={st.modalLabel}>ВЫБЕРИТЕ СТУДЕНТА (ЖИВОЙ ПОИСК)</label>
 
-                            {/* Наш новый асинхронный селект вместо инпута с числовым ID */}
                             <StudentAsyncSelect
                                 onSelect={(id) => setSelectedStudentId(id)}
                                 disabled={isSubmitting}
+                                excludeIds={enrolledStudentIds}
                             />
 
                             <div style={st.modalActions}>
@@ -534,7 +579,12 @@ const GroupDetailsPage: React.FC = () => {
             {isRemoveOpen && (
                 <div style={st.modalOverlay} onClick={e => e.target === e.currentTarget && setIsRemoveOpen(false)}>
                     <div style={{ ...st.modalContent, maxWidth: '440px' }}>
-                        <div style={{ ...st.modalHeader, borderBottom: '1px solid #FEE2E2', backgroundColor: '#FEF2F2' }}>
+                        <div style={{
+                            ...st.modalHeader,
+                            ...st.modalHeaderRounded,
+                            borderBottom: '1px solid #FEE2E2',
+                            backgroundColor: '#FEF2F2',
+                        }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <UserMinus size={18} color="#EF4444" />
                                 <h3 style={{ ...st.modalTitle, color: '#991B1B' }}>Исключение из группы</h3>
@@ -580,11 +630,16 @@ const GroupDetailsPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Модалка трансфера (перевода) */}
+            {/* Модалка трансфера */}
             {isTransferOpen && (
                 <div style={st.modalOverlay} onClick={e => e.target === e.currentTarget && setIsTransferOpen(false)}>
                     <div style={st.modalContent}>
-                        <div style={{ ...st.modalHeader, borderBottom: '1px solid #D1FAE5', backgroundColor: '#F0FDF4' }}>
+                        <div style={{
+                            ...st.modalHeader,
+                            ...st.modalHeaderRounded,
+                            borderBottom: '1px solid #D1FAE5',
+                            backgroundColor: '#F0FDF4',
+                        }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <ArrowLeftRight size={18} color="#10B981" />
                                 <h3 style={{ ...st.modalTitle, color: '#065F46' }}>Перевод в другую группу</h3>
@@ -634,11 +689,11 @@ const GroupDetailsPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Модалка добавления расписания */}
+            {/* Модалка расписания */}
             {isScheduleOpen && (
                 <div style={st.modalOverlay} onClick={e => e.target === e.currentTarget && setIsScheduleOpen(false)}>
                     <div style={st.modalContent}>
-                        <div style={st.modalHeader}>
+                        <div style={{ ...st.modalHeader, ...st.modalHeaderRounded }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 <Calendar size={18} color="#EA580C" />
                                 <h3 style={st.modalTitle}>Добавить день в расписание</h3>
@@ -649,12 +704,7 @@ const GroupDetailsPage: React.FC = () => {
                         </div>
                         <form onSubmit={handleScheduleSubmit} style={st.modalBody}>
                             <label style={st.modalLabel}>ВЫБЕРИТЕ ДЕНЬ НЕДЕЛИ</label>
-                            <select
-                                value={scheduleDay}
-                                onChange={(e) => setScheduleDay(e.target.value)}
-                                style={st.modalInput}
-                                disabled={isScheduling}
-                            >
+                            <select value={scheduleDay} onChange={(e) => setScheduleDay(e.target.value)} style={st.modalInput} disabled={isScheduling}>
                                 <option value="1">Понедельник</option>
                                 <option value="2">Вторник</option>
                                 <option value="3">Среда</option>
@@ -665,24 +715,10 @@ const GroupDetailsPage: React.FC = () => {
                             </select>
 
                             <label style={st.modalLabel}>ВРЕМЯ НАЧАЛА</label>
-                            <input
-                                type="time"
-                                value={startTime}
-                                onChange={(e) => setStartTime(e.target.value)}
-                                style={st.modalInput}
-                                disabled={isScheduling}
-                                required
-                            />
+                            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} style={st.modalInput} disabled={isScheduling} required />
 
                             <label style={st.modalLabel}>ВРЕМЯ ОКОНЧАНИЯ</label>
-                            <input
-                                type="time"
-                                value={endTime}
-                                onChange={(e) => setEndTime(e.target.value)}
-                                style={st.modalInput}
-                                disabled={isScheduling}
-                                required
-                            />
+                            <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} style={st.modalInput} disabled={isScheduling} required />
 
                             <div style={st.modalActions}>
                                 <button type="button" onClick={() => setIsScheduleOpen(false)} style={st.modalCancelBtn} disabled={isScheduling}>
@@ -696,6 +732,81 @@ const GroupDetailsPage: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {isEditOpen && (
+                <div style={st.modalOverlay} onClick={e => e.target === e.currentTarget && setIsEditOpen(false)}>
+                    <div style={st.editModalContent}>
+                        <button onClick={() => setIsEditOpen(false)} style={st.editCloseBtn} disabled={isEditing}>
+                            <X size={18} />
+                        </button>
+
+                        <h3 style={st.editTitle}>Редактирование группы</h3>
+                        <p style={st.editSubtitle}>Измените параметры группы и сохраните изменения.</p>
+
+                        <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '20px' }}>
+                            <div>
+                                <label style={st.editLabel}>НАЗВАНИЕ ГРУППЫ</label>
+                                <input
+                                    type="text" required style={st.editInput}
+                                    placeholder="Например: FRNT-2026-01"
+                                    value={editForm.name}
+                                    onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                                    disabled={isEditing}
+                                />
+                            </div>
+                            <div>
+                                <label style={st.editLabel}>НАЗНАЧИТЬ МЕНТОРА</label>
+                                <select
+                                    style={st.editInput}
+                                    value={editForm.mentorId}
+                                    onChange={e => setEditForm({ ...editForm, mentorId: Number(e.target.value) })}
+                                    disabled={isEditing}
+                                >
+                                    <option value={0}>-- Без изменений --</option>
+                                    {mentors.map(m => (
+                                        <option key={m.id} value={m.id}>{m.fullName}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <div style={{ flex: 1 }}>
+                                    <label style={st.editLabel}>ДАТА НАЧАЛА</label>
+                                    <input
+                                        type="date" style={st.editInput}
+                                        value={editForm.startDate}
+                                        onChange={e => setEditForm({ ...editForm, startDate: e.target.value })}
+                                        disabled={isEditing}
+                                    />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <label style={st.editLabel}>ДАТА ОКОНЧАНИЯ</label>
+                                    <input
+                                        type="date" style={st.editInput}
+                                        value={editForm.endDate}
+                                        onChange={e => setEditForm({ ...editForm, endDate: e.target.value })}
+                                        disabled={isEditing}
+                                    />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label style={st.editLabel}>МАКС. СТУДЕНТОВ</label>
+                                <input
+                                    type="number" min={1} style={st.editInput}
+                                    value={editForm.maxStudents}
+                                    onChange={e => setEditForm({ ...editForm, maxStudents: Number(e.target.value) })}
+                                    disabled={isEditing}
+                                />
+                            </div>
+
+                            <button type="submit" style={st.editSubmitBtn} disabled={isEditing}>
+                                {isEditing ? 'Сохранение...' : 'Сохранить изменения'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -703,16 +814,17 @@ const GroupDetailsPage: React.FC = () => {
 export default GroupDetailsPage;
 
 
-// --- ПОЛНОСТЬЮ ИСПРАВЛЕННЫЕ СТИЛИ (БЕЗ ОБРЫВОВ И ОШИБОК) ---
+// --- СТИЛИ ---
 const st = {
     container: { padding: '24px 40px', backgroundColor: '#F8FAFC', minHeight: '100vh', fontFamily: '"Inter", sans-serif' },
     navBar: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#FFFFFF', padding: '12px 20px', borderRadius: '12px', border: '1px solid #E2E8F0', marginBottom: '24px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' },
     backButton: { border: 'none', background: '#F1F5F9', color: '#334155', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px', padding: '8px 14px', borderRadius: '8px', transition: 'background-color 0.15s' },
     breadcrumbs: { fontSize: '13px', color: '#94A3B8', fontWeight: 500, display: 'flex', gap: '6px' },
-    headerBlock: { marginBottom: '24px' },
+    headerBlock: { marginBottom: '24px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' },
     title: { fontSize: '28px', fontWeight: 800, color: '#0F172A', margin: '0 0 4px 0', letterSpacing: '-0.02em', display: 'flex', alignItems: 'center', gap: '12px' },
     statusBadge: { fontSize: '11px', fontWeight: 700, backgroundColor: '#D1FAE5', color: '#065F46', padding: '4px 10px', borderRadius: '12px', textTransform: 'uppercase' as const, letterSpacing: '0.05em' },
     subtitle: { fontSize: '14px', color: '#64748B', margin: 0 },
+    editGroupBtn: { display: 'flex', alignItems: 'center', gap: '8px', padding: '9px 16px', border: '1px solid #CBD5E1', background: '#FFFFFF', color: '#334155', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px', whiteSpace: 'nowrap' as const },
     divider: { border: 'none', height: '1px', backgroundColor: '#E2E8F0', margin: '28px 0' },
     workspaceHeader: { marginBottom: '20px' },
     sectionTitle: { fontSize: '18px', fontWeight: 700, color: '#0F172A', margin: '0 0 16px 0', letterSpacing: '-0.01em' },
@@ -728,11 +840,17 @@ const st = {
     spinner: { color: '#4F46E5', animation: 'spin 1s linear infinite' },
     errorBanner: { display: 'flex', alignItems: 'center', gap: '10px', backgroundColor: '#FEF2F2', border: '1px solid #FEE2E2', color: '#EF4444', padding: '12px 16px', borderRadius: '10px', marginBottom: '24px', fontSize: '14px', fontWeight: 500 },
     removeWarningBox: { padding: '12px', backgroundColor: '#FEF2F2', border: '1px solid #FEE2E2', borderRadius: '8px', color: '#64748B', fontSize: '13px', lineHeight: '1.5' },
-
-    // Модальные окна
+    editCloseBtn: { position: 'absolute' as const, top: '20px', right: '20px', background: '#F1F5F9', border: 'none', color: '#64748B', cursor: 'pointer', padding: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '50%', width: '32px', height: '32px' },
+    editTitle: { margin: 0, fontSize: '20px', fontWeight: 700, color: '#0F172A' },
+    editSubtitle: { margin: '6px 0 0 0', fontSize: '13px', color: '#64748B', lineHeight: 1.4 },
+    editModalContent: { backgroundColor: '#FFFFFF', borderRadius: '24px', width: '100%', maxWidth: '460px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)', padding: '32px', position: 'relative' as const },
+    editLabel: { fontSize: '11px', fontWeight: 700, color: '#64748B', display: 'block', marginBottom: '6px', letterSpacing: '0.05em' },
+    editInput: { width: '100%', height: '44px', padding: '0 14px', borderRadius: '12px', border: '1px solid #E2E8F0', background: '#F8FAFC', fontSize: '14px', outline: 'none', color: '#0F172A', boxSizing: 'border-box' as const },
+    editSubmitBtn: { marginTop: '6px', height: '48px', backgroundColor: '#4F46E5', color: '#fff', border: 'none', borderRadius: '12px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' },
     modalOverlay: { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15, 23, 42, 0.4)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
     modalContent: { backgroundColor: '#FFFFFF', borderRadius: '16px', width: '100%', maxWidth: '400px', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)', overflow: 'visible' as const, border: '1px solid #E2E8F0' },
     modalHeader: { padding: '16px 20px', borderBottom: '1px solid #F1F5F9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    modalHeaderRounded: { borderTopLeftRadius: '16px', borderTopRightRadius: '16px' },
     modalTitle: { margin: 0, fontSize: '16px', fontWeight: 600, color: '#0F172A' },
     closeModalBtn: { border: 'none', background: 'none', cursor: 'pointer', color: '#94A3B8', display: 'flex', alignItems: 'center' },
     modalBody: { padding: '20px', display: 'flex', flexDirection: 'column' as const, gap: '16px' },
@@ -742,7 +860,6 @@ const st = {
     modalCancelBtn: { border: 'none', background: '#F1F5F9', color: '#475569', padding: '9px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px' },
     modalSubmitBtn: { border: 'none', background: '#4F46E5', color: '#FFFFFF', padding: '9px 16px', borderRadius: '8px', cursor: 'pointer', fontWeight: 600, fontSize: '13px' },
 
-    // Асинхронный выпадающий список
     dropdownList: { position: 'absolute' as const, top: '105%', left: 0, right: 0, backgroundColor: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '8px', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)', maxHeight: '200px', overflowY: 'auto' as const, zIndex: 1100, padding: '4px' },
     dropdownItem: { padding: '8px 12px', borderRadius: '6px', cursor: 'pointer', display: 'flex', flexDirection: 'column' as const, gap: '2px', transition: 'background-color 0.1s' }
 };
