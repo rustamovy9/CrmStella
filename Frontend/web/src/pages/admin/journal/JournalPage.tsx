@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, ChevronDown, ChevronUp, Plus, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, ChevronDown, ChevronUp, Plus, X } from 'lucide-react';
 import { journalService } from '../../../api/journalService';
+import { lessonService } from '../../../api/lessonService';
 import { groupStudentService } from '../../../api/groupStudentService';
 
 import type {
@@ -16,11 +17,11 @@ import { AddLessonModal } from '../../../components/modals/AddLessonModal';
 
 const STATUS = { Present: 1, Absent: 2, Late: 3, Excused: 4 } as const;
 
-const EMPTY_COMMENT = { 
-    open: false, 
-    lessonId: 0, 
-    studentId: 0, 
-    text: '', 
+const EMPTY_COMMENT = {
+    open: false,
+    lessonId: 0,
+    studentId: 0,
+    text: '',
     lateMinutes: 0,
     status: STATUS.Present
 };
@@ -41,6 +42,7 @@ const JournalPage: React.FC = () => {
     const [showAddLesson, setShowAddLesson] = useState(false);
     const [currentWeek, setCurrentWeek] = useState(1);
 
+    // comment modal
     const [commentModal, setCommentModal] = useState<{
         open: boolean;
         att?: AttendanceResponse;
@@ -50,8 +52,27 @@ const JournalPage: React.FC = () => {
         lateMinutes: number;
         status: number;
     }>(EMPTY_COMMENT);
-
     const closeCommentModal = () => setCommentModal(EMPTY_COMMENT);
+
+    // edit lesson modal
+    const [editLessonModal, setEditLessonModal] = useState<{
+        open: boolean;
+        lesson?: LessonResponse;
+    }>({ open: false });
+    const [editLessonForm, setEditLessonForm] = useState({
+        title: '',
+        description: '',
+        lessonDate: '',
+        startTime: '',
+        endTime: '',
+        weekNumber: 1,
+        orderIndex: 1,
+    });
+    const [isSavingLesson, setIsSavingLesson] = useState(false);
+
+    // delete lesson modal
+    const [deleteLessonTarget, setDeleteLessonTarget] = useState<{ id: number; title: string } | null>(null);
+    const [isDeletingLesson, setIsDeletingLesson] = useState(false);
 
     const loadAttScores = async (allLessons: LessonResponse[]) => {
         if (allLessons.length === 0) return;
@@ -84,7 +105,6 @@ const JournalPage: React.FC = () => {
                     .catch(() => ({ wn, data: [] as WeekResultResponse[] }))
             )
         );
-
         setWeekResults(prev => {
             const nextMap = isInitialLoad ? {} : { ...prev };
             results.forEach(r => { nextMap[r.wn] = r.data; });
@@ -156,9 +176,7 @@ const JournalPage: React.FC = () => {
             map[l.weekNumber].push(l);
         });
         Object.values(map).forEach(arr =>
-            arr.sort((a, b) =>
-                new Date(a.lessonDate).getTime() - new Date(b.lessonDate).getTime()
-            )
+            arr.sort((a, b) => new Date(a.lessonDate).getTime() - new Date(b.lessonDate).getTime())
         );
         return map;
     }, [lessons]);
@@ -175,61 +193,42 @@ const JournalPage: React.FC = () => {
 
     const attLookup = useMemo(() => {
         const m: Record<string, AttendanceResponse> = {};
-        Object.values(attMap).flat().forEach(a => {
-            m[`${a.lessonId}-${a.studentId}`] = a;
-        });
+        Object.values(attMap).flat().forEach(a => { m[`${a.lessonId}-${a.studentId}`] = a; });
         return m;
     }, [attMap]);
 
     const scoreLookup = useMemo(() => {
         const m: Record<string, LessonScoreResponse> = {};
-        Object.values(scoreMap).flat().forEach(sc => {
-            m[`${sc.lessonId}-${sc.studentId}`] = sc;
-        });
+        Object.values(scoreMap).flat().forEach(sc => { m[`${sc.lessonId}-${sc.studentId}`] = sc; });
         return m;
     }, [scoreMap]);
 
     const students = useMemo(() => {
         if (groupStudents.length > 0) return groupStudents;
-
         const map = new Map<number, string>();
-        Object.values(attMap).flat().forEach(a =>
-            map.set(a.studentId, a.studentFullName)
-        );
-        Object.values(scoreMap).flat().forEach(sc =>
-            map.set(sc.studentId, sc.studentName)
-        );
-        Object.values(weekResults).flat().forEach(wr =>
-            map.set(wr.studentId, wr.studentName)
-        );
+        Object.values(attMap).flat().forEach(a => map.set(a.studentId, a.studentFullName));
+        Object.values(scoreMap).flat().forEach(sc => map.set(sc.studentId, sc.studentName));
+        Object.values(weekResults).flat().forEach(wr => map.set(wr.studentId, wr.studentName));
         return Array.from(map.entries())
             .map(([id, name]) => ({ id, name }))
             .sort((a, b) => a.name.localeCompare(b.name));
     }, [groupStudents, attMap, scoreMap, weekResults]);
 
-    const chartStudentsFormat = useMemo(() => {
-        return students.map(s => ({
-            id: s.id,
-            fullName: s.name
-        }));
-    }, [students]);
+    const chartStudentsFormat = useMemo(() =>
+        students.map(s => ({ id: s.id, fullName: s.name })),
+        [students]
+    );
 
     const handleAttToggle = async (lessonId: number, studentId: number) => {
         const key = `${lessonId}-${studentId}`;
         const existing = attLookup[key];
         setSaving(`att-${key}`);
-
         try {
             if (!existing) {
                 try {
-                    await journalService.createAttendance({
-                        lessonId,
-                        studentId,
-                        status: STATUS.Present,
-                    });
+                    await journalService.createAttendance({ lessonId, studentId, status: STATUS.Present });
                 } catch (createErr: any) {
-                    if (createErr?.response?.data?.errorType === 3 ||
-                        createErr?.response?.status === 409) {
+                    if (createErr?.response?.data?.errorType === 3 || createErr?.response?.status === 409) {
                         await loadAttScores(lessons);
                         return;
                     }
@@ -238,13 +237,11 @@ const JournalPage: React.FC = () => {
             } else {
                 const isP = String(existing.status) === 'Present';
                 const newStatus = isP ? STATUS.Absent : STATUS.Present;
-
                 await journalService.updateAttendance(existing.id, {
                     status: newStatus,
                     absenceReason: existing.absenceReason,
                     mentorNote: existing.mentorNote,
                 });
-
                 if (newStatus === STATUS.Absent) {
                     const existingScore = scoreLookup[key];
                     if (existingScore && existingScore.score > 0) {
@@ -255,13 +252,9 @@ const JournalPage: React.FC = () => {
                     }
                 }
             }
-
             await loadAttScores(lessons);
-
             const lesson = lessons.find(l => l.id === lessonId);
-            if (lesson) {
-                await recalcAndReload(studentId, [lesson.weekNumber]);
-            }
+            if (lesson) await recalcAndReload(studentId, [lesson.weekNumber]);
         } catch (err: any) {
             console.error('Attendance error:', err?.response?.data || err);
         } finally {
@@ -270,26 +263,17 @@ const JournalPage: React.FC = () => {
     };
 
     const handleScoreChange = async (
-        lessonId: number,
-        studentId: number,
-        weekNumber: number,
-        score: number
+        lessonId: number, studentId: number, weekNumber: number, score: number
     ) => {
         const key = `${lessonId}-${studentId}`;
         const existing = scoreLookup[key];
         setSaving(`score-${key}`);
-
         try {
             if (!existing) {
                 try {
-                    await journalService.createLessonScore({
-                        lessonId,
-                        studentId,
-                        score,
-                    });
+                    await journalService.createLessonScore({ lessonId, studentId, score });
                 } catch (createErr: any) {
-                    if (createErr?.response?.data?.errorType === 3 ||
-                        createErr?.response?.status === 409) {
+                    if (createErr?.response?.data?.errorType === 3 || createErr?.response?.status === 409) {
                         await loadAttScores(lessons);
                         return;
                     }
@@ -301,13 +285,10 @@ const JournalPage: React.FC = () => {
                     mentorFeedback: existing.mentorFeedback,
                 });
             }
-
             await loadAttScores(lessons);
-
             const lesson = lessons.find(l => l.id === lessonId);
             const wn = lesson?.weekNumber ?? weekNumber;
             await recalcAndReload(studentId, [wn]);
-
         } catch (err: any) {
             console.error('Score change error:', err?.response?.data || err);
         } finally {
@@ -316,17 +297,13 @@ const JournalPage: React.FC = () => {
     };
 
     const handleWeekFieldUpdate = async (
-        studentId: number,
-        weekNumber: number,
-        field: 'bonusScore' | 'examScore',
-        value: number
+        studentId: number, weekNumber: number,
+        field: 'bonusScore' | 'examScore', value: number
     ) => {
         const savingKey = `wr-${field}-${studentId}-${weekNumber}`;
         setSaving(savingKey);
         try {
-            await journalService.updateWeekResult(studentId, gid, weekNumber, {
-                [field]: value,
-            });
+            await journalService.updateWeekResult(studentId, gid, weekNumber, { [field]: value });
             await loadWeekResults([weekNumber]);
         } catch (err: any) {
             console.error('Update week result error:', err?.response?.data || err);
@@ -341,21 +318,18 @@ const JournalPage: React.FC = () => {
         try {
             if (!att) {
                 await journalService.createAttendance({
-                    lessonId, 
-                    studentId,
-                    status: status,
+                    lessonId, studentId, status,
                     absenceReason: text,
                     lateMinutes: status === STATUS.Late ? lateMinutes : null,
                 });
             } else {
                 await journalService.updateAttendance(att.id, {
-                    status: status,
+                    status,
                     absenceReason: text,
                     lateMinutes: status === STATUS.Late ? lateMinutes : null,
                 });
             }
             await loadAttScores(lessons);
-
             const lesson = lessons.find(l => l.id === lessonId);
             if (lesson) await recalcAndReload(studentId, [lesson.weekNumber]);
         } catch (err) {
@@ -363,6 +337,67 @@ const JournalPage: React.FC = () => {
         } finally {
             setSaving(null);
             closeCommentModal();
+        }
+    };
+
+    // ── LESSON EDIT ─────────────────────────────────────────
+    const handleLessonEdit = (lesson: LessonResponse) => {
+        setEditLessonForm({
+            title: lesson.title,
+            description: lesson.description || '',
+            lessonDate: lesson.lessonDate?.split('T')[0] || '',
+            startTime: lesson.startTime?.substring(0, 5) || '',
+            endTime: lesson.endTime?.substring(0, 5) || '',
+            weekNumber: lesson.weekNumber,
+            orderIndex: lesson.orderIndex,
+        });
+        setEditLessonModal({ open: true, lesson });
+    };
+
+    const handleLessonEditSave = async () => {
+        if (!editLessonModal.lesson) return;
+        setIsSavingLesson(true);
+        try {
+            await lessonService.update({
+                id: editLessonModal.lesson.id,
+                groupId: editLessonModal.lesson.groupId,
+                weekNumber: editLessonForm.weekNumber,
+                orderIndex: editLessonForm.orderIndex,
+                title: editLessonForm.title,
+                description: editLessonForm.description,
+                lessonDate: editLessonForm.lessonDate
+                    ? new Date(editLessonForm.lessonDate + 'T00:00:00Z').toISOString()
+                    : editLessonModal.lesson.lessonDate,
+                startTime: editLessonForm.startTime || editLessonModal.lesson.startTime,
+                endTime: editLessonForm.endTime || editLessonModal.lesson.endTime,
+                isCompleted: editLessonModal.lesson.isCompleted,
+            });
+            setEditLessonModal({ open: false });
+            await loadAll();
+        } catch (err) {
+            console.error('Edit lesson error:', err);
+        } finally {
+            setIsSavingLesson(false);
+        }
+    };
+
+    // ── LESSON DELETE ────────────────────────────────────────
+    const handleLessonDelete = (lessonId: number) => {
+        const lesson = lessons.find(l => l.id === lessonId);
+        if (lesson) setDeleteLessonTarget({ id: lessonId, title: lesson.title });
+    };
+
+    const handleLessonDeleteConfirm = async () => {
+        if (!deleteLessonTarget) return;
+        setIsDeletingLesson(true);
+        try {
+            await lessonService.delete(deleteLessonTarget.id);
+            setDeleteLessonTarget(null);
+            await loadAll();
+        } catch (err) {
+            console.error('Delete lesson error:', err);
+        } finally {
+            setIsDeletingLesson(false);
         }
     };
 
@@ -375,10 +410,7 @@ const JournalPage: React.FC = () => {
 
     if (loading) return (
         <div style={s.center}>
-            <style>{`
-                @keyframes jspin { to { transform: rotate(360deg); } }
-                .jspinner { animation: jspin 0.7s linear infinite; }
-            `}</style>
+            <style>{`@keyframes jspin { to { transform: rotate(360deg); } } .jspinner { animation: jspin 0.7s linear infinite; }`}</style>
             <div className="jspinner" style={s.spinner} />
             <span style={{ color: '#64748B', fontSize: '14px' }}>Загрузка журнала...</span>
         </div>
@@ -399,15 +431,9 @@ const JournalPage: React.FC = () => {
             <div style={s.header}>
                 <button className="jback" style={s.backBtn} onClick={() => navigate(-1)}>
                     <ArrowLeft size={16} />
-                    <span style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A' }}>
-                        Journal
-                    </span>
+                    <span style={{ fontSize: '18px', fontWeight: 700, color: '#0F172A' }}>Журнал группы</span>
                 </button>
-                <button
-                    className="jaddbtn"
-                    style={s.addBtn}
-                    onClick={() => setShowAddLesson(true)}
-                >
+                <button className="jaddbtn" style={s.addBtn} onClick={() => setShowAddLesson(true)}>
                     <Plus size={15} />
                     Добавить урок
                 </button>
@@ -415,18 +441,16 @@ const JournalPage: React.FC = () => {
 
             {lessons.length === 0 ? (
                 <div style={s.emptyWrap}>
-                    <div style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', marginBottom: '6px' }}>
-                        Уроки ещё не созданы
+                    <div style={s.emptyIcon}>
+                        <BookOpen size={48} color="#4F46E5" strokeWidth={1.5} />
+                    </div>                    <div style={{ fontSize: '20px', fontWeight: 700, color: '#0F172A', marginBottom: '8px' }}>
+                        Журнал пустой
                     </div>
-                    <div style={{ fontSize: '13px', color: '#64748B', marginBottom: '20px' }}>
-                        Добавьте первый урок чтобы начать заполнять журнал
+                    <div style={{ fontSize: '14px', color: '#64748B', marginBottom: '28px', maxWidth: '360px', lineHeight: 1.6 }}>
+                        Добавьте первый урок чтобы начать отмечать посещаемость, ставить оценки и вести учёт студентов
                     </div>
-                    <button
-                        className="jaddbtn"
-                        style={s.addBtn}
-                        onClick={() => setShowAddLesson(true)}
-                    >
-                        <Plus size={15} />
+                    <button className="jaddbtn" style={s.addBtnLarge} onClick={() => setShowAddLesson(true)}>
+                        <Plus size={16} />
                         Добавить первый урок
                     </button>
                 </div>
@@ -474,21 +498,19 @@ const JournalPage: React.FC = () => {
                                                 const currentStatus = att
                                                     ? (att.status === 'Present' ? STATUS.Present
                                                         : att.status === 'Late' ? STATUS.Late
-                                                        : att.status === 'Excused' ? STATUS.Excused
-                                                        : STATUS.Absent)
+                                                            : att.status === 'Excused' ? STATUS.Excused
+                                                                : STATUS.Absent)
                                                     : STATUS.Present;
-
                                                 setCommentModal({
-                                                    open: true,
-                                                    att,
-                                                    lessonId,
-                                                    studentId,
+                                                    open: true, att, lessonId, studentId,
                                                     text: att?.absenceReason ?? '',
                                                     lateMinutes: att?.lateMinutes ?? 0,
                                                     status: currentStatus
                                                 });
                                             }}
                                             onWeekFieldUpdate={handleWeekFieldUpdate}
+                                            onLessonEdit={handleLessonEdit}
+                                            onLessonDelete={handleLessonDelete}
                                         />
                                     )}
                                 </div>
@@ -512,6 +534,7 @@ const JournalPage: React.FC = () => {
                 />
             )}
 
+            {/* ── COMMENT MODAL ─────────────────────────────── */}
             {commentModal.open && (
                 <div style={s.overlay}>
                     <div style={s.modal}>
@@ -561,9 +584,7 @@ const JournalPage: React.FC = () => {
                             placeholder="Причина отсутствия или опоздания..."
                             value={commentModal.text}
                             rows={3}
-                            onChange={e => setCommentModal(prev => ({
-                                ...prev, text: e.target.value
-                            }))}
+                            onChange={e => setCommentModal(prev => ({ ...prev, text: e.target.value }))}
                         />
 
                         <div style={s.modalFooter}>
@@ -582,6 +603,122 @@ const JournalPage: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {/* ── EDIT LESSON MODAL ─────────────────────────── */}
+            {editLessonModal.open && (
+                <div style={s.overlay}>
+                    <div style={s.modal}>
+                        <div style={s.modalHeader}>
+                            <span style={s.modalTitle}>Редактировать урок</span>
+                            <button style={s.modalClose} onClick={() => setEditLessonModal({ open: false })}>
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <label style={s.label}>НАЗВАНИЕ УРОКА</label>
+                        <input
+                            style={s.numInput}
+                            value={editLessonForm.title}
+                            placeholder="Название урока"
+                            onChange={e => setEditLessonForm(prev => ({ ...prev, title: e.target.value }))}
+                            disabled={isSavingLesson}
+                        />
+
+                        <label style={s.label}>ДАТА УРОКА</label>
+                        <input
+                            type="date"
+                            style={s.numInput}
+                            value={editLessonForm.lessonDate}
+                            onChange={e => setEditLessonForm(prev => ({ ...prev, lessonDate: e.target.value }))}
+                            disabled={isSavingLesson}
+                        />
+
+                        <div style={{ display: 'flex', gap: '12px' }}>
+                            <div style={{ flex: 1 }}>
+                                <label style={s.label}>НАЧАЛО</label>
+                                <input
+                                    type="time"
+                                    style={s.numInput}
+                                    value={editLessonForm.startTime}
+                                    onChange={e => setEditLessonForm(prev => ({ ...prev, startTime: e.target.value }))}
+                                    disabled={isSavingLesson}
+                                />
+                            </div>
+                            <div style={{ flex: 1 }}>
+                                <label style={s.label}>КОНЕЦ</label>
+                                <input
+                                    type="time"
+                                    style={s.numInput}
+                                    value={editLessonForm.endTime}
+                                    onChange={e => setEditLessonForm(prev => ({ ...prev, endTime: e.target.value }))}
+                                    disabled={isSavingLesson}
+                                />
+                            </div>
+                        </div>
+
+                        <label style={s.label}>НЕДЕЛЯ</label>
+                        <input
+                            type="number"
+                            min={1}
+                            style={s.numInput}
+                            value={editLessonForm.weekNumber}
+                            onChange={e => setEditLessonForm(prev => ({ ...prev, weekNumber: Number(e.target.value) }))}
+                            disabled={isSavingLesson}
+                        />
+
+                        <div style={s.modalFooter}>
+                            <button className="jcancelm" style={s.cancelBtn} onClick={() => setEditLessonModal({ open: false })} disabled={isSavingLesson}>
+                                Отмена
+                            </button>
+                            <button className="jsavem" style={s.saveBtn} onClick={handleLessonEditSave} disabled={isSavingLesson}>
+                                {isSavingLesson ? 'Сохранение...' : 'Сохранить'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── DELETE LESSON MODAL ───────────────────────── */}
+            {deleteLessonTarget && (
+                <div style={s.overlay}>
+                    <div style={s.modal}>
+                        <div style={s.modalHeader}>
+                            <span style={{ ...s.modalTitle, color: '#991B1B' }}>Удалить урок</span>
+                            <button style={s.modalClose} onClick={() => setDeleteLessonTarget(null)}>
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div style={{
+                            padding: '12px', background: '#FEF2F2',
+                            border: '1px solid #FEE2E2', borderRadius: '10px',
+                            color: '#64748B', fontSize: '13px', lineHeight: '1.5',
+                            marginBottom: '20px'
+                        }}>
+                            Вы собираетесь удалить урок:<br />
+                            <strong style={{ color: '#0F172A', fontSize: '14px' }}>
+                                {deleteLessonTarget.title}
+                            </strong>
+                            <div style={{ marginTop: '8px', fontSize: '12px', color: '#94A3B8' }}>
+                                Все записи посещаемости и оценки этого урока будут удалены.
+                            </div>
+                        </div>
+
+                        <div style={s.modalFooter}>
+                            <button className="jcancelm" style={s.cancelBtn} onClick={() => setDeleteLessonTarget(null)} disabled={isDeletingLesson}>
+                                Отмена
+                            </button>
+                            <button
+                                style={{ ...s.saveBtn, background: '#EF4444' }}
+                                onClick={handleLessonDeleteConfirm}
+                                disabled={isDeletingLesson}
+                            >
+                                {isDeletingLesson ? 'Удаление...' : 'Удалить'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
@@ -593,7 +730,6 @@ const s = {
     header: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' } as React.CSSProperties,
     backBtn: { display: 'flex', alignItems: 'center', gap: '8px', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#0F172A', transition: 'color 0.15s' } as React.CSSProperties,
     addBtn: { display: 'flex', alignItems: 'center', gap: '6px', background: '#4F46E5', color: '#FFFFFF', border: 'none', borderRadius: '10px', padding: '10px 18px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'background 0.15s' } as React.CSSProperties,
-    emptyWrap: { display: 'flex', flexDirection: 'column' as const, alignItems: 'center', justifyContent: 'center', padding: '64px 24px', background: '#FFFFFF', borderRadius: '20px', border: '1px solid #E2E8F0', textAlign: 'center' as const } as React.CSSProperties,
     chartWrapper: { marginBottom: '28px' } as React.CSSProperties,
     weekList: { display: 'flex', flexDirection: 'column' as const, gap: '12px' } as React.CSSProperties,
     weekCard: { background: '#FFFFFF', border: '1px solid #E2E8F0', borderRadius: '16px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(15,23,42,0.04)' } as React.CSSProperties,
@@ -609,6 +745,24 @@ const s = {
     label: { display: 'block', fontSize: '12px', fontWeight: 600, color: '#64748B', marginBottom: '6px' } as React.CSSProperties,
     numInput: { width: '100%', padding: '10px 12px', border: '1px solid #E2E8F0', borderRadius: '10px', fontSize: '14px', color: '#0F172A', fontFamily: 'inherit', boxSizing: 'border-box' as const, marginBottom: '16px', outline: 'none' } as React.CSSProperties,
     modalFooter: { display: 'flex', justifyContent: 'flex-end', gap: '10px' } as React.CSSProperties,
+    emptyWrap: {
+        display: 'flex', flexDirection: 'column' as const, alignItems: 'center',
+        justifyContent: 'center', padding: '80px 24px', background: '#FFFFFF',
+        borderRadius: '20px', border: '1px solid #E2E8F0', textAlign: 'center' as const,
+        boxShadow: '0 1px 3px rgba(15,23,42,0.04)'
+    } as React.CSSProperties,
+    emptyIcon: {
+        fontSize: '56px', marginBottom: '20px', lineHeight: 1,
+        filter: 'grayscale(20%)'
+    } as React.CSSProperties,
+    addBtnLarge: {
+        display: 'flex', alignItems: 'center', gap: '8px',
+        background: '#4F46E5', color: '#FFFFFF', border: 'none',
+        borderRadius: '12px', padding: '13px 24px',
+        fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+        transition: 'background 0.15s',
+        boxShadow: '0 4px 12px rgba(79,70,229,0.3)'
+    } as React.CSSProperties,
     cancelBtn: { padding: '9px 18px', border: '1px solid #E2E8F0', borderRadius: '10px', background: '#FFFFFF', color: '#64748B', fontSize: '13px', fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
     saveBtn: { padding: '9px 18px', border: 'none', borderRadius: '10px', background: '#4F46E5', color: '#FFFFFF', fontSize: '13px', fontWeight: 600, cursor: 'pointer' } as React.CSSProperties,
 };

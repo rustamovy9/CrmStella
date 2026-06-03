@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare } from 'lucide-react';
+import { MessageSquare, Pencil, Trash2 } from 'lucide-react';
 import type {
     LessonResponse,
     AttendanceResponse,
@@ -13,6 +13,7 @@ interface Student {
     isActive?: boolean;
     leftAt?: string | null;
 }
+
 interface Props {
     weekNumber: number;
     lessons: LessonResponse[];
@@ -24,21 +25,14 @@ interface Props {
     onAttToggle: (lessonId: number, studentId: number) => void;
     onScoreChange: (lessonId: number, studentId: number, weekNumber: number, score: number) => void;
     onCommentOpen: (lessonId: number, studentId: number, att?: AttendanceResponse) => void;
-    onWeekFieldUpdate: (
-        studentId: number,
-        weekNumber: number,
-        field: 'bonusScore' | 'examScore',
-        value: number
-    ) => void;
+    onWeekFieldUpdate: (studentId: number, weekNumber: number, field: 'bonusScore' | 'examScore', value: number) => void;
+    onLessonEdit: (lesson: LessonResponse) => void;
+    onLessonDelete: (lessonId: number) => void;
 }
 
 const fmtDate = (d: string) => {
     const date = new Date(d);
-    return date.toLocaleDateString('ru-RU', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric'
-    });
+    return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 };
 
 const isPresent = (status: any) => {
@@ -77,17 +71,10 @@ interface EditableNumProps {
     weekNumber: number;
     field: 'bonusScore' | 'examScore';
     saving: string | null;
-    onSave: (
-        studentId: number,
-        weekNumber: number,
-        field: 'bonusScore' | 'examScore',
-        value: number
-    ) => void;
+    onSave: (studentId: number, weekNumber: number, field: 'bonusScore' | 'examScore', value: number) => void;
 }
 
-const EditableNum: React.FC<EditableNumProps> = ({
-    value, studentId, weekNumber, field, saving, onSave
-}) => {
+const EditableNum: React.FC<EditableNumProps> = ({ value, studentId, weekNumber, field, saving, onSave }) => {
     const [local, setLocal] = React.useState<string>(value ? String(Math.round(value)) : '');
     const savingKey = `wr-${field}-${studentId}-${weekNumber}`;
     const isSavingThis = saving === savingKey;
@@ -125,6 +112,7 @@ const EditableNum: React.FC<EditableNumProps> = ({
 const JournalWeekTable: React.FC<Props> = ({
     weekNumber, lessons, students, attLookup, scoreLookup, weekResults,
     saving, onAttToggle, onScoreChange, onCommentOpen, onWeekFieldUpdate,
+    onLessonEdit, onLessonDelete,
 }) => {
     return (
         <div className="w-full" style={s.container}>
@@ -152,15 +140,87 @@ const JournalWeekTable: React.FC<Props> = ({
                 .omz-cmt.highlight-blue { color: #2F60E6; }
                 .omz-cmt.highlight-amber { color: #F59E0B; }
 
+                /* --- КРАСИВЫЕ АНИМАЦИИ ДЛЯ ДАТЫ И КНОПОК --- */
+                .lesson-hdr-container {
+                    position: relative;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 100%;
+                    padding: 4px 0;
+                }
+                .lesson-date-text {
+                    display: inline-block;
+                    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+                    will-change: transform;
+                }
+                .lesson-hdr-actions {
+                    position: absolute;
+                    right: 2px;
+                    top: 50%;
+                    transform: translateY(-50%) scale(0.85);
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 4px;
+                    opacity: 0;
+                    pointer-events: none;
+                    transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                    will-change: transform, opacity;
+                }
+                /* Состояние при наведении на ячейку хедера */
+                .lesson-hdr:hover .lesson-date-text {
+                    transform: translateX(-16px);
+                }
+                .lesson-hdr:hover .lesson-hdr-actions {
+                    opacity: 1;
+                    pointer-events: auto;
+                    transform: translateY(-50%) scale(1);
+                }
+
+                /* Премиальный стиль кнопок */
+                .lesson-btn {
+                    background: #FFFFFF;
+                    border: 1px solid #D0D5DD;
+                    cursor: pointer;
+                    padding: 5px;
+                    border-radius: 6px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    box-shadow: 0px 1px 2px rgba(16, 24, 40, 0.05);
+                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                    line-height: 0;
+                }
+                .lesson-btn:active {
+                    transform: scale(0.92);
+                }
+                .lesson-btn-edit { 
+                    color: #667085; 
+                }
+                .lesson-btn-edit:hover { 
+                    background: #EEF2FF; 
+                    color: #4F46E5; 
+                    border-color: #C7D2FE;
+                    transform: translateY(-1px);
+                    box-shadow: 0px 4px 6px -1px rgba(79, 70, 229, 0.1), 0px 2px 4px -1px rgba(79, 70, 229, 0.06);
+                }
+                .lesson-btn-del { 
+                    color: #667085; 
+                }
+                .lesson-btn-del:hover { 
+                    background: #FEF2F2; 
+                    color: #EF4444; 
+                    border-color: #FCA5A5;
+                    transform: translateY(-1px);
+                    box-shadow: 0px 4px 6px -1px rgba(239, 68, 68, 0.1), 0px 2px 4px -1px rgba(239, 68, 68, 0.06);
+                }
+
                 .omz-native-checkbox { width: 18px; height: 18px; cursor: pointer; accent-color: #2F60E6; margin: 0; }
                 .omz-native-checkbox:disabled { cursor: not-allowed; }
-
                 .omz-score { appearance: none; -webkit-appearance: none; background-color: transparent; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23667085' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 6px center; width: 48px; height: 100%; padding: 0 16px 0 6px; border: none; font-size: 14px; font-weight: 600; color: #101828; cursor: pointer; outline: none; text-align: center; }
                 .omz-score:disabled { color: #98A2B3; cursor: not-allowed; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23D0D5DD' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); }
-
                 .omz-num { width: 44px; height: 30px; padding: 0; border: 1px solid #D0D5DD; border-radius: 6px; font-size: 14px; font-weight: 500; color: #475467; background: #FFFFFF; text-align: center; box-shadow: 0 1px 2px rgba(16,24,40,0.05); outline: none; transition: all 0.15s ease; }
                 .omz-num:focus { border-color: #2F60E6; box-shadow: 0 0 0 3px rgba(47, 96, 230, 0.1); }
-
                 .omz-head-label { display: inline-flex; align-items: center; gap: 6px; color: #667085; font-weight: 600; font-size: 12px; }
             `}</style>
 
@@ -172,8 +232,26 @@ const JournalWeekTable: React.FC<Props> = ({
                                 STUDENTS
                             </th>
                             {lessons.map(l => (
-                                <th key={l.id} colSpan={1} className="col-divider" style={s.thDate}>
-                                    {fmtDate(l.lessonDate)}
+                                <th key={l.id} colSpan={1} className="col-divider lesson-hdr" style={s.thDate}>
+                                    <div className="lesson-hdr-container">
+                                        <span className="lesson-date-text">{fmtDate(l.lessonDate)}</span>
+                                        <span className="lesson-hdr-actions">
+                                            <button
+                                                className="lesson-btn lesson-btn-edit"
+                                                title="Редактировать урок"
+                                                onClick={(e) => { e.stopPropagation(); onLessonEdit(l); }}
+                                            >
+                                                <Pencil size={12} />
+                                            </button>
+                                            <button
+                                                className="lesson-btn lesson-btn-del"
+                                                title="Удалить урок"
+                                                onClick={(e) => { e.stopPropagation(); onLessonDelete(l.id); }}
+                                            >
+                                                <Trash2 size={12} />
+                                            </button>
+                                        </span>
+                                    </div>
                                 </th>
                             ))}
                             <th colSpan={4} style={s.thEnd}>END OF WEEK</th>
@@ -245,17 +323,10 @@ const JournalWeekTable: React.FC<Props> = ({
                                         const isSavingScore = saving === `score-${aKey}`;
                                         const present = isPresent(att?.status);
                                         const isLate = String(att?.status) === 'Late';
-                                        
-                                        // Надежная проверка на наличие текста внутри комментария
                                         const hasComment = !!(att?.absenceReason && String(att.absenceReason).trim());
-                                        
-                                        // Определяем класс подсветки кнопки в зависимости от CRM статуса
                                         const highlightClass = isLate ? 'highlight-amber' : hasComment ? 'highlight-blue' : '';
-                                        // Цвет для заливки иконки Lucide
                                         const activeColor = isLate ? '#F59E0B' : '#2F60E6';
-
                                         const currentScore = (sc && sc.score !== undefined) ? sc.score : 0;
-
                                         const isLeft = student.isActive === false;
                                         const canScore = (present || isLate) && !isLeft;
                                         const canToggleAtt = !isLeft && !isLate;
@@ -272,9 +343,9 @@ const JournalWeekTable: React.FC<Props> = ({
                                                             style={{ cursor: isLeft ? 'not-allowed' : 'pointer' }}
                                                             onClick={() => !isLeft && onCommentOpen(lesson.id, student.id, att)}
                                                         >
-                                                            <MessageSquare 
-                                                                size={14} 
-                                                                fill={hasComment ? activeColor : 'none'} 
+                                                            <MessageSquare
+                                                                size={14}
+                                                                fill={hasComment ? activeColor : 'none'}
                                                             />
                                                         </button>
 
@@ -363,7 +434,7 @@ const JournalWeekTable: React.FC<Props> = ({
 const s = {
     container: { background: '#FFFFFF', border: '1px solid #EAECF0', borderRadius: '12px', boxShadow: '0px 1px 3px rgba(16, 24, 40, 0.05)', overflow: 'hidden' } as React.CSSProperties,
     thStudent: { padding: '10px 12px', textAlign: 'left' as const, fontSize: '12px', textTransform: 'uppercase' as const, letterSpacing: '0.04em', minWidth: '160px', maxWidth: '180px' } as React.CSSProperties,
-    thDate: { padding: '10px 8px', textAlign: 'center' as const, fontSize: '14px', fontWeight: 700, color: '#101828', minWidth: '105px' } as React.CSSProperties,
+    thDate: { padding: '10px 8px', textAlign: 'center' as const, fontSize: '14px', fontWeight: 700, color: '#101828', minWidth: '115px' } as React.CSSProperties,
     thEnd: { padding: '8px 10px', textAlign: 'center' as const, fontSize: '11px', textTransform: 'uppercase' as const, letterSpacing: '0.04em' } as React.CSSProperties,
     thSub: { padding: '6px 8px', fontSize: '11px', fontWeight: 500, color: '#667085', textAlign: 'center' as const } as React.CSSProperties,
     tdStudent: { padding: '8px 12px', fontWeight: 500, fontSize: '14px', color: '#344054', whiteSpace: 'nowrap' as const, minWidth: '160px', maxWidth: '180px', textOverflow: 'ellipsis', overflow: 'hidden' } as React.CSSProperties,

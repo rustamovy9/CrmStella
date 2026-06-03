@@ -14,6 +14,7 @@ public class LeadService(
     IUnitOfWork unitOfWork,
     ICacheService cache,
     IAuditLogService auditLogService,
+    IEmailService emailService,
     ILogger<LeadService> logger) : ILeadService
 {
     private const string LeadCachePrefix = "leads:";
@@ -101,7 +102,7 @@ public class LeadService(
         };
 
         await unitOfWork.Leads.CreateAsync(lead);
-        await unitOfWork.SaveChangesAsync(); // ← сначала сохраняем лида, теперь у него есть Id
+        await unitOfWork.SaveChangesAsync();
 
         await unitOfWork.LeadActivities.CreateAsync(new LeadActivity
         {
@@ -177,13 +178,82 @@ public class LeadService(
         if (newStatus == LeadStatus.Lost)
             lead.LostReason = request.LostReason?.Trim();
 
+        if (newStatus == LeadStatus.Converted)
+        {
+            var email = lead.Email?.Trim();
+            if (string.IsNullOrWhiteSpace(email))
+                return Result<LeadResponse>.Fail(
+                    "Для конверсии необходимо указать email",
+                    ErrorType.BadRequest);
+
+            var existingUser = await unitOfWork.Users.GetByEmailAsync(email);
+            if (existingUser is not null)
+                return Result<LeadResponse>.Fail(
+                    "Пользователь с таким email уже существует",
+                    ErrorType.Conflict);
+
+            var studentRole = await unitOfWork.Roles.GetByNameAsync("Student");
+            if (studentRole is null)
+                return Result<LeadResponse>.Fail("Роль Student не найдена", ErrorType.BadRequest);
+
+            var tempPassword = GenerateTempPassword();
+            var passwordHash = BCrypt.Net.BCrypt.HashPassword(tempPassword);
+
+            var nameParts = lead.FullName.Trim().Split(' ', 2);
+            var firstName = nameParts[0];
+            var lastName = nameParts.Length > 1 ? nameParts[1] : "";
+
+            var user = new User
+            {
+                FirstName = firstName,
+                LastName = lastName,
+                Email = email,
+                PasswordHash = passwordHash,
+                RoleId = studentRole.Id,
+                IsActive = true,
+                IsPasswordSet = false,
+                CreatedAt = DateTime.UtcNow
+            };
+
+            await unitOfWork.Users.CreateAsync(user);
+            await unitOfWork.SaveChangesAsync();
+
+            var student = new Student
+            {
+                UserId = user.Id,
+                Balance = 0,
+                IsActive = true,
+                EnrolledAt = DateTime.UtcNow
+            };
+
+            await unitOfWork.Students.CreateAsync(student);
+            await unitOfWork.SaveChangesAsync();
+
+            lead.ConvertedToStudentId = student.Id;
+
+            logger.LogInformation(
+                "Lead {LeadId} converted to Student {StudentId} (User {UserId})",
+                lead.Id, student.Id, user.Id);
+
+            try
+            {
+                await emailService.SendWelcomeAsync(user.Email, user.FullName, tempPassword);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning("Welcome email не отправлен: {Msg}", ex.Message);
+            }
+        }
+
         await unitOfWork.LeadActivities.CreateAsync(new LeadActivity
         {
             LeadId = lead.Id,
             UserId = userId,
             Type = "status_change",
-            Description = $"Статус изменён: {oldStatus} → {newStatus}" +
-                          (request.Comment is not null ? $". {request.Comment}" : ""),
+            Description = newStatus == LeadStatus.Converted
+                ? $"Лид конвертирован в студента (Student ID: {lead.ConvertedToStudentId})"
+                : $"Статус изменён: {oldStatus} → {newStatus}" +
+                  (request.Comment is not null ? $". {request.Comment}" : ""),
             CreatedAt = DateTime.UtcNow
         });
 
@@ -191,9 +261,11 @@ public class LeadService(
         await unitOfWork.SaveChangesAsync();
 
         await auditLogService.LogAsync(userId, AuditActions.ChangeLeadStatus, "Lead", lead.Id,
-            new { Status = oldStatus }, new { Status = newStatus });
+            new { Status = oldStatus }, new { Status = newStatus, lead.ConvertedToStudentId });
 
         await cache.RemoveByPrefixAsync(LeadCachePrefix);
+        await cache.RemoveByPrefixAsync("students:");
+        await cache.RemoveByPrefixAsync("users:");
 
         var updated = await unitOfWork.Leads.GetByIdAsync(lead.Id);
         return Result<LeadResponse>.Ok(MapToResponse(updated!));
@@ -289,6 +361,14 @@ public class LeadService(
         await cache.RemoveByPrefixAsync(LeadCachePrefix);
 
         return Result<bool>.Ok(true);
+    }
+
+    private static string GenerateTempPassword()
+    {
+        const string chars = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+        var random = new Random();
+        return new string(Enumerable.Repeat(chars, 10)
+            .Select(s => s[random.Next(s.Length)]).ToArray());
     }
 
     private static LeadResponse MapToResponse(Lead l)

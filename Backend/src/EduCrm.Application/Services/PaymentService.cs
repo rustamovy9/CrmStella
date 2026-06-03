@@ -22,6 +22,8 @@ public class PaymentService(
     private const string PaymentCachePrefix = "payments:";
     private const string PaymentListCacheKey = "payments:list";
     private const string StudentCachePrefix = "students:";
+    private const string AllUsersCacheKey = "users:all";
+    private const string UserCachePrefix = "users:";
 
     public async Task<Result<List<PaymentListItemResponse>>> GetAllAsync()
     {
@@ -228,7 +230,6 @@ public class PaymentService(
         await unitOfWork.Payments.UpdateAsync(payment);
         await unitOfWork.SaveChangesAsync();
 
-        // пересчитываем баланс если изменилась сумма
         if (amountChanged)
             await RecalculateStudentBalanceAsync(studentId);
 
@@ -276,7 +277,7 @@ public class PaymentService(
         );
 
         await cache.RemoveByPrefixAsync(PaymentCachePrefix);
-        await cache.RemoveByPrefixAsync(StudentCachePrefix); // ← добавил сброс кэша студентов
+        await cache.RemoveByPrefixAsync(StudentCachePrefix);
 
         logger.LogInformation(
             "Payment confirmed: {PaymentId} IsConfirmed: {IsConfirmed}",
@@ -299,7 +300,6 @@ public class PaymentService(
         await unitOfWork.Payments.DeleteAsync(payment);
         await unitOfWork.SaveChangesAsync();
 
-        // пересчитываем баланс после удаления
         await RecalculateStudentBalanceAsync(studentId);
 
         await auditLogService.LogAsync(
@@ -367,6 +367,8 @@ public class PaymentService(
 
         await cache.RemoveByPrefixAsync(PaymentCachePrefix);
         await cache.RemoveByPrefixAsync(StudentCachePrefix);
+        await cache.RemoveByPrefixAsync(AllUsersCacheKey);
+        await cache.RemoveByPrefixAsync(UserCachePrefix);
 
         var created = await unitOfWork.Payments.GetByIdAsync(payment.Id);
         return Result<PaymentResponse>.Ok(MapToResponse(created!));
