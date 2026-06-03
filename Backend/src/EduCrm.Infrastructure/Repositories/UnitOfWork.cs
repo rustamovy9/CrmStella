@@ -21,6 +21,7 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
     private INotificationRepository? _notifications;
     private IPaymentRepository? _payments;
     private IProfileRepository? _profiles;
+    private IRoleRepository? _roles;
     private IScheduleRepository? _schedules;
     private IStudentProgressRepository? _studentProgress;
     private IStudentRepository? _students;
@@ -101,6 +102,9 @@ public class UnitOfWork(AppDbContext context) : IUnitOfWork
 
     public IWeekResultRepository WeekResults =>
         _weekResults ??= new WeekResultRepository(context);
+
+    public IRoleRepository Roles =>
+        _roles ??= new RoleRepository(context);
 
     public async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
     {

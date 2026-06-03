@@ -3,7 +3,6 @@ import { useParams, useNavigate } from 'react-router-dom';
 import type { UserDetailResponse, UpdateUserRequest, UpdateStudentRequest, UpdateMentorRequest } from '../../../types/admin';
 import { ArrowLeft, Mail, Phone, Briefcase, Wallet, Edit3, Trash2, X, Check, BookOpen, Star, Clock, Calendar, User, Shield, AlertTriangle } from 'lucide-react';
 import adminService from '../../../api/adminService';
-import { financeService } from '../../../api/paymentService';
 import StudentPaymentModal from '../../../components/modals/StudentPaymentModal';
 
 
@@ -297,31 +296,11 @@ const UserInfoPage: React.FC = () => {
             <StudentPaymentModal
                 isOpen={isPaymentModalOpen}
                 onClose={() => setIsPaymentModalOpen(false)}
+                studentId={user?.studentId ?? 0}
                 studentName={displayName}
-                onSubmit={async (paymentData) => {
-                    try {
-                        if (!user?.studentId) {
-                            alert('Критическая ошибка: studentId не найден!');
-                            return;
-                        }
-
-                        await financeService.create({
-                            studentId: user.studentId,
-                            amount: paymentData.amount,
-                            type: paymentData.type,
-                            method: paymentData.method,
-                            dueDate: paymentData.dueDate,
-                            note: paymentData.note,
-                            // Если groupId не выбран, передаем 0 (или null, если тип позволяет)
-                            groupId: paymentData.groupId ?? 0
-                        });
-
-                        setIsPaymentModalOpen(false);
-                        showSuccess();
-                        await fetchFullData();
-                    } catch (err: any) {
-                        alert(err.response?.data?.message || 'Ошибка создания платежа.');
-                    }
+                onSuccess={async () => {
+                    showSuccess();
+                    await fetchFullData();
                 }}
             />
             {/* Edit User */}

@@ -29,6 +29,7 @@ public interface IUnitOfWork
     IExamResultRepository ExamResults { get; }
     IAuditLogRepository AuditLogs { get; }
     IWeekResultRepository WeekResults { get; }
+    IRoleRepository Roles { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

@@ -58,12 +58,10 @@ public class BillingService(
         if (course is null)
             return Result<BillingResultResponse>.Fail("Course not found");
 
-        // ── ЦЕНА СО СКИДКОЙ ──────────────────────────────────────────────
         var basePrice = course.Price;
         var discountPercent = Math.Clamp(enrollment.DiscountPercent, 0, 100);
         var discountAmount = basePrice * (discountPercent / 100m);
-        var monthlyAmount = basePrice - discountAmount; // ← списываем уже со скидкой
-        // ─────────────────────────────────────────────────────────────────
+        var monthlyAmount = basePrice - discountAmount; 
 
         var balanceBefore = await unitOfWork.Payments.GetStudentBalanceAsync(studentId);
 

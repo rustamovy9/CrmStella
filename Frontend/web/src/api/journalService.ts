@@ -53,6 +53,7 @@ export const journalService = {
     score: data.score,
     mentorFeedback: data.mentorFeedback,
   }),
+  
 
   getSummary: async (date?: string) => {
     const response = await agent.get<ApiResult<AttendanceSummaryResponse>>(
