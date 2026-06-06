@@ -19,19 +19,19 @@ import {
     Calendar,
     ClipboardList,
     FileText,
-    Settings,
-    HelpCircle,
     ChevronDown,
     PieChart,
     UserPlus,
     UserCheck,
-    Briefcase
+    Briefcase,
+    User
 } from 'lucide-react';
+import { profileService } from '../../../api/profileService';
 
 interface SubMenuItem {
     path: string;
     label: string;
-    icon: React.ReactNode; 
+    icon: React.ReactNode;
 }
 
 interface MenuItem {
@@ -53,12 +53,20 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
     const [collapsed, setCollapsed] = useState(() => {
         return localStorage.getItem('sidebar-collapsed') === 'true';
     });
-    
+
     const [userMenuOpen, setUserMenuOpen] = useState(false);
     const [showLogoutModal, setShowLogoutModal] = useState(false);
     const [realUserName, setRealUserName] = useState('Пользователь');
     const dropdownRef = useRef<HTMLDivElement>(null);
     const [openSubmenus, setOpenSubmenus] = useState<Record<string, boolean>>({});
+    const API_BASE = 'http://localhost:5046';
+
+    const resolveAvatarUrl = (url?: string) => {
+        if (!url) return '';
+        if (url.startsWith('http')) return url;
+        return `${API_BASE}${url}`;
+    };
+    const [avatarUrl, setAvatarUrl] = useState<string>('');
 
     useEffect(() => {
         try {
@@ -71,6 +79,9 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
                     const namePart = parsed.email.split('@')[0];
                     setRealUserName(namePart.charAt(0).toUpperCase() + namePart.slice(1));
                 }
+                if (parsed && parsed.avatarUrl) {
+                    setAvatarUrl(parsed.avatarUrl);
+                }
             }
         } catch (e) {
             console.error("Ошибка чтения реального имени", e);
@@ -82,9 +93,20 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
         window.dispatchEvent(new Event('sidebar-toggle'));
         if (collapsed) {
             setUserMenuOpen(false);
-            setOpenSubmenus({}); 
+            setOpenSubmenus({});
         }
     }, [collapsed]);
+
+    useEffect(() => {
+        profileService.getMe()
+            .then(res => {
+                if (res.data.isSuccess && res.data.data) {
+                    if (res.data.data.avatarUrl) setAvatarUrl(res.data.data.avatarUrl);
+                    if (res.data.data.fullName) setRealUserName(res.data.data.fullName);
+                }
+            })
+            .catch(() => { });
+    }, []);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -115,9 +137,9 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
     const menus: Record<'Admin' | 'Mentor' | 'Student', MenuItem[]> = {
         Admin: [
             { path: '/admin/dashboard', label: 'Панель управления', icon: <LayoutGrid size={24} /> },
-            { 
-                path: '/admin/users-group', 
-                label: 'Пользователи', 
+            {
+                path: '/admin/users-group',
+                label: 'Пользователи',
                 icon: <Users size={24} />,
                 subItems: [
                     { path: '/admin/leads', label: 'Лиды (Заявки)', icon: <UserPlus size={18} /> },
@@ -125,9 +147,9 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
                     { path: '/admin/mentors', label: 'Преподаватели', icon: <Briefcase size={18} /> }
                 ]
             },
-            { 
-                path: '/admin/education-group', 
-                label: 'Учебный процесс', 
+            {
+                path: '/admin/education-group',
+                label: 'Учебный процесс',
                 icon: <BookOpen size={24} />,
                 subItems: [
                     { path: '/admin/courses', label: 'Все курсы', icon: <BookOpen size={18} /> },
@@ -175,7 +197,7 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
                 </button>
 
                 <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflowY: 'auto', overflowX: 'hidden' }}>
-                    
+
                     {/* Контейнер логотипа */}
                     <div
                         style={{
@@ -219,13 +241,13 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
                                             {!collapsed && (
                                                 <>
                                                     <span style={{ ...styles.linkLabel, flex: 1 }}>{item.label}</span>
-                                                    <ChevronDown 
-                                                        size={18} 
-                                                        style={{ 
+                                                    <ChevronDown
+                                                        size={18}
+                                                        style={{
                                                             transform: isSubMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)',
                                                             transition: 'transform 0.2s ease',
-                                                            opacity: 0.8 
-                                                        }} 
+                                                            opacity: 0.8
+                                                        }}
                                                     />
                                                 </>
                                             )}
@@ -287,7 +309,7 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
                 {/* Блок Профиля */}
                 <div style={styles.footer} ref={dropdownRef}>
                     {userMenuOpen && (
-                        <div 
+                        <div
                             style={{
                                 ...styles.dropdownMenu,
                                 bottom: collapsed ? '16px' : 'calc(100% - 2px)',
@@ -297,25 +319,17 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
                                 boxShadow: collapsed ? '4px 4px 25px rgba(15, 23, 42, 0.1)' : '0 -10px 25px rgba(15, 23, 42, 0.06)'
                             }}
                         >
-                            <button 
-                                onClick={() => { setUserMenuOpen(false); navigate(role === 'Admin' ? '/admin/settings' : `/${role.toLowerCase()}/settings`); }} 
+                            <button
+                                onClick={() => { setUserMenuOpen(false); navigate(role === 'Admin' ? '/admin/profile' : `/${role.toLowerCase()}/profile`); }}
                                 style={styles.dropdownItem}
                                 className="dropdown-click-item"
                             >
-                                <Settings size={20} style={{ marginRight: 12, color: '#2563EB' }} />
-                                <span>Настройки</span>
-                            </button>
-                            <button 
-                                onClick={() => { setUserMenuOpen(false); alert('Служба поддержки: support@educrm.com'); }} 
-                                style={styles.dropdownItem}
-                                className="dropdown-click-item"
-                            >
-                                <HelpCircle size={20} style={{ marginRight: 12, color: '#2563EB' }} />
-                                <span>Поддержка</span>
+                                <User size={20} style={{ marginRight: 12, color: '#2563EB' }} />
+                                <span>Профиль</span>
                             </button>
                             <div style={styles.dropdownDivider} />
-                            <button 
-                                onClick={() => { setUserMenuOpen(false); setShowLogoutModal(true); }} 
+                            <button
+                                onClick={() => { setUserMenuOpen(false); setShowLogoutModal(true); }}
                                 style={{ ...styles.dropdownItem, color: '#EF4444' }}
                                 className="dropdown-click-item-danger"
                             >
@@ -340,7 +354,15 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
                     >
                         <div style={{ display: 'flex', alignItems: 'center', gap: 14, overflow: 'hidden' }}>
                             <div style={styles.avatar}>
-                                {realUserName[0]}
+                                {avatarUrl ? (
+                                    <img
+                                        src={resolveAvatarUrl(avatarUrl)}
+                                        alt="avatar"
+                                        style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }}
+                                    />
+                                ) : (
+                                    realUserName[0]
+                                )}
                             </div>
 
                             {!collapsed && (
@@ -354,15 +376,15 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
                                 </div>
                             )}
                         </div>
-                        
+
                         {!collapsed && (
-                            <ChevronDown 
-                                size={18} 
-                                style={{ 
-                                    color: '#64748B', 
+                            <ChevronDown
+                                size={18}
+                                style={{
+                                    color: '#64748B',
                                     transition: 'transform 0.25s ease',
                                     transform: userMenuOpen ? 'rotate(180deg)' : 'rotate(0deg)'
-                                }} 
+                                }}
                             />
                         )}
                     </div>
@@ -408,10 +430,10 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
                 }
             `}</style>
 
-            <LogoutModal 
-                isOpen={showLogoutModal} 
-                onClose={() => setShowLogoutModal(false)} 
-                onConfirm={handleConfirmLogout} 
+            <LogoutModal
+                isOpen={showLogoutModal}
+                onClose={() => setShowLogoutModal(false)}
+                onConfirm={handleConfirmLogout}
             />
         </>
     );
@@ -523,6 +545,7 @@ const styles = {
         fontWeight: 700,
         fontSize: 16,
         flexShrink: 0,
+        overflow: 'hidden',  // ← добавь
         boxShadow: '0 4px 10px rgba(37, 99, 235, 0.15)',
     },
     profileInfo: {

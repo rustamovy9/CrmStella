@@ -208,7 +208,7 @@ const FinanceDashboard: React.FC = () => {
     const bonusStats = calcStats(payments, 'bonus', '4');
     const discountStats = calcStats(payments, 'discount', '5');
 
-    const totalBalance = paymentStats.confirmed - refundStats.confirmed;
+    const totalBalance = dashboard?.totalBalance ?? 0;
 
     return (
         <div style={styles.container}>
