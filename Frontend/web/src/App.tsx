@@ -26,6 +26,8 @@ import FinanceDashboard from './pages/admin/finance/FinanceDashboard';
 import { AnalyticsPage } from './pages/admin/analytic/AnalyticsPage';
 import LeadsPage from './pages/admin/leads/LeadsPage';
 
+import ProfilePage from './pages/profile/ProfilePage';
+
 function App() {
     return (
         <Router>
@@ -71,6 +73,9 @@ function App() {
                                     <Route path="schedules" element={<SchedulePage />} />
                                     <Route path="finance" element={<FinanceDashboard />} />
                                     <Route path="analytics" element={<AnalyticsPage />} />
+
+                                    {/* ПРОФИЛЬ */}
+                                    <Route path="profile" element={<ProfilePage />} />
                                 </Routes>
                             </MainLayout>
                         </ProtectedRoute>
@@ -86,6 +91,9 @@ function App() {
 
                                     {/* Добавили роут сюда, чтобы ментор тоже мог зайти в журнал */}
                                     <Route path="groups/:groupId/journal" element={<JournalPage />} />
+
+                                    {/* ПРОФИЛЬ */}
+                                    <Route path="profile" element={<ProfilePage />} />
                                 </Routes>
                             </MainLayout>
                         </ProtectedRoute>
@@ -98,6 +106,9 @@ function App() {
                                 <Routes>
                                     <Route index element={<Navigate to="dashboard" replace />} />
                                     <Route path="dashboard" element={<StudentDashboard />} />
+
+                                    {/* ПРОФИЛЬ */}
+                                    <Route path="profile" element={<ProfilePage />} />
                                 </Routes>
                             </MainLayout>
                         </ProtectedRoute>

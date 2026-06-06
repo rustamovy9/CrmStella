@@ -2,13 +2,13 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import adminService from '../../../api/adminService';
-import { financeService } from '../../../api/paymentService';
+import { financeService, type FinanceDashboardResponse } from '../../../api/paymentService';
 import { journalService } from '../../../api/journalService';
 import type { StudentListItemResponse, MentorListItemResponse, UserResponse } from '../../../types/admin';
-import type { PaymentListItem } from '../../../types/finance';
 import type { AttendanceSummaryResponse } from '../../../types/journal';
 import MetricCard from '../../../components/ui/MetricCard';
 import { Activity, ArrowRight, DollarSign, UserCheck, UserX, Clock, Calendar, AlertCircle } from 'lucide-react';
+import type { PaymentListItem } from '../../../types/finance';
 
 const AdminDashboard: React.FC = () => {
     const navigate = useNavigate();
@@ -16,6 +16,7 @@ const AdminDashboard: React.FC = () => {
     const [mentors, setMentors] = useState<MentorListItemResponse[]>([]);
     const [users, setUsers] = useState<UserResponse[]>([]);
     const [payments, setPayments] = useState<PaymentListItem[]>([]);
+    const [financeDashboard, setFinanceDashboard] = useState<FinanceDashboardResponse | null>(null);
     const [attendance, setAttendance] = useState<AttendanceSummaryResponse | null>(null);
     const [loading, setLoading] = useState<boolean>(true);
     const [loadingAttendance, setLoadingAttendance] = useState<boolean>(false);
@@ -41,11 +42,12 @@ const AdminDashboard: React.FC = () => {
             try {
                 setLoading(true);
 
-                const [studentsRes, mentorsRes, usersRes, paymentsRes] = await Promise.all([
+                const [studentsRes, mentorsRes, usersRes, paymentsRes, dashboardRes] = await Promise.all([
                     adminService.getStudents(),
                     adminService.getMentors(),
                     adminService.getUsers(),
                     financeService.getAll().catch(() => ({ isSuccess: false, data: [] })),
+                    financeService.getDashboard().catch(() => ({ isSuccess: false, data: null })),
                 ]);
 
                 if (studentsRes.data && studentsRes.data.isSuccess) {
@@ -72,6 +74,10 @@ const AdminDashboard: React.FC = () => {
                     setPayments(paymentsRes.data);
                 }
 
+                if (dashboardRes.isSuccess && dashboardRes.data) {
+                    setFinanceDashboard(dashboardRes.data);
+                }
+
             } catch (err) {
                 console.error("Ошибка при загрузке базовых метрик дашборда:", err);
                 setError("Не удалось синхронизировать данные системы");
@@ -87,7 +93,6 @@ const AdminDashboard: React.FC = () => {
         const fetchAttendanceData = async () => {
             try {
                 setLoadingAttendance(true);
-                // Передаем выбранную дату в API-сервис
                 const attendanceRes = await journalService.getSummary(selectedDate).catch(() => ({ isSuccess: false, data: null }));
 
                 if (attendanceRes.isSuccess && attendanceRes.data) {
@@ -108,15 +113,8 @@ const AdminDashboard: React.FC = () => {
     if (loading) return <div style={styles.centeredState}>Загрузка аналитических данных...</div>;
     if (error) return <div style={{ ...styles.centeredState, color: '#ef4444' }}>{error}</div>;
 
-    // ВЫЧИСЛЕНИЕ КАССЫ: Считаем сумму только подтвержденных доходов
-    const totalPaymentsVolume = payments.reduce((sum, p) => {
-        if (!p.isConfirmed) return sum;
-
-        const typeStr = String(p.type || '').toLowerCase();
-        const isIncome = typeStr === 'income' || typeStr === 'payment' || typeStr === '0' || typeStr === '1' || typeStr === 'доход' || !p.type;
-
-        return isIncome ? sum + (Number(p.amount) || 0) : sum;
-    }, 0);
+    // ВЫРУЧКА: берём готовое значение из бэкенда (тот же источник что и в Finance)
+    const totalRevenue = financeDashboard?.totalBalance ?? 0;
 
     const activeStudentsCount = students.filter(s => s.isActive).length;
 
@@ -144,7 +142,7 @@ const AdminDashboard: React.FC = () => {
                     title="Перейти к управлению способами оплаты"
                 >
                     <MetricCard
-                        value={`${totalPaymentsVolume.toLocaleString()} TJS`}
+                        value={`${totalRevenue.toLocaleString()} TJS`}
                         label="Общая выручка"
                         subLabel="Сумма всех подтвержденных оплат"
                         isMain={true}
@@ -522,66 +520,60 @@ const styles = {
     pageSubtitle: { fontSize: '14px', color: '#64748B', margin: '4px 0 0 0', fontWeight: 500 },
     statsGrid: { display: 'flex', flexWrap: 'wrap' as const, gap: '20px', marginBottom: '32px', width: '100%' },
 
-    // Посещаемость
     attendanceSection: { backgroundColor: '#ffffff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 16px -4px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.06)', marginBottom: '32px' },
     attendanceHeaderBlock: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' as const, gap: '16px', marginBottom: '24px' },
     sectionTitle: { fontSize: '16px', fontWeight: 700, color: '#0F172A', margin: 0 },
     sectionSubtitle: { fontSize: '12px', color: '#64748B', margin: '2px 0 0 0', fontWeight: 400 },
 
-    // Календарь-фильтр
     filterWrapper: { display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: '#F1F5F9', padding: '6px 14px', borderRadius: '12px', border: '1px solid #E2E8F0' },
     filterLabel: { fontSize: '13px', fontWeight: 600, color: '#475569' },
     datePickerInput: { border: 'none', background: 'transparent', color: '#0F172A', fontWeight: 700, fontSize: '13px', fontFamily: 'inherit', outline: 'none', cursor: 'pointer' },
     attendanceLoader: { padding: '40px', textAlign: 'center' as const, color: '#6366F1', fontSize: '14px', fontWeight: 600 },
 
-    // Вкладки (Табы)
     tabContainer: { display: 'flex', gap: '8px', borderBottom: '1px solid #F1F5F9', paddingBottom: '12px', marginBottom: '16px' },
     tabButton: { display: 'flex', alignItems: 'center', padding: '8px 14px', border: 'none', background: '#F8FAFC', color: '#64748B', borderRadius: '10px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s ease' },
     tabButtonActiveAbsent: { background: '#FEF2F2', color: '#EF4444' },
     tabButtonActiveLate: { background: '#FFFBEB', color: '#D97706' },
 
-    // Счётчики посещаемости
     attCounters: { display: 'flex', gap: '16px', flexWrap: 'wrap' as const, marginBottom: '20px' },
     attCounter: { flex: '1 1 200px', display: 'flex', alignItems: 'center', gap: '12px', padding: '14px 20px', borderRadius: '16px' },
     attCountValue: { fontSize: '20px', fontWeight: 800, lineHeight: 1 },
     attCountLabel: { fontSize: '12px', color: '#64748B', fontWeight: 500, marginTop: '2px' },
 
-    // Списки / Таблицы
     contentLayout: { display: 'flex', flexWrap: 'wrap' as const, gap: '24px', width: '100%' },
     tableSection: { backgroundColor: '#ffffff', borderRadius: '24px', padding: '24px', boxShadow: '0 4px 16px -4px rgba(15, 23, 42, 0.04), 0 0 0 1px rgba(15, 23, 42, 0.06)', flex: '1 1 480px', minWidth: '320px' },
     tableHeaderSection: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' },
     titleWithIcon: { display: 'flex', alignItems: 'center', gap: '12px' },
     iconBadge: { padding: '8px', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' },
     countBadge: { fontSize: '12px', fontWeight: 700, backgroundColor: '#F1F5F9', color: '#475569', padding: '4px 10px', borderRadius: '8px' },
-    
+
     tableWrapper: { width: '100%', overflowX: 'auto' as const, border: '1px solid #F1F5F9', borderRadius: '14px' },
     table: { width: '100%', borderCollapse: 'collapse' as const, textAlign: 'left' as const },
     thRow: { backgroundColor: '#F8FAFC', borderBottom: '1px solid #F1F5F9' },
     th: { padding: '12px 16px', fontSize: '12px', fontWeight: 600, color: '#64748B', whiteSpace: 'nowrap' as const },
     tr: { borderBottom: '1px solid #F8FAFC', transition: 'background-color 0.2s' },
     td: { padding: '14px 16px', fontSize: '13px', color: '#334155', verticalAlign: 'middle' },
-    
+
     studentTd: { padding: '14px 16px', fontSize: '13px', fontWeight: 600, color: '#0F172A' },
     lessonTd: { padding: '14px 16px', fontSize: '13px', color: '#475569', maxWidth: '180px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const },
     timeTd: { padding: '14px 16px', fontSize: '13px', fontWeight: 700, color: '#0F172A' },
-    
-    // Линки и бейджи
+
     groupLink: { color: '#2563EB', textDecoration: 'none', fontWeight: 600 },
     mentorLink: { color: '#4F46E5', textDecoration: 'none', fontWeight: 500 },
     noMentorText: { color: '#94A3B8', fontSize: '12px', fontStyle: 'italic' },
     reasonBadge: { backgroundColor: '#F1F5F9', color: '#475569', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 500 },
     lateMinutesBadge: { backgroundColor: '#FFFBEB', color: '#D97706', padding: '4px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 700, border: '1px solid #FEF3C7' },
-    
+
     userMeta: { display: 'flex', alignItems: 'center', gap: '12px' },
     avatarPlaceholder: { width: '32px', height: '32px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#ffffff', fontSize: '12px', fontWeight: 700 },
     userName: { fontSize: '13px', fontWeight: 600, color: '#0F172A' },
     userEmail: { fontSize: '11px', color: '#64748B', marginTop: '1px' },
     roleBadge: { padding: '4px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 700, display: 'inline-block' },
-    
+
     statusRow: { display: 'flex', alignItems: 'center', gap: '6px' },
     pulseDot: { width: '7px', height: '7px', borderRadius: '50%' },
     balanceText: { padding: '4px 10px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, display: 'inline-block' },
-    
+
     actionBtn: { display: 'inline-flex', alignItems: 'center', gap: '4px', border: 'none', backgroundColor: '#F8FAFC', color: '#334155', padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' },
     emptyStateContainer: { display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '32px', color: '#64748B', fontSize: '13px', fontWeight: 500, backgroundColor: '#F8FAFC', borderRadius: '12px', border: '1px dashed #E2E8F0' },
     centeredState: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '400px', fontSize: '15px', fontWeight: 600, color: '#64748B' }

@@ -413,17 +413,34 @@ public class PaymentService(
                 Balance = g.Sum(p =>
                     p.Type == PaymentType.Income ? p.Amount :
                     p.Type == PaymentType.Bonus ? p.Amount :
-                    -p.Amount),
+                    p.Type == PaymentType.Discount ? p.Amount :
+                    p.Type == PaymentType.Debt ? -p.Amount :
+                    p.Type == PaymentType.CourseFee ? -p.Amount :
+                    p.Type == PaymentType.Refund ? -p.Amount :
+                    0m),
                 HasIncome = g.Any(p => p.Type == PaymentType.Income)
             })
             .ToList();
 
         var response = new FinanceDashboardResponse
         {
-            TotalBalance = byStudent.Sum(s => s.Balance),
-            TotalDebt = byStudent.Where(s => s.Balance < 0).Sum(s => Math.Abs(s.Balance)),
+            TotalBalance = payments
+                               .Where(p => p.Type == PaymentType.Income)
+                               .Sum(p => p.Amount)
+                           - payments.Where(p => p.Type == PaymentType.Refund).Sum(p => p.Amount)
+                           - payments.Where(p => p.Type == PaymentType.Bonus).Sum(p => p.Amount)
+                           - payments.Where(p => p.Type == PaymentType.Discount).Sum(p => p.Amount),
+
+            TotalDebt = byStudent
+                .Where(s => s.Balance < 0)
+                .Sum(s => Math.Abs(s.Balance)),
+
             StudentsInDebt = byStudent.Count(s => s.Balance < 0),
-            TotalIncome = payments.Where(p => p.Type == PaymentType.Income).Sum(p => p.Amount),
+
+            TotalIncome = payments
+                .Where(p => p.Type == PaymentType.Income)
+                .Sum(p => p.Amount),
+
             StudentsPaid = byStudent.Count(s => s.HasIncome)
         };
 

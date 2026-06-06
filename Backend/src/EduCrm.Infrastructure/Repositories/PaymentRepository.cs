@@ -55,12 +55,12 @@ public class PaymentRepository(AppDbContext db) : IPaymentRepository
             .AsNoTracking()
             .Where(x => x.StudentId == studentId && x.IsConfirmed)
             .SumAsync(p =>
-                p.Type == PaymentType.Income ? p.Amount :
-                p.Type == PaymentType.Bonus    ? p.Amount :
-                p.Type == PaymentType.Debt     ? -p.Amount :
-                p.Type == PaymentType.CourseFee     ? -p.Amount :
-                p.Type == PaymentType.Refund   ? -p.Amount :
-                p.Type == PaymentType.Discount ? -p.Amount :
+                p.Type == PaymentType.Income    ?  p.Amount :
+                p.Type == PaymentType.Bonus     ?  p.Amount :
+                p.Type == PaymentType.Discount  ?  p.Amount :  // ← было минус, стало плюс
+                p.Type == PaymentType.Debt      ? -p.Amount :
+                p.Type == PaymentType.CourseFee ? -p.Amount :
+                p.Type == PaymentType.Refund    ? -p.Amount :
                 p.Amount);
     }
     
