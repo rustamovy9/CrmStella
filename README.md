@@ -1,4 +1,4 @@
-# EduCRM
+# CrmStella
 
 Modern Education CRM system built with ASP.NET Core Web API, Blazor WebAssembly, EF Core, and PostgreSQL using Clean Architecture principles.
 
