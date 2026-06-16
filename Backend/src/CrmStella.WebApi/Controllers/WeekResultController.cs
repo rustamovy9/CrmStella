@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CrmStella.WebApi.Controllers;
 
 [Route("api/week-results")]
-[Authorize(Roles = "Admin,Mentor")]
+[Authorize]
 public class WeekResultController(IWeekResultService weekResultService) : BaseController
 {
     [HttpGet("student/{studentId:int}/group/{groupId:int}")]
@@ -40,6 +40,7 @@ public class WeekResultController(IWeekResultService weekResultService) : BaseCo
     }
 
     [HttpPost("recalculate")]
+    [Authorize(Roles = "Admin,Mentor")]
     public async Task<IActionResult> Recalculate([FromBody] RecalculateWeekRequest request)
     {
         var result = await weekResultService.RecalculateAsync(request);
@@ -66,6 +67,7 @@ public class WeekResultController(IWeekResultService weekResultService) : BaseCo
     }
 
     [HttpPatch("{id:int}/comment")]
+    [Authorize(Roles = "Admin,Mentor")]
     public async Task<IActionResult> SetComment(int id, [FromBody] SetMentorCommentRequest request)
     {
         var result = await weekResultService.SetMentorCommentAsync(id, request);

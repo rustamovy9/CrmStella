@@ -29,7 +29,7 @@ public class AuthController(IAuthService authService) : BaseController
 
         var result = await authService.RegisterAsync(adminId, request);
 
-        if (!result.IsSuccess)
+            if (!result.IsSuccess)
             return HandleError(result);
 
         return Ok(result);

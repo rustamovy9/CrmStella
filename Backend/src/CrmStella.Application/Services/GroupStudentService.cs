@@ -1,4 +1,5 @@
 using CrmStella.Application.Common;
+using CrmStella.Application.DTOs.Group.Response;
 using CrmStella.Application.DTOs.GroupStudent.Request;
 using CrmStella.Application.DTOs.GroupStudent.Response;
 using CrmStella.Application.Interfaces.Repositories;
@@ -245,8 +246,91 @@ public class GroupStudentService(
             IsActive = gs.IsActive,
             IsTransferred = gs.TransferredTo is not null,
             RemoveReason = gs.RemoveReason,
-            LastBilledAt = gs.LastBilledAt,          
-            NextBillingDate = gs.NextBillingDate   
+            LastBilledAt = gs.LastBilledAt,
+            NextBillingDate = gs.NextBillingDate
         };
+    }
+
+    public async Task<Result<List<GroupListItemResponse>>> GetMyGroupsAsync(int userId)
+    {
+        var student = await unitOfWork.Students.GetByUserIdAsync(userId);
+
+        if (student is null)
+        {
+            return Result<List<GroupListItemResponse>>.Fail("Student not found");
+        }
+
+        var enrollments = await unitOfWork.GroupStudents.GetByStudentAsync(student.Id);
+
+        var result = enrollments.Select(gs =>
+        {
+            var g = gs.Group;
+
+            var activeCount =
+                g.GroupStudents?.Count(x => x.IsActive) ?? 0;
+
+            return new GroupListItemResponse
+            {
+                Id = g.Id,
+                Name = g.Name,
+                CourseId = g.CourseId,
+                CourseName = g.Course.Name,
+                MentorUserId = g.Mentor.UserId,
+                MentorId = g.Mentor.Id,
+                MentorName = g.Mentor.User.FullName,
+                StartDate = g.StartDate,
+                EndDate = g.EndDate,
+                MaxStudents = g.MaxStudents,
+                ActiveStudentsCount = activeCount,
+                FreeSlots = g.MaxStudents - activeCount,
+                Status = g.Status.ToString(),
+                CreatedAt = g.CreatedAt,
+            };
+        }).ToList();
+
+        return Result<List<GroupListItemResponse>>.Ok(result);
+    }
+
+    public async Task<Result<GroupResponse>> GetMyGroupAsync(int userId, int groupId)
+    {
+        var student = await unitOfWork.Students.GetByUserIdAsync(userId);
+
+        if (student == null)
+        {
+            return Result<GroupResponse>.Fail("Student not found");
+        }
+
+        var enrollment = await unitOfWork.GroupStudents.GetByGroupAndStudentAsync(groupId, student.Id);
+
+        if (enrollment is null || !enrollment.IsActive)
+        {
+            return Result<GroupResponse>.Fail("Access denied", ErrorType.Forbidden);
+        }
+
+        var group = await unitOfWork.Groups.GetByIdAsync(groupId);
+
+        if (group is null)
+        {
+            return Result<GroupResponse>.Fail("Group not found");
+        }
+
+        return Result<GroupResponse>.Ok(
+            new GroupResponse
+            {
+                Id = group.Id,
+                Name = group.Name,
+                CourseId = group.CourseId,
+                CourseName = group.Course.Name,
+                MentorId = group.MentorId,
+                MentorUserId = group.Mentor.UserId,
+                MentorName = group.Mentor.User.FullName,
+                StartDate = group.StartDate,
+                EndDate = group.EndDate,
+                MaxStudents = group.MaxStudents,
+                ActiveStudentsCount =
+                group.GroupStudents.Count(x => x.IsActive),
+                Status = group.Status.ToString(),
+                CreatedAt = group.CreatedAt
+            });
     }
 }

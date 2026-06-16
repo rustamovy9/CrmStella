@@ -14,6 +14,7 @@ public interface IGroupStudentRepository
 
     Task<GroupStudent?> GetByGroupAndStudentAsync(
         int groupId, int studentId, CancellationToken ct = default);
+    Task<List<GroupStudent>> GetByStudentAsync(int studentId, CancellationToken ct = default);
 
     Task CreateAsync(GroupStudent groupStudent, CancellationToken cancellationToken = default);
     Task UpdateAsync(GroupStudent groupStudent, CancellationToken cancellationToken = default);

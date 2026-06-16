@@ -76,7 +76,7 @@ public class GroupStudentRepository(AppDbContext context) : IGroupStudentReposit
                          && gs.NextBillingDate <= asOf)
             .ToListAsync(ct);
     }
-    
+
     public async Task<GroupStudent?> GetByGroupAndStudentAsync(
         int groupId, int studentId, CancellationToken ct = default)
         => await context.GroupStudents
@@ -85,4 +85,18 @@ public class GroupStudentRepository(AppDbContext context) : IGroupStudentReposit
                     gs.StudentId == studentId &&
                     gs.IsActive,
                 ct);
+
+    public async Task<List<GroupStudent>> GetByStudentAsync(int studentId, CancellationToken ct = default)
+    {
+        return await context.GroupStudents
+            .Where(gs =>
+                    gs.StudentId == studentId &&
+                    gs.IsActive)
+                .Include(gs => gs.Group)
+                    .ThenInclude(g => g.Course)
+                .Include(gs => gs.Group)
+                    .ThenInclude(g => g.Mentor)
+                        .ThenInclude(m => m.User)
+            .ToListAsync(ct);
+    }
 }

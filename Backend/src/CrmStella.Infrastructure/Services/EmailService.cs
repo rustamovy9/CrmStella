@@ -3,13 +3,15 @@ using System.Net.Mail;
 using System.Threading.Tasks;
 using CrmStella.Application.Common;
 using CrmStella.Application.Interfaces.Services;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace CrmStella.Infrastructure.Services;
 
-public class EmailService(IOptions<EmailSettings> settings) : IEmailService
+public class EmailService(IOptions<EmailSettings> settings, ILogger<EmailService> logger) : IEmailService
 {
     private readonly EmailSettings _settings = settings.Value;
+    private readonly ILogger<EmailService> _logger = logger;
 
     public async Task SendVerificationCodeAsync(string toEmail, string fullName, string code)
     {
@@ -67,6 +69,27 @@ public class EmailService(IOptions<EmailSettings> settings) : IEmailService
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(_settings.Host))
+                _logger.LogWarning("SMTP Host is empty.");
+
+            if (_settings.Port <= 0)
+                _logger.LogWarning("SMTP Port is invalid: {Port}", _settings.Port);
+
+            if (string.IsNullOrWhiteSpace(_settings.UserName))
+                _logger.LogWarning("SMTP UserName is empty.");
+
+            if (string.IsNullOrWhiteSpace(_settings.FromEmail))
+                _logger.LogWarning("SMTP FromEmail is empty.");
+
+            _logger.LogInformation(
+                "SMTP send start. Host={Host}, Port={Port}, UseSsl={UseSsl}, FromEmail={FromEmail}, ToEmail={ToEmail}, Subject={Subject}",
+                _settings.Host,
+                _settings.Port,
+                true,
+                _settings.FromEmail,
+                toEmail,
+                subject);
+
             using var client = new SmtpClient(_settings.Host, _settings.Port)
             {
                 Credentials = new NetworkCredential(_settings.UserName, _settings.Password),
@@ -134,32 +157,41 @@ public class EmailService(IOptions<EmailSettings> settings) : IEmailService
             };
 
             message.To.Add(toEmail);
+
+            _logger.LogInformation(
+                "SMTP client configured. Starting SendMailAsync handshake to {Host}:{Port}",
+                _settings.Host,
+                _settings.Port);
+
             await client.SendMailAsync(message);
+
+            _logger.LogInformation(
+                "SMTP send succeeded. ToEmail={ToEmail}, Subject={Subject}",
+                toEmail,
+                subject);
+        }
+        catch (SmtpException ex)
+        {
+            _logger.LogError(
+                ex,
+                "SMTP failed. Host={Host}, Port={Port}, ToEmail={ToEmail}, Subject={Subject}, StatusCode={StatusCode}",
+                _settings.Host,
+                _settings.Port,
+                toEmail,
+                subject,
+                ex.StatusCode);
+            throw;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Failed to send email to {toEmail}: {ex.Message}");
+            _logger.LogError(
+                ex,
+                "Unexpected email error. Host={Host}, Port={Port}, ToEmail={ToEmail}, Subject={Subject}",
+                _settings.Host,
+                _settings.Port,
+                toEmail,
+                subject);
             throw;
         }
-    }
-
-    Task IEmailService.SendVerificationCodeAsync(string toEmail, string fullName, string code)
-    {
-        throw new System.NotImplementedException();
-    }
-
-    Task IEmailService.SendPasswordResetAsync(string toEmail, string fullName, string code)
-    {
-        throw new System.NotImplementedException();
-    }
-
-    Task IEmailService.SendWelcomeAsync(string toEmail, string fullName, string tempPassword)
-    {
-        throw new System.NotImplementedException();
-    }
-
-    Task IEmailService.SendAsync(string toEmail, string subject, string body)
-    {
-        throw new System.NotImplementedException();
     }
 }

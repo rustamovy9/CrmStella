@@ -36,7 +36,7 @@ public class LessonScoreController(ILessonScoreService lessonScoreService) : Bas
     }
 
     [HttpGet("lesson/{lessonId:int}")]
-    [Authorize(Roles = "Admin,Mentor")]
+    [Authorize(Roles = "Admin,Mentor,Student")]
     public async Task<IActionResult> GetByLesson(int lessonId)
     {
         var result = await lessonScoreService.GetByLessonIdAsync(lessonId);

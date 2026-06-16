@@ -24,7 +24,7 @@ builder.Configuration
 if (builder.Environment.IsDevelopment())
 {
     // Local development overrides live in development.json
-    builder.Configuration.AddJsonFile("development.json", optional: true, reloadOnChange: true);
+    builder.Configuration.AddJsonFile("appsettings.Development.json", optional: true, reloadOnChange: true);
 }
 
 builder.Host.UseSerilog();

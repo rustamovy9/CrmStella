@@ -22,6 +22,10 @@ public class RegisterRequest
     [Phone(ErrorMessage = "Invalid phone number format")]
     public string? PhoneNumber { get; set; }
 
+    [MinLength(6, ErrorMessage = "Password must be at least 6 characters")]
+    [MaxLength(100, ErrorMessage = "Password must not exceed 100 characters")]
+    public string? Password { get; set; }
+
     [Range(1, 3, ErrorMessage = "Invalid role")]
     public int RoleId { get; set; }
 }
