@@ -111,6 +111,12 @@ public class LessonScoreService(
         var exists = await unitOfWork.LessonScores
             .ExistsByLessonAndStudentAsync(request.LessonId, request.StudentId, cancellationToken);
 
+        logger.LogInformation(
+    "Lesson={LessonId}, Student={StudentId}, Exists={Exists}",
+    request.LessonId,
+    request.StudentId,
+    exists);
+
         if (exists)
             return Result<LessonScoreResponse>.Fail("Score already exists");
 

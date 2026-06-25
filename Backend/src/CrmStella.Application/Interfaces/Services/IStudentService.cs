@@ -13,6 +13,7 @@ public interface IStudentService
         CancellationToken cancellationToken = default);
 
     Task<Result<UserDetailResponse>> GetByIdAsync(int id);
+    Task<Result<StudentDashboardResponse>> GetDashboardAsync(int userId);
     Task<Result<StudentResponse>> UpdateAsync(int id, UpdateStudentRequest request);
     Task<Result<bool>> SetStatusAsync(int id, SetStudentStatusRequest request);
 }

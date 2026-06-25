@@ -72,6 +72,19 @@ public class UserRepository(AppDbContext context) : IUserRepository
             .AnyAsync(x => x.Email == email.ToLower(), cancellationToken);
     }
 
+    public async Task<bool> ExistsByEmailAsync(
+    string email,
+    int excludeUserId,
+    CancellationToken cancellationToken = default)
+    {
+        return await context.Users
+            .AsNoTracking()
+            .AnyAsync(
+                x => x.Email == email.ToLower()
+                     && x.Id != excludeUserId,
+                cancellationToken);
+    }
+
     public async Task LoadRoleAsync(
         User user,
         CancellationToken cancellationToken = default)

@@ -45,6 +45,19 @@ public class WeekResultService(
         if (cached is not null)
             return Result<List<WeekResultResponse>>.Ok(cached);
 
+        if (cached is not null)
+        {
+            logger.LogInformation(
+                "CACHE HIT: {Key}",
+                cacheKey);
+
+            return Result<List<WeekResultResponse>>.Ok(cached);
+        }
+
+        logger.LogInformation(
+            "CACHE MISS: {Key}",
+            cacheKey);
+
         var list = await unitOfWork.WeekResults.GetByGroupAndWeekAsync(groupId, weekNumber);
 
         var result = list.Select(MapToResponse).ToList();
@@ -88,6 +101,12 @@ public class WeekResultService(
         var weekResult = await unitOfWork.WeekResults
             .GetByKeyAsync(request.StudentId, request.GroupId, request.WeekNumber);
 
+        logger.LogInformation(
+        "BEFORE RECALC -> Bonus={Bonus}, Exam={Exam}",
+        weekResult.BonusScore,
+        weekResult.ExamScore);
+
+
         var isNew = weekResult is null;
 
         var existingBonus = weekResult?.BonusScore ?? 0;
@@ -109,6 +128,15 @@ public class WeekResultService(
 
         var lessonScores = await unitOfWork.LessonScores
             .GetByStudentAndLessonsAsync(request.StudentId, weekLessonIds);
+
+        logger.LogInformation(
+"Recalculate scores: {Scores}",
+string.Join(
+    ", ",
+    lessonScores.Select(x =>
+        $"{x.StudentId}:{x.LessonId}:{x.Score}")
+)
+);
 
         var lessonScoresSum = lessonScores.Sum(ls => ls.Score);
 
@@ -215,6 +243,8 @@ public class WeekResultService(
         await unitOfWork.WeekResults.UpdateAsync(weekResult);
         await unitOfWork.SaveChangesAsync();
 
+        await cache.RemoveByPrefixAsync(WeekResultCachePrefix);
+
         await auditLogService.LogAsync(
             null,
             AuditActions.RecalculateWeekResult,
@@ -231,6 +261,12 @@ public class WeekResultService(
         logger.LogInformation(
             "WeekResult manual fields updated: student {StudentId} group {GroupId} week {Week}",
             studentId, groupId, weekNumber);
+
+
+        logger.LogInformation(
+            "AFTER UPDATE -> Bonus={Bonus}, Exam={Exam}",
+            weekResult.BonusScore,
+            weekResult.ExamScore);
 
 
         return await RecalculateAsync(new RecalculateWeekRequest

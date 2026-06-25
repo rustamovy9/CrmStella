@@ -69,6 +69,8 @@ public class MentorRepository(AppDbContext context) : IMentorRepository
     {
         return await context.Mentors
             .AsNoTracking()
+            .Include(m => m.User)
+            .ThenInclude(u=>u.Profile)
             .FirstOrDefaultAsync(m => m.UserId == userId, cancellationToken);
     }
 

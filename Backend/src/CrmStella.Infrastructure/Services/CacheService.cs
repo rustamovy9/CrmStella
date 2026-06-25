@@ -1,9 +1,10 @@
 using CrmStella.Application.Interfaces.Services;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 
 namespace CrmStella.Infrastructure.Services;
 
-public class CacheService(IMemoryCache cache) : ICacheService
+public class CacheService(IMemoryCache cache,ILogger<CacheService> logger) : ICacheService
 {
     private static readonly TimeSpan DefaultExpiry = TimeSpan.FromMinutes(10);
 
@@ -83,6 +84,20 @@ public class CacheService(IMemoryCache cache) : ICacheService
                 _keys.Remove(key);
             }
         }
+
+        foreach (var key in keysToRemove)
+{
+    logger.LogInformation(
+        "CACHE REMOVE: {Key}",
+        key);
+
+    cache.Remove(key);
+
+    lock (_lock)
+    {
+        _keys.Remove(key);
+    }
+}
 
         return Task.CompletedTask;
     }

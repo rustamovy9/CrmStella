@@ -1,4 +1,5 @@
 using CrmStella.Application.Common;
+using CrmStella.Application.DTOs.Group.Response;
 using CrmStella.Application.DTOs.Student.Request;
 using CrmStella.Application.DTOs.Student.Response;
 using CrmStella.Application.DTOs.Students.Request;
@@ -7,6 +8,7 @@ using CrmStella.Application.Interfaces.Repositories;
 using CrmStella.Application.Interfaces.Services;
 using CrmStella.Domain.Constants;
 using CrmStella.Domain.Entities;
+using CrmStella.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
 namespace CrmStella.Application.Services;
@@ -202,5 +204,118 @@ public class StudentService(
             EnrolledAt = s.EnrolledAt,
             GroupsCount = s.GroupStudents?.Count ?? 0
         };
+    }
+
+    public async Task<Result<StudentDashboardResponse>> GetDashboardAsync(int userId)
+    {
+        var student = await unitOfWork.Students.GetByUserIdAsync(userId);
+
+        if (student is null)
+        {
+            return Result<StudentDashboardResponse>.Fail("Student not found", ErrorType.NotFound);
+        }
+
+        var enrollments = await unitOfWork.GroupStudents.GetByStudentAsync(student.Id);
+
+
+        //Groups
+        var groups = enrollments
+            .Select(x => x.Group)
+            .DistinctBy(x => x.Id)
+            .ToList();
+
+        var activeGroups =
+            groups.Count(x =>
+                x.Status == GroupStatus.Active);
+
+        var completedGroups =
+            groups.Count(x =>
+                x.Status == GroupStatus.Completed);
+
+        var totalGroups = groups.Count();
+
+        //Attendances
+        var attendances = await unitOfWork.Attendances
+            .GetByStudentIdAsync(student.Id);
+
+        var totalAttendances = attendances.Count();
+
+        var presentCount =
+            attendances.Count(x => x.Status == AttendanceStatus.Present);
+
+        var absences =
+            attendances.Count(x => x.Status == AttendanceStatus.Absent);
+
+        var lateMinutes =
+            attendances.
+                Where(x => x.LateMinutes.HasValue)
+                .Sum(x => x.LateMinutes!.Value);
+
+        var attendancePercent =
+            totalAttendances == 0
+                ? 0
+                : Math.Round(presentCount * 100d / totalAttendances, 1);
+
+        //Score
+        var scores = await unitOfWork.LessonScores
+            .GetByStudentIdAsync(student.Id);
+
+        var averageScore =
+            scores.Count == 0
+                ? 0
+                : Math.Round(scores.Average(x => x.Score), 1);
+
+        var recentScores = scores
+            .OrderByDescending(x => x.ScoredAt)
+            .Take(5)
+            .Select(x => new StudentDashboardScoreResponse
+            {
+                LessonName = x.Lesson.Title,
+                Score = x.Score,
+                Comment = x.MentorFeedback,
+                Date = x.ScoredAt,
+            }).ToList();
+
+        //Groupi
+        var groupResponses = groups
+            .Select(g =>
+            {
+                var activeCount =
+                    g.GroupStudents.Count(x => x.IsActive);
+
+                return new GroupListItemResponse
+                {
+                    Id = g.Id,
+                    Name = g.Name,
+                    CourseId = g.CourseId,
+                    CourseName = g.Course.Name,
+                    MentorId = g.MentorId,
+                    MentorUserId = g.Mentor.UserId,
+                    MentorName = g.Mentor.User.FullName,
+                    StartDate = g.StartDate,
+                    EndDate = g.EndDate,
+                    MaxStudents = g.MaxStudents,
+                    ActiveStudentsCount = activeCount,
+                    FreeSlots = g.MaxStudents - activeCount,
+                    Status = g.Status.ToString(),
+                    CreatedAt = g.CreatedAt
+                };
+            }).ToList();
+
+        var response =
+            new StudentDashboardResponse
+            {
+                AverageScore = averageScore,
+                AttendancePercent = attendancePercent,
+                ActiveGroups = activeGroups,
+                CompletedGroups = completedGroups,
+                Absences = absences,
+                LateMinutes = lateMinutes,
+                TotalGroups = totalGroups,
+                RecentScores = recentScores,
+                Groups = groupResponses
+            };
+        
+        return Result<StudentDashboardResponse>.Ok(response);
     }
 }

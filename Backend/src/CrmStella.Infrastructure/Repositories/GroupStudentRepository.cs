@@ -97,6 +97,8 @@ public class GroupStudentRepository(AppDbContext context) : IGroupStudentReposit
                 .Include(gs => gs.Group)
                     .ThenInclude(g => g.Mentor)
                         .ThenInclude(m => m.User)
+                .Include(gs => gs.Group)
+                    .ThenInclude(g => g.GroupStudents)
             .ToListAsync(ct);
     }
 }

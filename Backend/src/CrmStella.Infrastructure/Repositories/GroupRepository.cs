@@ -68,9 +68,12 @@ public class GroupRepository(AppDbContext context) : IGroupRepository
     {
         return await context.Groups
             .Include(g => g.Course)
+            .Include(g => g.Schedules)
             .Include(g => g.Mentor)
             .ThenInclude(m => m.User)
             .Include(g => g.GroupStudents)
+            .ThenInclude(gs => gs.Student)
+            .ThenInclude(s => s.User)
             .FirstOrDefaultAsync(g => g.Id == id, cancellationToken);
     }
 
@@ -95,5 +98,19 @@ public class GroupRepository(AppDbContext context) : IGroupRepository
     {
         context.Groups.Update(group);
         return Task.CompletedTask;
+    }
+
+    public async Task<List<Group>> GetByMentorAsync(int mentorId, CancellationToken cancellationToken = default)
+    {
+        return await context.Groups
+            .Include(g=>g.Course)
+            .Include(g=>g.Lessons)
+            .Include(g=>g.Mentor)
+            .ThenInclude(m=>m.User)
+            .Include(g=>g.GroupStudents)
+            .ThenInclude(m=>m.Student)
+            .Where(g => g.MentorId == mentorId)
+            .OrderByDescending(g=>g.CreatedAt)
+            .ToListAsync(cancellationToken);
     }
 }

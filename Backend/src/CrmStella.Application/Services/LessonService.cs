@@ -177,7 +177,16 @@ public class LessonService(
         await unitOfWork.Lessons.DeleteAsync(id, cancellationToken);
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
+        var check =
+        await unitOfWork.Lessons.GetByIdAsync(id);
+
+        logger.LogInformation(
+            "Lesson after delete: {Lesson}",
+            check == null ? "NULL" : "EXISTS");
+
+        logger.LogInformation("Removing lesson cache");
         await cache.RemoveByPrefixAsync(LessonCachePrefix);
+        logger.LogInformation("Lesson cache removed");
 
         await auditLogService.LogAsync(
             null,

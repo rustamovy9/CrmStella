@@ -13,4 +13,6 @@ public interface IMentorService
     Task<Result<MentorResponse>> GetByIdAsync(int id);
     Task<Result<MentorResponse>> UpdateAsync(int id, UpdateMentorRequest request);
     Task<Result<bool>> SetStatusAsync(int id, SetMentorStatusRequest request);
+
+    Task<Result<MentorDashboardResponse>> GetDashboardAsync(int id);
 }

@@ -120,6 +120,14 @@ public class UserService(
         user.FirstName = request.FirstName;
         user.LastName = request.LastName;
         user.PhoneNumber = request.PhoneNumber;
+        user.Email = request.Email;
+
+        var exists = await unitOfWork.Users.ExistsByEmailAsync(request.Email,user.Id);
+        if(exists)
+        {
+            return Result<UserDetailResponse>.Fail("Пользователь с таким email уже существует.");
+        }
+
 
         await unitOfWork.Users.UpdateAsync(user);
         await unitOfWork.SaveChangesAsync();

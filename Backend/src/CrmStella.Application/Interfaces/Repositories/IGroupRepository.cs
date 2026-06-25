@@ -11,6 +11,7 @@ public interface IGroupRepository
         CancellationToken cancellationToken = default);
 
     Task<Group?> GetByIdAsync(int id, CancellationToken cancellationToken = default);
+    Task<List<Group>> GetByMentorAsync(int mentorId, CancellationToken cancellationToken = default);
     Task<bool> ExistsByNameAsync(string name, CancellationToken cancellationToken = default);
 
     Task CreateAsync(Group group, CancellationToken cancellationToken = default);

@@ -1,10 +1,12 @@
 using CrmStella.Application.Common;
+using CrmStella.Application.DTOs.Group.Response;
 using CrmStella.Application.DTOs.Mentor.Request;
 using CrmStella.Application.DTOs.Mentor.Response;
 using CrmStella.Application.Interfaces.Repositories;
 using CrmStella.Application.Interfaces.Services;
 using CrmStella.Domain.Constants;
 using CrmStella.Domain.Entities;
+using CrmStella.Domain.Enums;
 using Microsoft.Extensions.Logging;
 
 namespace CrmStella.Application.Services;
@@ -175,5 +177,93 @@ public class MentorService(
             IsActive = m.IsActive,
             GroupsCount = m.Groups?.Count ?? 0
         };
+    }
+
+    public async Task<Result<MentorDashboardResponse>> GetDashboardAsync(int id)
+    {
+        var mentor = await unitOfWork.Mentors.GetByUserIdAsync(id);
+
+        if (mentor is null)
+        {
+            return Result<MentorDashboardResponse>.Fail("Mentor not found");
+        }
+
+        var groups = await unitOfWork.Groups.GetByMentorAsync(mentor.Id);
+
+        var activeGroups =
+        groups.Count(g =>
+            g.Status == GroupStatus.Active);
+
+        var totalStudents =
+            groups
+                .SelectMany(g =>
+                    g.GroupStudents
+                        .Where(gs => gs.IsActive))
+                .Select(gs => gs.StudentId)
+                .Distinct()
+                .Count();
+
+        var today = DateTime.UtcNow.Date;
+
+        var lessonsToday = groups.Sum(g => g.Lessons?.Count(l => l.LessonDate.Date == today.Date) ?? 0);
+
+
+        foreach (var group in groups)
+        {
+            foreach (var lesson in group.Lessons ?? [])
+            {
+                logger.LogInformation(
+                    "Lesson: {Date}",
+                    lesson.LessonDate);
+            }
+        }
+
+        logger.LogInformation(
+            "Today: {Today}",
+            today);
+
+        var response =
+            new MentorDashboardResponse
+            {
+                ActiveGroups = activeGroups,
+                TotalStudents = totalStudents,
+                LessonsToday = lessonsToday,
+                Groups = groups
+                    .Select(g =>
+                {
+                    var activeCount =
+                        g.GroupStudents?
+                            .Count(x =>
+                                x.IsActive)
+                        ?? 0;
+
+                    return new GroupListItemResponse
+                    {
+                        Id = g.Id,
+                        Name = g.Name,
+                        CourseId = g.CourseId,
+                        CourseName = g.Course.Name,
+                        MentorUserId = g.Mentor.UserId,
+                        MentorId = g.MentorId,
+                        MentorName =
+                            g.Mentor.User.FullName,
+                        StartDate = g.StartDate,
+                        EndDate = g.EndDate,
+                        MaxStudents = g.MaxStudents,
+                        ActiveStudentsCount =
+                            activeCount,
+                        FreeSlots =
+                            g.MaxStudents -
+                            activeCount,
+                        Status =
+                            g.Status.ToString(),
+                        CreatedAt =
+                            g.CreatedAt
+                    };
+                })
+                .ToList()
+            };
+
+        return Result<MentorDashboardResponse>.Ok(response);
     }
 }

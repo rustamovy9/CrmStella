@@ -2,6 +2,7 @@ using CrmStella.Application.Common;
 using CrmStella.Application.DTOs.Group.Response;
 using CrmStella.Application.DTOs.GroupStudent.Request;
 using CrmStella.Application.DTOs.GroupStudent.Response;
+using CrmStella.Application.DTOs.Mentor.Response;
 using CrmStella.Application.Interfaces.Repositories;
 using CrmStella.Application.Interfaces.Services;
 using CrmStella.Domain.Constants;
@@ -291,31 +292,31 @@ public class GroupStudentService(
         return Result<List<GroupListItemResponse>>.Ok(result);
     }
 
-    public async Task<Result<GroupResponse>> GetMyGroupAsync(int userId, int groupId)
+    public async Task<Result<StudentGroupDetailsResponse>> GetMyGroupAsync(int userId, int groupId)
     {
         var student = await unitOfWork.Students.GetByUserIdAsync(userId);
 
         if (student == null)
         {
-            return Result<GroupResponse>.Fail("Student not found");
+            return Result<StudentGroupDetailsResponse>.Fail("Student not found");
         }
 
         var enrollment = await unitOfWork.GroupStudents.GetByGroupAndStudentAsync(groupId, student.Id);
 
         if (enrollment is null || !enrollment.IsActive)
         {
-            return Result<GroupResponse>.Fail("Access denied", ErrorType.Forbidden);
+            return Result<StudentGroupDetailsResponse>.Fail("Access denied", ErrorType.Forbidden);
         }
 
         var group = await unitOfWork.Groups.GetByIdAsync(groupId);
 
         if (group is null)
         {
-            return Result<GroupResponse>.Fail("Group not found");
+            return Result<StudentGroupDetailsResponse>.Fail("Group not found");
         }
 
-        return Result<GroupResponse>.Ok(
-            new GroupResponse
+        return Result<StudentGroupDetailsResponse>.Ok(
+            new StudentGroupDetailsResponse
             {
                 Id = group.Id,
                 Name = group.Name,
@@ -330,7 +331,168 @@ public class GroupStudentService(
                 ActiveStudentsCount =
                 group.GroupStudents.Count(x => x.IsActive),
                 Status = group.Status.ToString(),
-                CreatedAt = group.CreatedAt
+                CreatedAt = group.CreatedAt,
+                ScheduleSummary = string.Join(", ",
+                                            group.Schedules.Select(x => x.DayOfWeek switch
+                                            {
+                                                DayOfWeek.Monday => "Пн",
+                                                DayOfWeek.Tuesday => "Вт",
+                                                DayOfWeek.Wednesday => "Ср",
+                                                DayOfWeek.Thursday => "Чт",
+                                                DayOfWeek.Friday => "Пт",
+                                                DayOfWeek.Saturday => "Сб",
+                                                DayOfWeek.Sunday => "Вс",
+                                                _ => ""
+                                            })
+                ),
+                Students = group.GroupStudents
+            .Where(x => x.IsActive)
+            .Select(x => new GroupStudentResponse
+            {
+                Id = x.Id,
+
+                GroupId = x.GroupId,
+                GroupName = group.Name,
+                StudentId = x.StudentId,
+                StudentName = x.Student.User.FullName,
+                StudentEmail = x.Student.User.Email,
+                StudentPhone = x.Student.User.PhoneNumber!,
+                JoinedAt = x.JoinedAt,
+                LeftAt = x.LeftAt,
+                IsActive = x.IsActive,
+                RemoveReason = x.RemoveReason,
+                LastBilledAt = x.LastBilledAt,
+                NextBillingDate = x.NextBillingDate
+            })
+            .ToList()
             });
+    }
+
+    public async Task<Result<List<GroupListItemResponse>>> GetMentorGroupsAsync(int userId)
+    {
+        var mentor = await unitOfWork.Mentors.GetByUserIdAsync(userId);
+
+        if (mentor is null)
+        {
+            return Result<List<GroupListItemResponse>>.Fail("Mentor not found");
+        }
+
+        var groups = await unitOfWork.Groups.GetByMentorAsync(mentor.Id);
+
+        var result =
+            groups.Select(g =>
+            {
+                var activeCount = g.GroupStudents?.Count(x => x.IsActive) ?? 0;
+
+
+                return new GroupListItemResponse
+                {
+                    Id = g.Id,
+                    Name = g.Name,
+                    CourseId = g.CourseId,
+                    CourseName = g.Course.Name,
+                    MentorUserId = mentor.UserId,
+                    MentorId = mentor.Id,
+                    MentorName = mentor.User.FullName,
+                    StartDate = g.StartDate,
+                    EndDate = g.EndDate,
+                    MaxStudents = g.MaxStudents,
+                    ActiveStudentsCount = activeCount,
+                    FreeSlots = g.MaxStudents - activeCount,
+                    Status = g.Status.ToString(),
+                    CreatedAt = g.CreatedAt
+                };
+            }).ToList();
+
+        return Result<List<GroupListItemResponse>>.Ok(result);
+    }
+
+    public async Task<Result<MentorGroupDetailsResponse>> GetMentorGroupAsync(int userId, int groupId)
+    {
+        var mentor =
+        await unitOfWork.Mentors
+            .GetByUserIdAsync(userId);
+
+        if (mentor is null)
+        {
+            return Result<MentorGroupDetailsResponse>
+                .Fail("Mentor not found");
+        }
+
+        var group =
+            await unitOfWork.Groups
+                .GetByIdAsync(groupId);
+
+        if (group is null)
+        {
+            return Result<MentorGroupDetailsResponse>
+                .Fail("Group not found");
+        }
+
+        if (group.MentorId != mentor.Id)
+        {
+            return Result<MentorGroupDetailsResponse>
+                .Fail(
+                    "Access denied",
+                    ErrorType.Forbidden
+                );
+        }
+
+        return Result<MentorGroupDetailsResponse>
+            .Ok(
+                new MentorGroupDetailsResponse
+                {
+                    Id = group.Id,
+                    Name = group.Name,
+                    CourseName = group.Course.Name,
+                    MentorUserId = mentor.UserId,
+                    MentorId = mentor.Id,
+                    MentorName = mentor.User.FullName,
+                    StartDate = group.StartDate,
+                    EndDate = group.EndDate,
+                    MaxStudents = group.MaxStudents,
+                    ActiveStudentsCount =
+                        group.GroupStudents
+                            .Count(x => x.IsActive),
+
+                    ScheduleSummary = string.Join(", ",
+                                            group.Schedules.Select(x => x.DayOfWeek switch
+                                            {
+                                                DayOfWeek.Monday => "Пн",
+                                                DayOfWeek.Tuesday => "Вт",
+                                                DayOfWeek.Wednesday => "Ср",
+                                                DayOfWeek.Thursday => "Чт",
+                                                DayOfWeek.Friday => "Пт",
+                                                DayOfWeek.Saturday => "Сб",
+                                                DayOfWeek.Sunday => "Вс",
+                                                _ => ""
+                                            })
+                ),
+
+                    Students =
+                        group.GroupStudents
+                            .Select(x =>
+                                new GroupStudentResponse
+                                {
+                                    Id = x.Id,
+                                    StudentId =
+                                        x.StudentId,
+                                    StudentName =
+                                        x.Student.User
+                                            .FullName,
+                                    StudentEmail =
+                                        x.Student.User
+                                            .Email,
+                                    StudentPhone =
+                                        x.Student.User
+                                            .PhoneNumber!,
+                                    JoinedAt =
+                                        x.JoinedAt,
+                                    IsActive = x.IsActive,
+                                    IsTransferred = x.TransferredToGroupStudentId != null || x.TransferredFromGroupStudentId != null,
+                                    RemoveReason = x.RemoveReason
+                                })
+                            .ToList()
+                });
     }
 }
