@@ -39,23 +39,7 @@ const sumPillStyle = (score: number) => {
     return { bg: '#F04438', color: '#FFFFFF' };
 };
 
-const HeaderCheckbox: React.FC<{ checked: boolean; indeterminate: boolean }> = ({ checked, indeterminate }) => {
-    const ref = React.useRef<HTMLInputElement>(null);
-    React.useEffect(() => {
-        if (ref.current) ref.current.indeterminate = indeterminate;
-    }, [indeterminate]);
-    return (
-        <input
-            ref={ref}
-            type="checkbox"
-            className="omz-native-checkbox"
-            checked={checked}
-            disabled
-            style={{ cursor: 'default', opacity: checked || indeterminate ? 1 : 0.7 }}
-            onChange={() => { }}
-        />
-    );
-};
+
 
 
 const StudentGroupJournalWeekTable: React.FC<Props> = ({
