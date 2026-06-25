@@ -91,4 +91,41 @@ public class GroupStudentController(IGroupStudentService groupStudentService) : 
 
         return Ok(result);
     }
+
+    [HttpGet("mentor/groups")]
+    [Authorize(Roles = "Mentor")]
+    public async Task<IActionResult> GetMentorGroups()
+    {
+        var userId = int.Parse(
+            User.FindFirstValue(ClaimTypes.NameIdentifier)!
+        );
+
+        var result =
+            await groupStudentService.GetMentorGroupsAsync(userId);
+
+        if (!result.IsSuccess)
+            return HandleError(result);
+
+        return Ok(result);
+    }
+
+    [HttpGet("mentor/groups/{groupId:int}")]
+    [Authorize(Roles = "Mentor")]
+    public async Task<IActionResult> GetMentorGroup(int groupId)
+    {
+        var userId = int.Parse(
+            User.FindFirstValue(ClaimTypes.NameIdentifier)!
+        );
+
+        var result =
+            await groupStudentService.GetMentorGroupAsync(
+                userId,
+                groupId
+            );
+
+        if (!result.IsSuccess)
+            return HandleError(result);
+
+        return Ok(result);
+    }
 }

@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using CrmStella.Application.DTOs.Student.Request;
 using CrmStella.Application.DTOs.Students.Request;
 using CrmStella.Application.Interfaces.Services;
@@ -7,7 +8,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace CrmStella.WebApi.Controllers;
 
 [Route("api/students")]
-[Authorize(Roles = "Admin")]
+[Authorize(Roles = "Admin,Student")]
 public class StudentsController(IStudentService studentService) : BaseController
 {
     [HttpGet]
@@ -47,6 +48,22 @@ public class StudentsController(IStudentService studentService) : BaseController
     public async Task<IActionResult> SetStatus(int id, [FromBody] SetStudentStatusRequest request)
     {
         var result = await studentService.SetStatusAsync(id, request);
+        if (!result.IsSuccess)
+            return HandleError(result);
+
+        return Ok(result);
+    }
+
+    [HttpGet("dashboard")]
+    public async Task<IActionResult> GetDashboard()
+    {
+        var userId = int.Parse(
+            User.FindFirstValue(ClaimTypes.NameIdentifier)!
+        );
+
+        var result =
+            await studentService.GetDashboardAsync(userId);
+
         if (!result.IsSuccess)
             return HandleError(result);
 

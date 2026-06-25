@@ -1,10 +1,12 @@
 ﻿using CrmStella.Application.DTOs.Lesson.Request;
 using CrmStella.Application.Interfaces.Services;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace CrmStella.WebApi.Controllers;
 
 [Route("api/lessons")]
+[Authorize]
 public class LessonController(ILessonService lessonService) : BaseController
 {
     [HttpGet]
