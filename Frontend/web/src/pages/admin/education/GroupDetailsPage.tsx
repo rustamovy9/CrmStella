@@ -264,7 +264,7 @@ const GroupDetailsPage: React.FC = () => {
             }
 
         } catch (err: any) {
-            console.error("EduCrm API Sync Error:", err);
+            console.error("CrmStella API Sync Error:", err);
             setError(err.message || "Не удалось синхронизировать данные с сервером API");
         } finally {
             setLoading(false);

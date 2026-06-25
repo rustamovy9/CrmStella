@@ -511,6 +511,7 @@ const JournalPage: React.FC = () => {
                                             onWeekFieldUpdate={handleWeekFieldUpdate}
                                             onLessonEdit={handleLessonEdit}
                                             onLessonDelete={handleLessonDelete}
+                                            canEdit={true}
                                         />
                                     )}
                                 </div>

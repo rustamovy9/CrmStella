@@ -163,15 +163,11 @@ const Sidebar: React.FC<SidebarProps> = ({ role }) => {
         Mentor: [
             { path: '/mentor/dashboard', label: 'Панель ментора', icon: <LayoutGrid size={24} /> },
             { path: '/mentor/groups', label: 'Мои группы', icon: <GraduationCap size={24} /> },
-            { path: '/mentor/lessons', label: 'Расписание занятий', icon: <Calendar size={24} /> },
-            { path: '/mentor/attendance', label: 'Посещаемость', icon: <CheckSquare size={24} /> },
-            { path: '/mentor/scores', label: 'Журнал оценок', icon: <ClipboardList size={24} /> },
+            // { path: '/mentor/schedules', label: 'Расписание', icon: <Calendar size={18} /> }
         ],
         Student: [
             { path: '/student/dashboard', label: 'Моя панель', icon: <LayoutGrid size={24} /> },
-            { path: '/student/lessons', label: 'Моё расписание', icon: <Calendar size={24} /> },
-            { path: '/student/scores', label: 'Успеваемость', icon: <ClipboardList size={24} /> },
-            { path: '/student/homework', label: 'Домашние задания', icon: <FileText size={24} /> },
+            { path: '/student/groups', label: 'Мои группы', icon: <GraduationCap size={24} /> },
         ],
     };
 

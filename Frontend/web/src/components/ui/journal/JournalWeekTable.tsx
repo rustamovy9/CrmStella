@@ -18,16 +18,43 @@ interface Props {
     weekNumber: number;
     lessons: LessonResponse[];
     students: Student[];
+
     attLookup: Record<string, AttendanceResponse>;
     scoreLookup: Record<string, LessonScoreResponse>;
+
     weekResults: WeekResultResponse[];
+
     saving: string | null;
-    onAttToggle: (lessonId: number, studentId: number) => void;
-    onScoreChange: (lessonId: number, studentId: number, weekNumber: number, score: number) => void;
-    onCommentOpen: (lessonId: number, studentId: number, att?: AttendanceResponse) => void;
-    onWeekFieldUpdate: (studentId: number, weekNumber: number, field: 'bonusScore' | 'examScore', value: number) => void;
-    onLessonEdit: (lesson: LessonResponse) => void;
-    onLessonDelete: (lessonId: number) => void;
+
+    canEdit?: boolean;
+
+    onAttToggle?: (
+        lessonId: number,
+        studentId: number
+    ) => void;
+
+    onScoreChange?: (
+        lessonId: number,
+        studentId: number,
+        weekNumber: number,
+        score: number
+    ) => void;
+
+    onCommentOpen?: (
+        lessonId: number,
+        studentId: number,
+        att?: AttendanceResponse
+    ) => void;
+
+    onWeekFieldUpdate?: (
+        studentId: number,
+        weekNumber: number,
+        field: 'bonusScore' | 'examScore',
+        value: number
+    ) => void;
+
+    onLessonEdit?: (lesson: LessonResponse) => void;
+    onLessonDelete?: (lessonId: number) => void;
 }
 
 const fmtDate = (d: string) => {
@@ -38,7 +65,11 @@ const fmtDate = (d: string) => {
 const isPresent = (status: any) => {
     if (!status) return false;
     const s = String(status).toLowerCase();
-    return s === 'present' || s === '1';
+    return (
+        s === 'present' ||
+        s === 'late' ||
+        s === '1'
+    );
 };
 
 const sumPillStyle = (score: number) => {
@@ -112,7 +143,7 @@ const EditableNum: React.FC<EditableNumProps> = ({ value, studentId, weekNumber,
 const JournalWeekTable: React.FC<Props> = ({
     weekNumber, lessons, students, attLookup, scoreLookup, weekResults,
     saving, onAttToggle, onScoreChange, onCommentOpen, onWeekFieldUpdate,
-    onLessonEdit, onLessonDelete,
+    onLessonEdit, onLessonDelete, canEdit = false,
 }) => {
     return (
         <div className="w-full" style={s.container}>
@@ -222,6 +253,8 @@ const JournalWeekTable: React.FC<Props> = ({
                 .omz-num { width: 44px; height: 30px; padding: 0; border: 1px solid #D0D5DD; border-radius: 6px; font-size: 14px; font-weight: 500; color: #475467; background: #FFFFFF; text-align: center; box-shadow: 0 1px 2px rgba(16,24,40,0.05); outline: none; transition: all 0.15s ease; }
                 .omz-num:focus { border-color: #2F60E6; box-shadow: 0 0 0 3px rgba(47, 96, 230, 0.1); }
                 .omz-head-label { display: inline-flex; align-items: center; gap: 6px; color: #667085; font-weight: 600; font-size: 12px; }
+                .readonly-score { pointer-events: none; appearance: none; -webkit-appearance: none; -moz-appearance: none; background-image: none !important; color: #101828 !important; opacity: 1 !important;}
+                .student-readonly-checkbox {pointer-events: none;}
             `}</style>
 
             <div className="omz-table-wrapper">
@@ -235,22 +268,25 @@ const JournalWeekTable: React.FC<Props> = ({
                                 <th key={l.id} colSpan={1} className="col-divider lesson-hdr" style={s.thDate}>
                                     <div className="lesson-hdr-container">
                                         <span className="lesson-date-text">{fmtDate(l.lessonDate)}</span>
-                                        <span className="lesson-hdr-actions">
-                                            <button
-                                                className="lesson-btn lesson-btn-edit"
-                                                title="Редактировать урок"
-                                                onClick={(e) => { e.stopPropagation(); onLessonEdit(l); }}
-                                            >
-                                                <Pencil size={12} />
-                                            </button>
-                                            <button
-                                                className="lesson-btn lesson-btn-del"
-                                                title="Удалить урок"
-                                                onClick={(e) => { e.stopPropagation(); onLessonDelete(l.id); }}
-                                            >
-                                                <Trash2 size={12} />
-                                            </button>
-                                        </span>
+                                        {canEdit && (
+
+                                            <span className="lesson-hdr-actions">
+                                                <button
+                                                    className="lesson-btn lesson-btn-edit"
+                                                    title="Редактировать урок"
+                                                    onClick={(e) => { e.stopPropagation(); onLessonEdit?.(l); }}
+                                                >
+                                                    <Pencil size={12} />
+                                                </button>
+                                                <button
+                                                    className="lesson-btn lesson-btn-del"
+                                                    title="Удалить урок"
+                                                    onClick={(e) => { e.stopPropagation(); onLessonDelete?.(l.id); }}
+                                                >
+                                                    <Trash2 size={12} />
+                                                </button>
+                                            </span>
+                                        )}
                                     </div>
                                 </th>
                             ))}
@@ -328,20 +364,19 @@ const JournalWeekTable: React.FC<Props> = ({
                                         const activeColor = isLate ? '#F59E0B' : '#2F60E6';
                                         const currentScore = (sc && sc.score !== undefined) ? sc.score : 0;
                                         const isLeft = student.isActive === false;
-                                        const canScore = (present || isLate) && !isLeft;
-                                        const canToggleAtt = !isLeft && !isLate;
 
                                         return (
                                             <td key={lesson.id} className="col-divider" style={s.tdCenter}>
                                                 <div className={`crm-cell-combo ${present ? 'active' : ''} ${isLate ? 'late' : ''}`} style={{ opacity: (isSavingAtt || isSavingScore || isLeft) ? 0.6 : 1 }}>
                                                     <div className="crm-att-side">
+
                                                         <button
                                                             type="button"
                                                             className={`omz-cmt ${highlightClass}`}
                                                             title={isLeft ? 'Студент выбыл' : (att?.absenceReason ?? 'Добавить комментарий')}
-                                                            disabled={isLeft}
+                                                            disabled={isLeft || !canEdit}
                                                             style={{ cursor: isLeft ? 'not-allowed' : 'pointer' }}
-                                                            onClick={() => !isLeft && onCommentOpen(lesson.id, student.id, att)}
+                                                            onClick={() => !isLeft && onCommentOpen?.(lesson.id, student.id, att)}
                                                         >
                                                             <MessageSquare
                                                                 size={14}
@@ -349,31 +384,36 @@ const JournalWeekTable: React.FC<Props> = ({
                                                             />
                                                         </button>
 
+
                                                         <input
                                                             type="checkbox"
-                                                            className="omz-native-checkbox"
-                                                            checked={present || isLate}
-                                                            disabled={!!saving || !canToggleAtt}
-                                                            title={
-                                                                isLeft ? 'Студент выбыл' :
-                                                                    isLate ? 'Студент опоздал — статус меняется через комментарий' :
-                                                                        undefined
-                                                            }
-                                                            onChange={() => onAttToggle(lesson.id, student.id)}
+                                                            className={`omz-native-checkbox ${!canEdit ? 'student-readonly-checkbox' : ''}`}
+                                                            checked={present}
+                                                            onChange={() => {
+                                                                if (canEdit) {
+                                                                    onAttToggle?.(
+                                                                        lesson.id,
+                                                                        student.id
+                                                                    );
+                                                                }
+                                                            }}
                                                         />
                                                     </div>
 
                                                     <div className="crm-score-side">
                                                         <select
-                                                            className="omz-score"
+                                                            className={`omz-score ${!canEdit ? 'readonly-score' : ''}`}
                                                             value={currentScore}
-                                                            disabled={!!saving || !canScore}
-                                                            title={
-                                                                isLeft ? 'Студент выбыл' :
-                                                                    !canScore ? 'Студент не присутствовал — оценку поставить нельзя' : undefined
-                                                            }
-                                                            style={{ cursor: canScore ? 'pointer' : 'not-allowed' }}
-                                                            onChange={e => onScoreChange(lesson.id, student.id, weekNumber, Number(e.target.value))}
+                                                            onChange={(e) => {
+                                                                if (canEdit) {
+                                                                    onScoreChange?.(
+                                                                        lesson.id,
+                                                                        student.id,
+                                                                        weekNumber,
+                                                                        Number(e.target.value)
+                                                                    );
+                                                                }
+                                                            }}
                                                         >
                                                             <option value={0}>0</option>
                                                             {[1, 2, 3, 4, 5].map(v => (
@@ -395,25 +435,37 @@ const JournalWeekTable: React.FC<Props> = ({
                                     </td>
 
                                     <td style={s.tdCenter}>
-                                        <EditableNum
-                                            value={wr?.bonusScore ?? 0}
-                                            studentId={student.id}
-                                            weekNumber={weekNumber}
-                                            field="bonusScore"
-                                            saving={saving}
-                                            onSave={onWeekFieldUpdate}
-                                        />
+                                        {!canEdit ? (
+                                            <div style={s.readonlyNum}>
+                                                {Math.round(wr?.bonusScore ?? 0)}
+                                            </div>
+                                        ) : (
+                                            <EditableNum
+                                                value={wr?.bonusScore ?? 0}
+                                                studentId={student.id}
+                                                weekNumber={weekNumber}
+                                                field="bonusScore"
+                                                saving={saving}
+                                                onSave={onWeekFieldUpdate!}
+                                            />
+                                        )}
                                     </td>
 
                                     <td style={s.tdCenter}>
-                                        <EditableNum
-                                            value={wr?.examScore ?? 0}
-                                            studentId={student.id}
-                                            weekNumber={weekNumber}
-                                            field="examScore"
-                                            saving={saving}
-                                            onSave={onWeekFieldUpdate}
-                                        />
+                                        {!canEdit ? (
+                                            <div style={s.readonlyNum}>
+                                                {Math.round(wr?.examScore ?? 0)}
+                                            </div>
+                                        ) : (
+                                            <EditableNum
+                                                value={wr?.examScore ?? 0}
+                                                studentId={student.id}
+                                                weekNumber={weekNumber}
+                                                field="examScore"
+                                                saving={saving}
+                                                onSave={onWeekFieldUpdate!}
+                                            />
+                                        )}
                                     </td>
 
                                     <td style={s.tdCenter}>
@@ -432,6 +484,7 @@ const JournalWeekTable: React.FC<Props> = ({
 };
 
 const s = {
+    readonlyNum: { width: '46px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #D0D5DD', borderRadius: '8px', background: '#FFFFFF', fontSize: '14px', fontWeight: 500, color: '#101828', margin: '0 auto', } as React.CSSProperties,
     container: { background: '#FFFFFF', border: '1px solid #EAECF0', borderRadius: '12px', boxShadow: '0px 1px 3px rgba(16, 24, 40, 0.05)', overflow: 'hidden' } as React.CSSProperties,
     thStudent: { padding: '10px 12px', textAlign: 'left' as const, fontSize: '12px', textTransform: 'uppercase' as const, letterSpacing: '0.04em', minWidth: '160px', maxWidth: '180px' } as React.CSSProperties,
     thDate: { padding: '10px 8px', textAlign: 'center' as const, fontSize: '14px', fontWeight: 700, color: '#101828', minWidth: '115px' } as React.CSSProperties,
