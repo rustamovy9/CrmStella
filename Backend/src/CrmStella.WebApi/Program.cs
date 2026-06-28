@@ -38,7 +38,7 @@ var origins = builder.Configuration
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("CorsPolicy", policy =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins(origins!)
             .AllowAnyHeader()
