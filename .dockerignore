@@ -1,0 +1,9 @@
+**/bin
+**/obj
+.git
+.gitignore
+.vs
+.vscode
+node_modules
+Frontend/web/node_modules
+Frontend/web/dist
