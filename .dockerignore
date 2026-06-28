@@ -1,9 +1,13 @@
-**/bin
-**/obj
 .git
 .gitignore
+
+**/bin
+**/obj
+
 .vs
 .vscode
-node_modules
+
 Frontend/web/node_modules
 Frontend/web/dist
+
+**/node_modules
