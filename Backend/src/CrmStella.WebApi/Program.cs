@@ -112,7 +112,7 @@ using (var scope = app.Services.CreateScope())
     await DataSeeder.SeedAsync(context);
 }
 
-app.UseCors("AllowFrontend");
+app.UseCors("CorsPolicy");
 app.UseHttpsRedirection();
 app.UseMiddleware<ExceptionMiddleware>();
 app.UseMiddleware<LoggingMiddleware>();
