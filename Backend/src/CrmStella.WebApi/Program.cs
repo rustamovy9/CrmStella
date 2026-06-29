@@ -33,8 +33,8 @@ builder.Services.AddEndpointsApiExplorer();
 
 
 var frontendUrl =
-    builder.Configuration["FrontendUrl"]
-    ?? "http://localhost:5173";
+    // builder.Configuration["FrontendUrl"]
+    "http://localhost:5173";
 
 builder.Services.AddCors(options =>
 {
