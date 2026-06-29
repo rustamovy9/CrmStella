@@ -4,9 +4,11 @@ WORKDIR /src
 
 COPY . .
 
-RUN dotnet restore
+WORKDIR /src/Backend/src/CrmStella.WebApi
 
-RUN dotnet publish \
+RUN dotnet restore CrmStella.WebApi.csproj
+
+RUN dotnet publish CrmStella.WebApi.csproj \
     -c Release \
     -o /app/publish \
     --no-restore
