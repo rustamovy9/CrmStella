@@ -2,7 +2,7 @@ import axios from 'axios';
 import type { ApiResult, AuthResponse } from '../types/auth';
 
 const agent = axios.create({
-    baseURL: 'http://localhost:5046/api',
+    baseURL: 'https://crmstella.onrender.com/api',
     headers: { 'Content-Type': 'application/json' },
 });
 
