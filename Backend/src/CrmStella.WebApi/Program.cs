@@ -32,15 +32,15 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 
 
-var origins = builder.Configuration
-    .GetSection("Cors:Origins")
-    .Get<string[]>();
+var frontendUrl =
+    builder.Configuration["FrontendUrl"]
+    ?? "http://localhost:5173";
 
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy("AllowFrontend", policy =>
+    options.AddPolicy("CorsPolicy", policy =>
     {
-        policy.WithOrigins(origins!)
+        policy.WithOrigins(frontendUrl)
             .AllowAnyHeader()
             .AllowAnyMethod()
             .AllowCredentials();
